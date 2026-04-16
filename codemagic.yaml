@@ -37,13 +37,14 @@ workflows:
           keychain add-certificates
           xcode-project use-profiles --project pwa/ios/App/App.xcodeproj
 
-          # Extract profile info using temp file (PlistBuddy + stdin is unreliable)
+          # Extract profile info using temp file
           PROFILES_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
           PROFILE_PATH=$(ls "$PROFILES_DIR"/*.mobileprovision 2>/dev/null | head -1)
           echo "📄 Profile file: $PROFILE_PATH"
 
-          DECODED_PLIST=$(mktemp /tmp/profile.XXXXXX.plist)
+          DECODED_PLIST=/tmp/decoded_profile.plist
           security cms -D -i "$PROFILE_PATH" > "$DECODED_PLIST"
+          cat "$DECODED_PLIST" | head -5
 
           PP_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" "$DECODED_PLIST")
           PP_NAME=$(/usr/libexec/PlistBuddy -c "Print Name" "$DECODED_PLIST")
