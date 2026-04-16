@@ -52,7 +52,9 @@ export function BottomNav() {
     <>
       {/* Top header */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-[var(--header-bg)] backdrop-blur border-b border-[var(--border)] px-4 py-2.5 flex items-center justify-between safe-area-top">
-        <Image src="/logo.png" alt="Prize Club" width={90} height={34} className="h-7 w-auto brightness-0 invert light:brightness-100 light:invert-0" style={{ filter: isDark ? 'brightness(0) invert(1)' : 'none' }} />
+        <Link href="/boats">
+          <Image src="/logo.png" alt="Prize Club" width={90} height={34} className="h-7 w-auto brightness-0 invert light:brightness-100 light:invert-0" style={{ filter: isDark ? 'brightness(0) invert(1)' : 'none' }} />
+        </Link>
         <div className="flex items-center gap-2">
           <button onClick={toggleTheme} className="p-1.5 rounded-lg bg-[var(--subtle)] text-[var(--text-secondary)] hover:bg-[var(--subtle-hover)] transition">
             {isDark ? <Sun size={14} /> : <Moon size={14} />}
