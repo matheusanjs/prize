@@ -30,26 +30,80 @@ workflows:
           pod install
       - name: Set up code signing
         script: |
+          set -e
           keychain initialize
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
             --create
           keychain add-certificates
 
-          # Force Manual signing before use-profiles (cap sync resets to Automatic)
-          sed -i '' 's/ProvisioningStyle = Automatic/ProvisioningStyle = Manual/g' pwa/ios/App/App.xcodeproj/project.pbxproj
-          sed -i '' 's/CODE_SIGN_STYLE = Automatic/CODE_SIGN_STYLE = Manual/g' pwa/ios/App/App.xcodeproj/project.pbxproj
-
-          # Debug: list installed profiles
+          # Get installed profile UUID from filename
+          PROFILES_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
           echo "📄 Installed profiles:"
-          ls -la "$HOME/Library/MobileDevice/Provisioning Profiles/" 2>/dev/null || echo "No profiles dir"
+          ls -la "$PROFILES_DIR/" 2>/dev/null || true
 
-          # Apply profiles to Xcode project
-          xcode-project use-profiles --project pwa/ios/App/App.xcodeproj
+          PROFILE_FILE=$(ls "$PROFILES_DIR/"*.mobileprovision 2>/dev/null | head -1)
+          if [ -z "$PROFILE_FILE" ]; then
+            echo "❌ No provisioning profiles found!"
+            exit 1
+          fi
 
-          # Debug: verify pbxproj was updated
-          echo "🔍 Signing settings after use-profiles:"
-          grep -A1 "CODE_SIGN_STYLE\|PROVISIONING_PROFILE\|DEVELOPMENT_TEAM" pwa/ios/App/App.xcodeproj/project.pbxproj || true
+          PROFILE_UUID=$(basename "$PROFILE_FILE" .mobileprovision)
+          echo "📎 Profile UUID from filename: $PROFILE_UUID"
+
+          # Decode profile and extract info via grep (PlistBuddy fails on Codemagic)
+          security cms -D -i "$PROFILE_FILE" > /tmp/profile_decoded.xml 2>&1
+          echo "📜 Decoded profile size: $(wc -c < /tmp/profile_decoded.xml) bytes"
+          echo "📜 First 10 lines:"
+          head -10 /tmp/profile_decoded.xml
+
+          TEAM_ID=$(grep -A1 'TeamIdentifier' /tmp/profile_decoded.xml | grep '<string>' | head -1 | sed 's/.*<string>//;s/<\/string>.*//' | tr -d '[:space:]')
+          PROFILE_NAME=$(grep -A1 '>Name<' /tmp/profile_decoded.xml | grep '<string>' | head -1 | sed 's/.*<string>//;s/<\/string>.*//')
+
+          echo "✅ Team: $TEAM_ID | Profile Name: $PROFILE_NAME | UUID: $PROFILE_UUID"
+
+          if [ -z "$TEAM_ID" ]; then
+            echo "❌ Could not extract Team ID!"
+            cat /tmp/profile_decoded.xml
+            exit 1
+          fi
+
+          # Persist for build step
+          echo "CM_TEAM_ID=$TEAM_ID" >> $CM_ENV
+          echo "CM_PROFILE_UUID=$PROFILE_UUID" >> $CM_ENV
+
+          # Force Manual signing + inject DEVELOPMENT_TEAM and PROVISIONING_PROFILE into pbxproj
+          PBXPROJ="pwa/ios/App/App.xcodeproj/project.pbxproj"
+          sed -i '' 's/ProvisioningStyle = Automatic/ProvisioningStyle = Manual/g' "$PBXPROJ"
+          sed -i '' 's/CODE_SIGN_STYLE = Automatic/CODE_SIGN_STYLE = Manual/g' "$PBXPROJ"
+
+          # Inject DEVELOPMENT_TEAM and PROVISIONING_PROFILE into each target build config
+          export INJECT_TEAM="$TEAM_ID"
+          export INJECT_UUID="$PROFILE_UUID"
+          python3 << 'PYEOF'
+import os
+path = "pwa/ios/App/App.xcodeproj/project.pbxproj"
+team = os.environ["INJECT_TEAM"]
+uuid = os.environ["INJECT_UUID"]
+with open(path, 'r') as f:
+    content = f.read()
+if 'DEVELOPMENT_TEAM' not in content:
+    content = content.replace(
+        'CODE_SIGN_STYLE = Manual;',
+        f'CODE_SIGN_STYLE = Manual;\n\t\t\t\tDEVELOPMENT_TEAM = {team};'
+    )
+if 'PROVISIONING_PROFILE_SPECIFIER' not in content:
+    content = content.replace(
+        f'DEVELOPMENT_TEAM = {team};',
+        f'DEVELOPMENT_TEAM = {team};\n\t\t\t\tPROVISIONING_PROFILE_SPECIFIER = "{uuid}";'
+    )
+with open(path, 'w') as f:
+    f.write(content)
+print(f"Injected DEVELOPMENT_TEAM={team} PROVISIONING_PROFILE_SPECIFIER={uuid}")
+PYEOF
+
+          echo "🔍 Final signing settings:"
+          grep "CODE_SIGN_STYLE\|DEVELOPMENT_TEAM\|PROVISIONING_PROFILE" "$PBXPROJ" || true
       - name: Increment build number
         script: |
           cd pwa/ios/App
@@ -59,7 +113,8 @@ workflows:
         script: |
           xcode-project build-ipa \
             --workspace "$XCODE_WORKSPACE" \
-            --scheme "$XCODE_SCHEME"
+            --scheme "$XCODE_SCHEME" \
+            --archive-flags="DEVELOPMENT_TEAM=$CM_TEAM_ID PROVISIONING_PROFILE=$CM_PROFILE_UUID"
     artifacts:
       - pwa/ios/App/build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
