@@ -6,6 +6,9 @@ workflows:
     integrations:
       app_store_connect: "Codemagic"
     environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.marinaprizeclub.app
       vars:
         XCODE_WORKSPACE: "pwa/ios/App/App.xcworkspace"
         XCODE_SCHEME: "App"
@@ -30,13 +33,6 @@ workflows:
           pod install
       - name: Set up code signing
         script: |
-          set -e
-          keychain initialize
-          app-store-connect fetch-signing-files "$BUNDLE_ID" \
-            --type IOS_APP_STORE \
-            --create \
-            --certificate-key=@env:CM_CERTIFICATE_PRIVATE_KEY
-          keychain add-certificates
           xcode-project use-profiles
       - name: Increment build number
         script: |
