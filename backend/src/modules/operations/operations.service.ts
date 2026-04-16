@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateChecklistDto } from './dto/create-checklist.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const PRE_LAUNCH_ITEMS = [
   'Âncora e cabo presentes',
@@ -12,7 +13,10 @@ const PRE_LAUNCH_ITEMS = [
 
 @Injectable()
 export class OperationsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificationsService: NotificationsService,
+  ) {}
 
   // ─── Pre-launch checklist (CLIENT flow) ───────────────────────────────────
 
@@ -159,7 +163,30 @@ export class OperationsService {
       }
     }
 
+    // Notify client that checklist is complete and boat is ready
+    if (allChecked) {
+      this.notifyChecklistReady(checklist).catch(() => {});
+    }
+
     return { success: true, allChecked };
+  }
+
+  private async notifyChecklistReady(checklist: any) {
+    if (!checklist.reservationId) return;
+    const reservation = await this.prisma.reservation.findUnique({
+      where: { id: checklist.reservationId },
+      include: { boat: { select: { name: true } } },
+    });
+    if (!reservation) return;
+    // Only notify the client whose reservation it is
+    this.notificationsService.send({
+      userId: reservation.userId,
+      type: 'CHECKLIST_READY',
+      title: '✅ Embarcação pronta!',
+      body: `O checklist da ${reservation.boat?.name || 'embarcação'} foi concluído. Sua embarcação está disponível!`,
+      data: { reservationId: reservation.id, boatId: reservation.boatId, url: '/boats' },
+      pushTag: `checklist-ready-${checklist.id}`,
+    }).catch(() => {});
   }
 
   async getMyActiveReservations(userId: string) {

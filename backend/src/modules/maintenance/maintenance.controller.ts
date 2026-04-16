@@ -39,4 +39,11 @@ export class MaintenanceController {
   update(@Param('id') id: string, @Body() dto: UpdateMaintenanceDto) {
     return this.maintenanceService.update(id, dto);
   }
+
+  @Patch(':id/resolve')
+  @Roles('ADMIN', 'OPERATOR')
+  @ApiOperation({ summary: 'Resolver manutenção — marcar como concluída e liberar embarcação' })
+  resolve(@Param('id') id: string) {
+    return this.maintenanceService.resolve(id);
+  }
 }

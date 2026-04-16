@@ -26,7 +26,8 @@ export class UsersService {
         select: {
           id: true, name: true, email: true, phone: true,
           role: true, isActive: true, lastLoginAt: true, createdAt: true,
-          _count: { select: { shares: true } },
+          avatar: true,
+          _count: { select: { shares: { where: { isActive: true, deletedAt: null } } } },
         },
         orderBy: { createdAt: 'desc' },
       }),
@@ -80,6 +81,14 @@ export class UsersService {
         },
         _count: { select: { reservations: true, charges: true } },
       },
+    });
+  }
+
+  async updateProfile(id: string, dto: { name?: string; phone?: string; avatar?: string }) {
+    return this.prisma.user.update({
+      where: { id },
+      data: dto,
+      select: { id: true, name: true, email: true, phone: true, role: true, avatar: true },
     });
   }
 }

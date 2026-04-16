@@ -6,6 +6,7 @@ import { Shield, Eye, Wrench } from 'lucide-react';
 const SECTIONS = [
   {
     video: '/estrutura1.mp4',
+    videoDesktop: '/estrutura1-desktop.mp4',
     mobileImg: '/guardaria-mobile.webp',
     icon: Shield,
     label: 'Guardaria',
@@ -15,6 +16,7 @@ const SECTIONS = [
   },
   {
     video: '/estrutura2.mp4',
+    videoDesktop: '/estrutura2-desktop.mp4',
     mobileImg: '/seguranca-mobile.webp',
     icon: Eye,
     label: 'Segurança',
@@ -24,6 +26,7 @@ const SECTIONS = [
   },
   {
     video: '/estrutura3.mp4',
+    videoDesktop: '/estrutura3-desktop.mp4',
     mobileImg: '/manutencao-mobile.webp',
     icon: Wrench,
     label: 'Manutenção',
@@ -71,16 +74,17 @@ function VideoCard({
 
   useEffect(() => {
     if (!videoRef.current || isMobile) return;
+    const src = section.videoDesktop;
     if (isInView) {
-      if (!videoRef.current.src.includes(section.video)) {
-        videoRef.current.src = section.video;
+      if (!videoRef.current.src.includes(src)) {
+        videoRef.current.src = src;
         videoRef.current.load();
       }
       videoRef.current.play().catch(() => {});
     } else {
       videoRef.current.pause();
     }
-  }, [isInView, section.video, isMobile]);
+  }, [isInView, section.videoDesktop, isMobile]);
 
   return (
     <div
@@ -110,6 +114,7 @@ function VideoCard({
           preload="none"
           poster={section.video.replace('.mp4', '-poster.jpg')}
           className="absolute inset-0 w-full h-full object-cover"
+          style={{ filter: 'contrast(1.08) saturate(1.15) brightness(1.05)' }}
         />
       )}
 

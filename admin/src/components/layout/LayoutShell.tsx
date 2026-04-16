@@ -7,7 +7,7 @@ import { Sidebar } from '@/components/layout/Sidebar';
 export function LayoutShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isLoginPage = pathname === '/login';
-  const isFullscreen = pathname === '/cozinha';
+  const isFullscreen = pathname === '/cozinha' || pathname === '/kds';
 
   return (
     <AuthProvider>

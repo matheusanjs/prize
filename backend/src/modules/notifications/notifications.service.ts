@@ -1,29 +1,80 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
+import { PushService, PushPayload } from './push.service';
+
+export type NotifType =
+  | 'RESERVATION' | 'RESERVATION_CREATED' | 'RESERVATION_CANCELLED'
+  | 'RESERVATION_REMINDER' | 'RESERVATION_CONFIRM_ARRIVAL'
+  | 'PAYMENT' | 'CHARGE_CREATED' | 'CHARGE_DUE_TOMORROW' | 'CHARGE_DUE_TODAY' | 'CHARGE_OVERDUE'
+  | 'FUEL' | 'SWAP_REQUEST' | 'SWAP_ACCEPTED' | 'SWAP_REJECTED'
+  | 'CHECKLIST_READY' | 'QUEUE' | 'MAINTENANCE' | 'GENERAL' | 'AI_INSIGHT';
+
+interface SendOpts {
+  userId: string;
+  type: NotifType;
+  title: string;
+  body: string;
+  data?: Record<string, any>;
+  /** push-specific overrides */
+  pushTag?: string;
+  pushActions?: { action: string; title: string }[];
+  pushUrgency?: 'very-low' | 'low' | 'normal' | 'high';
+}
 
 @Injectable()
 export class NotificationsService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(NotificationsService.name);
 
-  async send(userId: string, type: string, title: string, body: string, data?: any) {
+  constructor(
+    private prisma: PrismaService,
+    private pushService: PushService,
+  ) {}
+
+  /** Create in-app notification + send push to all user devices */
+  async send(opts: SendOpts) {
+    const { userId, type, title, body, data, pushTag, pushActions, pushUrgency } = opts;
+
+    // 1. Save in-app notification
     const notification = await this.prisma.notification.create({
       data: { userId, type: type as any, title, body, data },
     });
 
-    // TODO: Firebase push notification
-    // TODO: WhatsApp notification (simulated)
+    // 2. Push notification
+    const payload: PushPayload = {
+      title,
+      body,
+      icon: '/icon-192.png',
+      badge: '/icon-badge.png',
+      tag: pushTag || `${type}-${notification.id}`,
+      data: { ...data, notificationId: notification.id, type, url: data?.url },
+      actions: pushActions,
+      urgency: pushUrgency || 'normal',
+    };
+
+    this.pushService.sendToUser(userId, payload).catch((err) => {
+      this.logger.error(`Push to ${userId} failed: ${err.message}`);
+    });
 
     return notification;
   }
 
-  async sendBulk(userIds: string[], type: string, title: string, body: string) {
+  /** Send to multiple users */
+  async sendBulk(userIds: string[], type: NotifType, title: string, body: string, data?: Record<string, any>) {
     const notifications = await this.prisma.notification.createMany({
-      data: userIds.map((userId) => ({
-        userId,
-        type: type as any,
-        title,
-        body,
-      })),
+      data: userIds.map((userId) => ({ userId, type: type as any, title, body, data })),
+    });
+
+    const payload: PushPayload = {
+      title,
+      body,
+      icon: '/icon-192.png',
+      badge: '/icon-badge.png',
+      tag: `${type}-bulk-${Date.now()}`,
+      data: { ...data, type },
+    };
+
+    this.pushService.sendToUsers(userIds, payload).catch((err) => {
+      this.logger.error(`Bulk push failed: ${err.message}`);
     });
 
     return { sent: notifications.count };

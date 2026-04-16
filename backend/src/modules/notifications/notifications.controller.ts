@@ -1,6 +1,7 @@
-import { Controller, Get, Patch, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Query, Body, Headers, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
+import { PushService } from './push.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -9,7 +10,10 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 @UseGuards(JwtAuthGuard)
 @Controller('notifications')
 export class NotificationsController {
-  constructor(private notificationsService: NotificationsService) {}
+  constructor(
+    private notificationsService: NotificationsService,
+    private pushService: PushService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'Minhas notificações' })
@@ -27,5 +31,29 @@ export class NotificationsController {
   @ApiOperation({ summary: 'Marcar todas como lidas' })
   markAllAsRead(@CurrentUser('id') userId: string) {
     return this.notificationsService.markAllAsRead(userId);
+  }
+
+  /* ─── Push Subscription ─── */
+
+  @Get('push/public-key')
+  @ApiOperation({ summary: 'VAPID public key para subscrição push' })
+  getPublicKey() {
+    return { publicKey: this.pushService.getPublicKey() };
+  }
+
+  @Post('push/subscribe')
+  @ApiOperation({ summary: 'Registrar subscrição push' })
+  subscribe(
+    @CurrentUser('id') userId: string,
+    @Body() body: { subscription: { endpoint: string; keys: { p256dh: string; auth: string } } },
+    @Headers('user-agent') userAgent?: string,
+  ) {
+    return this.pushService.subscribe(userId, body.subscription, userAgent);
+  }
+
+  @Delete('push/unsubscribe')
+  @ApiOperation({ summary: 'Remover subscrição push' })
+  unsubscribe(@Body() body: { endpoint: string }) {
+    return this.pushService.unsubscribe(body.endpoint);
   }
 }

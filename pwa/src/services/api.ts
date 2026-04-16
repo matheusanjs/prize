@@ -2,21 +2,75 @@ import axios from 'axios';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
-const api = axios.create({
-  baseURL: BASE_URL,
-  headers: { 'Content-Type': 'application/json' },
-});
+// ─── Lightweight GET response cache (30s TTL) ────────────────────────────
+
+const CACHE_TTL = 10_000; // 10 seconds
+const NO_CACHE_URLS = ['/reservations/calendar/', '/reservations/boat/'];
+const responseCache = new Map<string, { data: unknown; expiresAt: number }>();
+
+// Clear stale cache on route navigation — prevents cross-page cache hits
+if (typeof window !== 'undefined') {
+  let lastPath = window.location.pathname;
+  const observer = new MutationObserver(() => {
+    const newPath = window.location.pathname;
+    if (newPath !== lastPath) { lastPath = newPath; responseCache.clear(); }
+  });
+  observer.observe(document.documentElement, { subtree: true, attributes: true, childList: true });
+}
+
+function cacheKey(url: string, params?: Record<string, unknown>): string {
+  return url + (params ? '?' + JSON.stringify(params) : '');
+}
+
+export function invalidateCache(pattern?: string | RegExp) {
+  if (!pattern) { responseCache.clear(); return; }
+  for (const key of responseCache.keys()) {
+    if (typeof pattern === 'string' ? key.includes(pattern) : pattern.test(key)) {
+      responseCache.delete(key);
+    }
+  }
+}
+
+export function getCachedData<T>(key: string): T | undefined {
+  const entry = responseCache.get(key);
+  if (entry && entry.expiresAt > Date.now()) return entry.data as T;
+  if (entry) responseCache.delete(key);
+  return undefined;
+}
+
+const api = axios.create({ baseURL: BASE_URL });
 
 api.interceptors.request.use((config) => {
+  // Always attach token first, even for cached responses
   if (typeof window !== 'undefined') {
     const token = localStorage.getItem('token');
     if (token) config.headers.Authorization = `Bearer ${token}`;
+  }
+
+  // Only cache GET requests
+  if (config.method === 'get' && config.url) {
+    // Never cache calendar and boat reservation endpoints
+    if (NO_CACHE_URLS.some(u => config.url!.includes(u))) return config;
+    const key = cacheKey(config.url, config.params);
+    const cached = responseCache.get(key);
+    if (cached && cached.expiresAt > Date.now()) {
+      // Return a resolved AxiosResponse-like object to skip the network call
+      return Promise.resolve({ data: cached.data, status: 200, statusText: 'OK', headers: {}, config } as any);
+    }
   }
   return config;
 });
 
 api.interceptors.response.use(
-  (r) => r,
+  (r) => {
+    // Cache GET responses for deduplication
+    if (r.config.method === 'get' && r.config.url) {
+      if (NO_CACHE_URLS.some(u => r.config.url!.includes(u))) return r;
+      const key = cacheKey(r.config.url, r.config.params);
+      responseCache.set(key, { data: r.data, expiresAt: Date.now() + CACHE_TTL });
+    }
+    return r;
+  },
   async (error) => {
     const originalRequest = error.config;
 
@@ -135,5 +189,16 @@ export const getWeatherForecast = () => api.get('/weather/forecast');
 export const getWeatherAiSummary = () => api.get('/weather/ai-summary');
 
 export const getMarketplaceBoats = () => axios.get(`${BASE_URL}/public/boats/marketplace`);
+
+// ─── Woovi (Pix Payments) ───────────────────────────────
+export const createWooviCharge = (chargeId: string) => api.post(`/payments/woovi/charge/${chargeId}`);
+export const getWooviChargeStatus = (correlationID: string) => api.get(`/payments/woovi/charge/${correlationID}`);
+
+// Profile
+export const updateProfile = (data: { name?: string; phone?: string; avatar?: string }) =>
+  api.patch('/users/profile', data);
+
+export const changePassword = (data: { currentPassword: string; newPassword: string }) =>
+  api.post('/auth/change-password', data);
 
 export default api;

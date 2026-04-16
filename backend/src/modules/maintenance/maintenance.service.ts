@@ -20,8 +20,8 @@ export class MaintenanceService {
       },
     });
 
-    // If critical, block boat immediately
-    if (dto.priority === 'CRITICAL') {
+    // Block boat if requested (explicit flag or CRITICAL priority for backwards compat)
+    if (dto.blockBoat || dto.priority === 'CRITICAL') {
       await this.prisma.boat.update({
         where: { id: dto.boatId },
         data: { status: 'MAINTENANCE' },
@@ -91,6 +91,36 @@ export class MaintenanceService {
       await this.prisma.boat.update({
         where: { id: maintenance.boatId },
         data: { status: 'MAINTENANCE' },
+      });
+    }
+
+    return updated;
+  }
+
+  /** Resolve a maintenance — mark as COMPLETED and release boat if no other active maintenances */
+  async resolve(id: string) {
+    const maintenance = await this.prisma.maintenance.findUnique({ where: { id } });
+    if (!maintenance) throw new NotFoundException('Manutenção não encontrada');
+    if (maintenance.status === 'COMPLETED' || maintenance.status === 'CANCELLED') return maintenance;
+
+    const updated = await this.prisma.maintenance.update({
+      where: { id },
+      data: { status: 'COMPLETED', completedAt: new Date() },
+    });
+
+    // Release boat if no other active maintenances
+    const otherActive = await this.prisma.maintenance.count({
+      where: {
+        boatId: maintenance.boatId,
+        status: { in: ['SCHEDULED', 'IN_PROGRESS'] },
+        id: { not: id },
+      },
+    });
+
+    if (otherActive === 0) {
+      await this.prisma.boat.update({
+        where: { id: maintenance.boatId },
+        data: { status: 'AVAILABLE' },
       });
     }
 

@@ -38,6 +38,21 @@ interface ForecastDay {
   condition?: string;
 }
 
+// Alias for timeline component
+interface ForecastDayForTimeline {
+  date: string;
+  windSpeedMin: number;
+  windSpeedMax: number;
+  airTempMin: number;
+  airTempMax: number;
+  rainProbability?: number;
+  rain?: number;
+  humidity?: number;
+  navigationLevel: string;
+  clientSummary: string;
+  condition?: string;
+}
+
 type NavLevel = 'BOM' | 'ATENCAO' | 'RUIM' | 'PERIGOSO';
 
 const levelConfig: Record<NavLevel, { label: string; badge: string; badgeText: string; accent: string; dot: string }> = {
@@ -69,10 +84,11 @@ interface Props {
   variant?: 'client' | 'operator';
   todayReservations?: TodayReservation[];
   onConfirmArrival?: (reservation: TodayReservation) => void;
+  onDeclineReservation?: (reservation: TodayReservation) => void;
   aiSummary?: string | null;
 }
 
-export default function WeatherWidget({ variant = 'client', todayReservations = [], onConfirmArrival, aiSummary }: Props) {
+export default function WeatherWidget({ variant = 'client', todayReservations = [], onConfirmArrival, onDeclineReservation, aiSummary }: Props) {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [forecast, setForecast] = useState<ForecastDay[]>([]);
   const [loading, setLoading] = useState(true);
@@ -108,65 +124,52 @@ export default function WeatherWidget({ variant = 'client', todayReservations = 
   const windKmh = weather.windSpeed != null ? (weather.windSpeed * 3.6).toFixed(0) : '-';
 
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
-  const futureForecast = forecast.filter((d) => d.date > today);
+  const futureForecast = forecast.filter((d) => d.date >= today);
 
   return (
-    <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] overflow-hidden mb-4 shadow-sm">
-      {/* Header */}
-      <div className="px-4 pt-4 pb-3 flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-1.5 mb-0.5">
-            <MapPin size={12} className="text-[var(--text-muted)]" />
-            <p className="text-[11px] text-[var(--text-muted)] font-medium">Cabo Frio — Praia do Forte</p>
+    <div className="bg-[var(--card)] rounded-xl border border-[var(--border)] overflow-hidden mb-4 shadow-sm">
+      {/* Compact Header + Stats */}
+      <div className="px-4 py-2.5">
+        {/* Header row */}
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-1.5">
+            <MapPin size={10} className="text-[var(--text-muted)]" />
+            <span className="text-[10px] text-[var(--text-muted)] font-medium">Cabo Frio</span>
+            <span className="text-[9px] text-[var(--text-muted)] opacity-70">· {formatTime(weather.collectedAt)}</span>
           </div>
-          <p className="text-[10px] text-[var(--text-muted)]">Atualizado às {formatTime(weather.collectedAt)}</p>
+          <div className="flex items-center gap-1.5">
+            {aiSummary && (
+              <button
+                onClick={() => setShowAiModal(true)}
+                className="flex items-center gap-1 bg-blue-500/10 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 text-[9px] font-bold px-2 py-0.5 rounded-full hover:bg-blue-500/20 dark:hover:bg-blue-500/30 transition-colors active:scale-95"
+              >
+                <Sparkles size={9} />
+                IA
+              </button>
+            )}
+            <span className={`${cfg.badge} ${cfg.badgeText} text-[10px] font-bold px-2 py-0.5 rounded-full`}>
+              {cfg.label}
+            </span>
+          </div>
         </div>
-        <div className="flex items-center gap-1.5">
-          {aiSummary && (
-            <button
-              onClick={() => setShowAiModal(true)}
-              className="flex items-center gap-1 bg-blue-500/10 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 text-[10px] font-bold px-2 py-1 rounded-full hover:bg-blue-500/20 dark:hover:bg-blue-500/30 transition-colors active:scale-95"
-            >
-              <Sparkles size={10} />
-              IA
-            </button>
-          )}
-          <span className={`${cfg.badge} ${cfg.badgeText} text-[11px] font-bold px-2.5 py-1 rounded-full`}>
-            {cfg.label}
-          </span>
-        </div>
-      </div>
 
-      {/* Stats */}
-      <div className="px-4 pb-4">
-        <div className="flex items-center gap-3 overflow-x-auto pb-0.5">
-          <div className="flex items-center gap-2 bg-[var(--subtle)] rounded-xl px-3 py-2 min-w-fit">
-            <Sun size={14} className={cfg.accent} />
-            <div>
-              <p className="text-[9px] text-[var(--text-muted)] leading-none mb-0.5">Temp</p>
-              <p className="text-xs font-semibold text-[var(--text)]">{weather.airTemperature?.toFixed(0) ?? '-'}°C</p>
-            </div>
+        {/* Compact inline stats */}
+        <div className="flex items-center">
+          <div className="flex items-center gap-1.5 pr-3 border-r border-[var(--border)]">
+            <Sun size={12} className={cfg.accent} />
+            <span className="text-[11px] font-semibold text-[var(--text)]">{weather.airTemperature?.toFixed(0) ?? '-'}°C</span>
           </div>
-          <div className="flex items-center gap-2 bg-[var(--subtle)] rounded-xl px-3 py-2 min-w-fit">
-            <Wind size={14} className={cfg.accent} />
-            <div>
-              <p className="text-[9px] text-[var(--text-muted)] leading-none mb-0.5">Vento</p>
-              <p className="text-xs font-semibold text-[var(--text)]">{windKmh} km/h</p>
-            </div>
+          <div className="flex items-center gap-1.5 px-3 border-r border-[var(--border)]">
+            <Wind size={12} className={cfg.accent} />
+            <span className="text-[11px] font-semibold text-[var(--text)]">{windKmh} km/h</span>
           </div>
-          <div className="flex items-center gap-2 bg-[var(--subtle)] rounded-xl px-3 py-2 min-w-fit">
-            <Droplets size={14} className={cfg.accent} />
-            <div>
-              <p className="text-[9px] text-[var(--text-muted)] leading-none mb-0.5">Umidade</p>
-              <p className="text-xs font-semibold text-[var(--text)]">{weather.humidity ?? '-'}%</p>
-            </div>
+          <div className="flex items-center gap-1.5 px-3 border-r border-[var(--border)]">
+            <Droplets size={12} className={cfg.accent} />
+            <span className="text-[11px] font-semibold text-[var(--text)]">{weather.humidity ?? '-'}%</span>
           </div>
-          <div className="flex items-center gap-2 bg-[var(--subtle)] rounded-xl px-3 py-2 min-w-fit">
-            <CloudRain size={14} className={cfg.accent} />
-            <div>
-              <p className="text-[9px] text-[var(--text-muted)] leading-none mb-0.5">Chuva</p>
-              <p className="text-xs font-semibold text-[var(--text)]">{weather.precipitation ?? 0}mm</p>
-            </div>
+          <div className="flex items-center gap-1.5 pl-3">
+            <CloudRain size={12} className={cfg.accent} />
+            <span className="text-[11px] font-semibold text-[var(--text)]">{weather.precipitation ?? 0}mm</span>
           </div>
         </div>
       </div>
@@ -196,13 +199,25 @@ export default function WeatherWidget({ variant = 'client', todayReservations = 
                     Presença confirmada · Chegada: <strong>{r.expectedArrivalTime}</strong>
                   </span>
                 </div>
-              ) : onConfirmArrival ? (
-                <button
-                  onClick={() => onConfirmArrival(r)}
-                  className="mt-2 w-full bg-emerald-500 text-white py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform"
-                >
-                  <CheckCircle2 size={13} /> Confirmar presença
-                </button>
+              ) : (onConfirmArrival || onDeclineReservation) ? (
+                <div className="flex gap-2 mt-2">
+                  {onConfirmArrival && (
+                    <button
+                      onClick={() => onConfirmArrival(r)}
+                      className="flex-1 bg-emerald-500 text-white py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform"
+                    >
+                      <CheckCircle2 size={13} /> Confirmar
+                    </button>
+                  )}
+                  {onDeclineReservation && (
+                    <button
+                      onClick={() => onDeclineReservation(r)}
+                      className="flex-1 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform text-red-400 border border-red-500/20 bg-red-500/10"
+                    >
+                      <X size={13} /> Cancelar
+                    </button>
+                  )}
+                </div>
               ) : null}
             </div>
           ))}

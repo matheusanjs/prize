@@ -2,6 +2,15 @@ import axios from 'axios';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
+// API origin for resolving static asset paths (e.g. /static/default-avatar.png)
+const API_ORIGIN = BASE_URL.replace(/\/api\/v\d+$/, '');
+
+export function resolveStaticUrl(path?: string | null): string | null {
+  if (!path) return null;
+  if (path.startsWith('data:') || path.startsWith('http://') || path.startsWith('https://')) return path;
+  return `${API_ORIGIN}${path.startsWith('/') ? '' : '/'}${path}`;
+}
+
 const api = axios.create({
   baseURL: BASE_URL,
   headers: { 'Content-Type': 'application/json' },
@@ -115,6 +124,7 @@ export const removeGaugeExample = (id: string) => api.delete(`/fuel/gauge-exampl
 export const getMaintenances = (params?: { boatId?: string; status?: string }) => api.get('/maintenance', { params });
 export const createMaintenance = (data: Record<string, unknown>) => api.post('/maintenance', data);
 export const updateMaintenance = (id: string, data: Record<string, unknown>) => api.patch(`/maintenance/${id}`, data);
+export const resolveMaintenance = (id: string) => api.patch(`/maintenance/${id}/resolve`, {});
 
 // Queue
 export const getQueue = (params?: { status?: string; date?: string }) => api.get('/operations/queue', { params });
@@ -215,5 +225,26 @@ export const triggerWeatherCollection = () => api.post('/weather/trigger');
 
 // Damages report
 export const getDamagesReport = (params?: { boatId?: string; from?: string; to?: string }) => api.get('/operations/damages', { params });
+
+// ─── Woovi (Pix Payments) ───────────────────────────────
+export const createWooviCharge = (chargeId: string) => api.post(`/payments/woovi/charge/${chargeId}`);
+export const getWooviChargeStatus = (correlationID: string) => api.get(`/payments/woovi/charge/${correlationID}`);
+
+// ─── WhatsApp ───────────────────────────────────────────
+export const getWhatsappStatus = () => api.get('/whatsapp/status');
+export const connectWhatsapp = () => api.post('/whatsapp/connect');
+export const disconnectWhatsapp = () => api.post('/whatsapp/disconnect');
+export const getWhatsappMessages = (params?: Record<string, string>) => api.get('/whatsapp/messages', { params });
+export const getWhatsappConversation = (phone: string) => api.get('/whatsapp/conversation', { params: { phone } });
+export const getWhatsappConversations = () => api.get('/whatsapp/conversations');
+export const sendWhatsappMessage = (data: { phone: string; message: string; userId?: string }) => api.post('/whatsapp/send', data);
+export const broadcastWhatsapp = (data: { message: string }) => api.post('/whatsapp/broadcast', data);
+export const getWhatsappStats = () => api.get('/whatsapp/stats');
+export const getWhatsappTemplates = () => api.get('/whatsapp/templates');
+export const createWhatsappTemplate = (data: { slug: string; name: string; body: string; category: string }) => api.post('/whatsapp/templates', data);
+export const updateWhatsappTemplate = (id: string, data: { name?: string; body?: string; category?: string; isActive?: boolean }) => api.patch(`/whatsapp/templates/${id}`, data);
+export const triggerReservationConfirmations = () => api.post('/whatsapp/trigger/reservation-confirmations');
+export const triggerPaymentReminders = () => api.post('/whatsapp/trigger/payment-reminders');
+export const triggerOverdueAlerts = () => api.post('/whatsapp/trigger/overdue-alerts');
 
 export default api;

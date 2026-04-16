@@ -89,14 +89,6 @@ export default function MaintenancePage() {
     } catch { /* empty */ }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="animate-spin w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full" />
-      </div>
-    );
-  }
-
   return (
     <div className="py-4">
       <div className="flex items-center justify-between mb-4">
@@ -121,7 +113,11 @@ export default function MaintenancePage() {
         ))}
       </div>
 
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <div className="animate-spin w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full" />
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="text-center py-12 text-[var(--text-muted)]">
           <Wrench size={48} className="mx-auto mb-3 opacity-50" />
           <p>Nenhuma manutenção</p>

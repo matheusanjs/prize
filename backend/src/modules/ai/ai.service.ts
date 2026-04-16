@@ -199,7 +199,7 @@ Se houver pagamento, mencione. Se estiver atrasada, oriente sobre regularizaçã
     const prompt = `Explique esta cobrança para o cliente:
 - Descrição: ${charge.description}
 - Valor: R$ ${charge.amount.toFixed(2)}
-- Vencimento: ${charge.dueDate.toLocaleDateString('pt-BR')}
+- Vencimento: ${charge.dueDate.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
 - Status: ${charge.status}
 - Categoria: ${charge.category}
 - Pagamentos: ${charge.payments.length > 0 ? charge.payments.map(p => `R$ ${p.amount.toFixed(2)} via ${p.method}`).join(', ') : 'Nenhum'}`;
@@ -233,7 +233,7 @@ Responda em JSON com: riskLevel (LOW/MEDIUM/HIGH), score (0-100), reason, sugges
 - Total de cobranças: ${userCharges.length}
 - Cobranças atrasadas: ${latePayments.length}
 - Taxa de atraso: ${(lateRate * 100).toFixed(1)}%
-- Último pagamento: ${userCharges.find(c => c.paidAt)?.paidAt?.toLocaleDateString('pt-BR') || 'Nenhum'}`;
+- Último pagamento: ${userCharges.find(c => c.paidAt)?.paidAt?.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) || 'Nenhum'}`;
 
     const result = await model.generateContent(prompt);
     const text = result.response.text();
@@ -322,7 +322,7 @@ Seja analítico, use dados quando disponível. Responda em português brasileiro
         }),
       ]);
 
-      return `Cotas ativas: ${shares}, Cobranças pendentes: ${pendingCharges}, Próxima reserva: ${nextReservation ? `${nextReservation.boat.name} em ${nextReservation.startDate.toLocaleDateString('pt-BR')}` : 'Nenhuma'}, Na fila: ${queuePosition ? `Sim (posição ${queuePosition.position})` : 'Não'}`;
+      return `Cotas ativas: ${shares}, Cobranças pendentes: ${pendingCharges}, Próxima reserva: ${nextReservation ? `${nextReservation.boat.name} em ${nextReservation.startDate.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}` : 'Nenhuma'}, Na fila: ${queuePosition ? `Sim (posição ${queuePosition.position})` : 'Não'}`;
     }
 
     if (role === 'ADMIN') {

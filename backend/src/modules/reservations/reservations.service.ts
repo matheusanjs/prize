@@ -1,13 +1,34 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Logger, Inject, Optional } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { Cron } from '@nestjs/schedule';
+import { ReservationValidationService } from './reservation-validation.service';
+import { WhatsAppAutomationService } from '../whatsapp/whatsapp-automation.service';
+import { NotificationsService } from '../notifications/notifications.service';
+
+const DOUBLE_BOOKING_MSG = 'Horario indisponivel. Esta embarcacao ja esta reservada no periodo solicitado.';
+
+function isDbOverlapError(error: unknown): boolean {
+  if (typeof error === 'object' && error !== null) {
+    const e = error as Record<string, unknown>;
+    if (e.code === 'P2002') return true;
+    if ((e.code as string)?.includes('unique_violation') || (e.code as string) === '23505') return true;
+    if (e.code === 'P2023') return true;
+    if ((e.code as string)?.startsWith('23')) return true;
+  }
+  return false;
+}
 
 @Injectable()
 export class ReservationsService {
   private readonly logger = new Logger(ReservationsService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private validationService: ReservationValidationService,
+    private notificationsService: NotificationsService,
+    @Optional() @Inject(WhatsAppAutomationService) private whatsapp?: WhatsAppAutomationService,
+  ) {}
 
   // Every day at 17:00 BRT — mark all ended reservations as COMPLETED
   @Cron('0 17 * * *', { timeZone: 'America/Sao_Paulo' })
@@ -70,8 +91,11 @@ export class ReservationsService {
       const overdueCharge = await this.prisma.charge.findFirst({
         where: {
           userId,
-          status: 'OVERDUE',
           deletedAt: null,
+          OR: [
+            { status: 'OVERDUE' },
+            { status: 'PENDING', dueDate: { lt: new Date() } },
+          ],
         },
       });
 
@@ -101,27 +125,6 @@ export class ReservationsService {
       throw new BadRequestException('Embarcação em manutenção no período solicitado');
     }
 
-    // Check conflicting reservations
-    const conflict = await this.prisma.reservation.findFirst({
-      where: {
-        boatId: dto.boatId,
-        status: { in: ['CONFIRMED', 'PENDING', 'IN_USE'] },
-        deletedAt: null,
-        startDate: { lt: new Date(dto.endDate) },
-        endDate: { gt: new Date(dto.startDate) },
-      },
-      include: { user: { select: { name: true } } },
-    });
-
-    if (conflict) {
-      const cStart = conflict.startDate.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-      const cEnd = conflict.endDate.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-      const who = conflict.user?.name || 'outro cotista';
-      throw new BadRequestException(
-        `Horário indisponível. ${who} já tem reserva de ${cStart} até ${cEnd}.`,
-      );
-    }
-
     // Check max reservation days
     const maxDays = parseInt(process.env.MAX_RESERVATION_DAYS || '7');
     const start = new Date(dto.startDate);
@@ -132,17 +135,79 @@ export class ReservationsService {
       throw new BadRequestException(`Reserva máxima de ${maxDays} dias`);
     }
 
-    return this.prisma.reservation.create({
-      data: {
-        boatId: dto.boatId,
-        userId,
-        startDate: start,
-        endDate: end,
-        status: 'CONFIRMED',
-        notes: dto.notes,
-      },
-      include: { boat: { select: { id: true, name: true, model: true } } },
-    });
+    // Conflict check + insert MUST be atomic to prevent race conditions.
+    // The DB trigger (from migration 20260415000000) acts as the final guard.
+    try {
+      const reservation = await this.prisma.$transaction(async (tx) => {
+        // Pre-flight validation (also catches edge cases not covered by app-level checks)
+        await this.validationService.validateBeforeCreate(dto.boatId, start, end);
+
+        const conflict = await tx.reservation.findFirst({
+          where: {
+            boatId: dto.boatId,
+            status: { in: ['CONFIRMED', 'PENDING', 'IN_USE'] },
+            deletedAt: null,
+            startDate: { lt: end },
+            endDate: { gt: start },
+          },
+          include: { user: { select: { name: true } } },
+        });
+
+        if (conflict) {
+          const cStart = conflict.startDate.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
+          const cEnd = conflict.endDate.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
+          const who = conflict.user?.name || 'outro cotista';
+          throw new BadRequestException(
+            `Horário indisponível. ${who} já tem reserva de ${cStart} até ${cEnd}.`,
+          );
+        }
+
+        return tx.reservation.create({
+          data: {
+            boatId: dto.boatId,
+            userId,
+            startDate: start,
+            endDate: end,
+            status: 'CONFIRMED',
+            confirmedAt: new Date(),
+            notes: dto.notes,
+          },
+          include: { boat: { select: { id: true, name: true, model: true } } },
+        });
+      });
+
+      // Send instant WhatsApp confirmation for same-day reservations
+      if (this.whatsapp && reservation) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        if (new Date(reservation.startDate) >= today && new Date(reservation.startDate) < tomorrow) {
+          this.whatsapp.sendInstantReservationConfirmation(reservation.id).catch((err) => {
+            this.logger.error(`Failed to send WhatsApp reservation confirmation ${reservation.id}: ${err.message}`);
+          });
+        }
+      }
+
+      // Send push notification for new reservation
+      if (reservation) {
+        this.notificationsService.send({
+          userId: reservation.userId,
+          type: 'RESERVATION_CREATED',
+          title: '📅 Reserva confirmada',
+          body: `Sua reserva em ${reservation.boat?.name || 'embarcação'} foi criada com sucesso!`,
+          data: { reservationId: reservation.id, boatId: reservation.boatId, url: '/boats' },
+          pushTag: `res-created-${reservation.id}`,
+        }).catch((err) => this.logger.error(`Push reservation notification failed: ${err.message}`));
+      }
+
+      return reservation;
+    } catch (error) {
+      if (isDbOverlapError(error)) {
+        throw new BadRequestException(DOUBLE_BOOKING_MSG);
+      }
+      throw error;
+    }
   }
 
   async findAll(p = 1, l = 20, status?: string, boatId?: string) {
@@ -159,7 +224,7 @@ export class ReservationsService {
         take: limit,
         include: {
           boat: { select: { id: true, name: true, model: true } },
-          user: { select: { id: true, name: true, email: true } },
+          user: { select: { id: true, name: true, email: true, avatar: true } },
         },
         orderBy: { startDate: 'desc' },
       }),
@@ -194,21 +259,26 @@ export class ReservationsService {
       const dayEnd = new Date(date + 'T23:59:59');
       where.startDate = { lte: dayEnd };
       where.endDate = { gte: dayStart };
+      // Date-specific queries are also used for historical view in PWA.
+      where.status = { in: ['CONFIRMED', 'PENDING', 'IN_USE', 'COMPLETED'] };
     }
     return this.prisma.reservation.findMany({
       where,
-      include: { user: { select: { id: true, name: true } } },
+      include: { user: { select: { id: true, name: true, avatar: true } } },
       orderBy: { startDate: 'asc' },
     });
   }
 
   async cancel(id: string, userId: string, reason?: string, role?: string) {
-    const reservation = await this.prisma.reservation.findUnique({ where: { id } });
+    const reservation = await this.prisma.reservation.findUnique({
+      where: { id },
+      include: { boat: { select: { name: true } } },
+    });
     if (!reservation) throw new NotFoundException('Reserva não encontrada');
     if (role !== 'ADMIN' && reservation.userId !== userId) throw new ForbiddenException('Reserva não pertence a você');
     if (reservation.status === 'CANCELLED') throw new BadRequestException('Reserva já cancelada');
 
-    return this.prisma.reservation.update({
+    const result = await this.prisma.reservation.update({
       where: { id },
       data: {
         status: 'CANCELLED',
@@ -216,6 +286,18 @@ export class ReservationsService {
         cancelReason: reason || 'Cancelado pelo cliente',
       },
     });
+
+    // Send push notification for cancellation
+    this.notificationsService.send({
+      userId: reservation.userId,
+      type: 'RESERVATION_CANCELLED',
+      title: '❌ Reserva cancelada',
+      body: `Sua reserva em ${(reservation as any).boat?.name || 'embarcação'} foi cancelada.`,
+      data: { reservationId: id, url: '/boats' },
+      pushTag: `res-cancelled-${id}`,
+    }).catch((err) => this.logger.error(`Push cancel notification failed: ${err.message}`));
+
+    return result;
   }
 
   async getCalendar(boatId: string, month: number, year: number) {
@@ -229,7 +311,7 @@ export class ReservationsService {
         startDate: { lte: endOfMonth },
         endDate: { gte: startOfMonth },
       },
-      include: { user: { select: { id: true, name: true } } },
+      include: { user: { select: { id: true, name: true, avatar: true } } },
       orderBy: { startDate: 'asc' },
     });
   }
@@ -274,7 +356,7 @@ export class ReservationsService {
     });
     if (existing) throw new BadRequestException('Já existe uma solicitação de troca pendente envolvendo uma dessas reservas');
 
-    return this.prisma.reservationSwap.create({
+    const swap = await this.prisma.reservationSwap.create({
       data: {
         reservationId: dto.targetReservationId,
         offeredReservationId: dto.offeredReservationId,
@@ -288,6 +370,26 @@ export class ReservationsService {
         requester: { select: { id: true, name: true } },
       },
     });
+
+    // Send WhatsApp notifications
+    if (this.whatsapp) {
+      this.whatsapp.sendSwapRequestNotification(swap.id).catch((err) => {
+        this.logger.error(`Failed to send swap request notification: ${err.message}`);
+      });
+    }
+
+    // Send push notification to target user (owner of the wanted reservation)
+    this.notificationsService.send({
+      userId: swap.targetUserId,
+      type: 'SWAP_REQUEST',
+      title: '🔄 Solicitação de troca de data',
+      body: `${swap.requester?.name || 'Um cotista'} quer trocar de data com você na ${swap.reservation?.boat?.name || 'embarcação'}.`,
+      data: { swapId: swap.id, url: '/reservations' },
+      pushTag: `swap-req-${swap.id}`,
+      pushActions: [{ action: 'view', title: 'Ver detalhes' }],
+    }).catch((err) => this.logger.error(`Push swap request notification failed: ${err.message}`));
+
+    return swap;
   }
 
   async getMySwapRequests(userId: string) {
@@ -354,33 +456,41 @@ export class ReservationsService {
       const offeredStart = swap.offeredReservation.startDate;
       const offeredEnd = swap.offeredReservation.endDate;
 
-      await this.prisma.$transaction([
-        // Target reservation gets the offered reservation's dates
-        this.prisma.reservation.update({
-          where: { id: swap.reservationId },
-          data: { startDate: offeredStart, endDate: offeredEnd },
-        }),
-        // Offered reservation gets the target reservation's dates
-        this.prisma.reservation.update({
-          where: { id: swap.offeredReservationId },
-          data: { startDate: targetStart, endDate: targetEnd },
-        }),
-      ]);
-
-      // Also swap scheduledAt in OperationalQueue if entries exist
-      await this.prisma.$transaction([
-        this.prisma.operationalQueue.updateMany({
-          where: { reservationId: swap.reservationId },
-          data: { scheduledAt: offeredStart },
-        }),
-        this.prisma.operationalQueue.updateMany({
-          where: { reservationId: swap.offeredReservationId },
-          data: { scheduledAt: targetStart },
-        }),
-      ]);
+      try {
+        await this.prisma.$transaction(async (tx) => {
+          // Temporarily disable overlap trigger so the intermediate state doesn't conflict
+          await tx.$executeRawUnsafe('ALTER TABLE reservations DISABLE TRIGGER trg_reservation_overlap_check');
+          // Target reservation gets the offered reservation's dates
+          await tx.reservation.update({
+            where: { id: swap.reservationId },
+            data: { startDate: offeredStart, endDate: offeredEnd },
+          });
+          // Offered reservation gets the target reservation's dates
+          await tx.reservation.update({
+            where: { id: swap.offeredReservationId },
+            data: { startDate: targetStart, endDate: targetEnd },
+          });
+          // Re-enable overlap trigger
+          await tx.$executeRawUnsafe('ALTER TABLE reservations ENABLE TRIGGER trg_reservation_overlap_check');
+          // Also swap scheduledAt in OperationalQueue if entries exist
+          await tx.operationalQueue.updateMany({
+            where: { reservationId: swap.reservationId },
+            data: { scheduledAt: offeredStart },
+          });
+          await tx.operationalQueue.updateMany({
+            where: { reservationId: swap.offeredReservationId },
+            data: { scheduledAt: targetStart },
+          });
+        });
+      } catch (error) {
+        if (isDbOverlapError(error)) {
+          throw new BadRequestException('Troca nao pode ser concluida: ha conflito com outra reserva.');
+        }
+        throw error;
+      }
     }
 
-    return this.prisma.reservationSwap.update({
+    const result = await this.prisma.reservationSwap.update({
       where: { id: swapId },
       data: {
         status: accept ? 'ACCEPTED' : 'REJECTED',
@@ -393,6 +503,28 @@ export class ReservationsService {
         targetUser: { select: { id: true, name: true } },
       },
     });
+
+    // Send WhatsApp notifications
+    if (this.whatsapp) {
+      this.whatsapp.sendSwapResponseNotification(result.id).catch((err) => {
+        this.logger.error(`Failed to send swap response notification: ${err.message}`);
+      });
+    }
+
+    // Send push notification to the requester about the response
+    const notifType = accept ? 'SWAP_ACCEPTED' : 'SWAP_REJECTED';
+    const emoji = accept ? '✅' : '❌';
+    const statusText = accept ? 'aceita' : 'recusada';
+    this.notificationsService.send({
+      userId: result.requesterId,
+      type: notifType,
+      title: `${emoji} Troca de data ${statusText}`,
+      body: `${result.targetUser?.name || 'O cotista'} ${statusText} sua solicitação de troca na ${result.reservation?.boat?.name || 'embarcação'}.`,
+      data: { swapId: result.id, url: '/reservations' },
+      pushTag: `swap-resp-${result.id}`,
+    }).catch((err) => this.logger.error(`Push swap response notification failed: ${err.message}`));
+
+    return result;
   }
 
   async getCoOwners(userId: string, boatId: string) {

@@ -4,22 +4,23 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { clsx } from 'clsx';
 import { useAuth } from '@/contexts/auth';
-import { Ship, Calendar, FileText, Fuel, Wrench, Settings, LogOut, ClipboardCheck, Sun, Moon, ShoppingBag } from 'lucide-react';
+import { Ship, Calendar, FileText, Fuel, Wrench, Settings, LogOut, ClipboardCheck, Sun, Moon, ShoppingBag, User, Compass, Home } from 'lucide-react';
 import Image from 'next/image';
 import { useState, useEffect } from 'react';
 
 const clientNav = [
-  { label: 'Cotas', href: '/boats', icon: Ship },
+  { label: 'Início', href: '/boats', icon: Home },
   { label: 'Reservas', href: '/reservations', icon: Calendar },
+  { label: 'Social', href: '/social', icon: Compass },
   { label: 'Faturas', href: '/invoices', icon: FileText },
-  { label: 'Ofertas', href: '/compras', icon: ShoppingBag },
-  { label: 'Checklist', href: '/operations', icon: ClipboardCheck },
+  { label: 'Perfil', href: '/profile', icon: User },
 ];
 
 const operatorNav = [
   { label: 'Combustível', href: '/fuel', icon: Fuel },
   { label: 'Operações', href: '/operations', icon: Settings },
   { label: 'Manutenção', href: '/maintenance', icon: Wrench },
+  { label: 'Perfil', href: '/profile', icon: User },
 ];
 
 export function BottomNav() {
@@ -56,9 +57,6 @@ export function BottomNav() {
           <button onClick={toggleTheme} className="p-1.5 rounded-lg bg-[var(--subtle)] text-[var(--text-secondary)] hover:bg-[var(--subtle-hover)] transition">
             {isDark ? <Sun size={14} /> : <Moon size={14} />}
           </button>
-          <div className="w-7 h-7 rounded-full bg-primary-500/15 flex items-center justify-center text-primary-500 font-bold text-xs">
-            {user.name?.charAt(0)}
-          </div>
           <button onClick={logout} className="p-1.5 hover:bg-[var(--subtle-hover)] rounded-lg transition">
             <LogOut size={14} className="text-[var(--text-muted)]" />
           </button>
@@ -67,7 +65,7 @@ export function BottomNav() {
 
       {/* Bottom navigation */}
       <nav className="fixed bottom-0 left-0 right-0 z-50 bg-[var(--nav-bg)] border-t border-[var(--nav-border)] safe-area-bottom">
-        <div className="flex items-center justify-around py-2">
+        <div className="flex items-center justify-evenly py-2.5 px-1">
           {items.map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
             return (
@@ -75,10 +73,13 @@ export function BottomNav() {
                 key={item.href}
                 href={item.href}
                 className={clsx(
-                  'flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg transition-colors min-w-[64px]',
+                  'relative flex flex-col items-center gap-0.5 px-3.5 py-1 rounded-lg transition-colors min-w-[68px]',
                   isActive ? 'text-primary-500' : 'text-[var(--text-muted)]'
                 )}
               >
+                {isActive && (
+                  <span className="absolute -top-[11px] left-1/2 -translate-x-1/2 w-14 h-1 rounded-full bg-primary-500" />
+                )}
                 <item.icon size={22} strokeWidth={isActive ? 2.5 : 1.5} />
                 <span className={clsx('text-[10px]', isActive ? 'font-semibold' : 'font-medium')}>
                   {item.label}

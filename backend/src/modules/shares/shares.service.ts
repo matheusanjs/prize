@@ -61,7 +61,7 @@ export class SharesService {
     return this.prisma.share.findMany({
       where,
       include: {
-        boat: { select: { id: true, name: true, model: true, totalShares: true, monthlyFee: true, imageUrl: true } },
+        boat: { select: { id: true, name: true, model: true, status: true, totalShares: true, monthlyFee: true, imageUrl: true } },
         user: { select: { id: true, name: true, email: true, phone: true } },
       },
       orderBy: { createdAt: 'desc' },

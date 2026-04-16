@@ -87,4 +87,10 @@ export class FinanceController {
   processDelinquencies() {
     return this.financeService.processDelinquencies();
   }
+
+  @Post('charges/:id/woovi')
+  @ApiOperation({ summary: 'Gerar cobrança Woovi Pix para uma cobrança' })
+  generateWooviCharge(@Param('id') chargeId: string) {
+    return this.financeService.generateWooviForCharge(chargeId);
+  }
 }

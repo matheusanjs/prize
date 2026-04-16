@@ -1,16 +1,33 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger, Inject, Optional } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateChargeDto } from './dto/create-charge.dto';
 import { RegisterPaymentDto } from './dto/register-payment.dto';
+import type { WooviService } from '../payments/woovi.service';
+import { WhatsAppAutomationService } from '../whatsapp/whatsapp-automation.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class FinanceService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(FinanceService.name);
+  private prisma: PrismaService;
+  private wooviService!: WooviService;
+
+  constructor(
+    prisma: PrismaService,
+    private notificationsService: NotificationsService,
+    @Optional() @Inject(WhatsAppAutomationService) private whatsapp?: WhatsAppAutomationService,
+  ) {
+    this.prisma = prisma;
+  }
+
+  setWooviService(service: WooviService) {
+    this.wooviService = service;
+  }
 
   // ---- CHARGES ----
 
   async createCharge(dto: CreateChargeDto) {
-    return this.prisma.charge.create({
+    const charge = await this.prisma.charge.create({
       data: {
         userId: dto.userId,
         description: dto.description,
@@ -21,6 +38,32 @@ export class FinanceService {
         boatId: dto.boatId,
       },
     });
+
+    // Auto-generate Woovi PIX charge for user-facing charges
+    if (this.wooviService && charge.status === 'PENDING') {
+      this.generateWooviForCharge(charge.id).catch((err) => {
+        this.logger.error(`Failed to auto-generate Woovi charge ${charge.id}: ${err.message}`);
+      });
+    }
+
+    // Send WhatsApp notification
+    if (this.whatsapp) {
+      this.whatsapp.sendChargeCreatedNotification(charge.id).catch((err) => {
+        this.logger.error(`Failed to send WhatsApp charge notification ${charge.id}: ${err.message}`);
+      });
+    }
+
+    // Send push notification
+    this.notificationsService.send({
+      userId: dto.userId,
+      type: 'CHARGE_CREATED',
+      title: '💰 Nova fatura gerada',
+      body: `Fatura de R$ ${Number(dto.amount).toFixed(2)} — ${dto.description || 'Cobrança'}`,
+      data: { chargeId: charge.id, url: '/faturas' },
+      pushTag: `charge-new-${charge.id}`,
+    }).catch((err) => this.logger.error(`Push charge notification failed: ${err.message}`));
+
+    return charge;
   }
 
   async generateMonthlyCharges() {
@@ -73,7 +116,77 @@ export class FinanceService {
       }
     }
 
+    // Auto-generate Woovi PIX charges for all new charges
+    if (this.wooviService) {
+      for (const charge of charges) {
+        this.generateWooviForCharge(charge.id).catch((err) => {
+          this.logger.error(`Failed to auto-generate Woovi charge ${charge.id}: ${err.message}`);
+        });
+      }
+    }
+
+    // Send push notifications for all generated charges
+    for (const charge of charges) {
+      this.notificationsService.send({
+        userId: charge.userId,
+        type: 'CHARGE_CREATED',
+        title: '💰 Nova fatura gerada',
+        body: `${charge.description} — R$ ${Number(charge.amount).toFixed(2)}`,
+        data: { chargeId: charge.id, url: '/faturas' },
+        pushTag: `charge-new-${charge.id}`,
+      }).catch((err) => this.logger.error(`Push monthly charge notification failed: ${err.message}`));
+    }
+
     return { generated: charges.length, charges };
+  }
+
+  /**
+   * Generate Woovi PIX charge for an existing charge (auto-calls from createCharge/monthly generation)
+   */
+  async generateWooviForCharge(chargeId: string): Promise<any> {
+    const charge = await this.prisma.charge.findUnique({ where: { id: chargeId } });
+    if (!charge || charge.status !== 'PENDING') return null;
+    if (charge.wooviCorrelationID) return null; // already generated
+
+    const correlationID = `prizeclub-charge-${charge.id}`;
+    const amountInCents = Math.round(charge.amount * 100);
+
+    const wooviResponse = await this.wooviService.createCharge({
+      value: amountInCents,
+      comment: charge.description || `Cobrança ${charge.id}`,
+      correlationID,
+    });
+
+    // Save Woovi data on Charge AND create Payment record for webhook matching
+    await this.prisma.$transaction(async (tx) => {
+      await tx.charge.update({
+        where: { id: chargeId },
+        data: {
+          wooviCorrelationID: correlationID,
+          wooviBrCode: wooviResponse.charge.brCode,
+        },
+      });
+      await tx.payment.create({
+        data: {
+          chargeId: charge.id,
+          userId: charge.userId,
+          amount: charge.amount,
+          method: 'PIX',
+          wooviTransactionId: wooviResponse.charge.transactionID,
+          wooviBrCode: wooviResponse.charge.brCode,
+          wooviQrCodeUrl: wooviResponse.charge.qrCodeImage,
+          wooviPaymentLinkUrl: wooviResponse.charge.paymentLinkUrl,
+          wooviPixKey: wooviResponse.charge.pixKey,
+          wooviStatus: wooviResponse.charge.status,
+          wooviCorrelationID: correlationID,
+          wooviExpiresDate: new Date(wooviResponse.charge.expiresDate),
+          wooviFee: wooviResponse.charge.fee / 100,
+        },
+      });
+    });
+
+    this.logger.log(`Woovi PIX auto-generated for charge ${chargeId} (${correlationID})`);
+    return wooviResponse;
   }
 
   async getUserCharges(userId: string, status?: string) {

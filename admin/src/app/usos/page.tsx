@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Activity, Filter, RefreshCw, Ship, User, Clock, Fuel, ClipboardCheck, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getUsages, getBoats } from '@/services/api';
 
@@ -62,6 +62,13 @@ export default function UsosPage() {
   const totalFuel = (item: UsageItem) => (item.fuelLogs || []).reduce((s, f) => s + (f.liters || 0), 0);
   const totalCost = (item: UsageItem) => (item.fuelLogs || []).reduce((s, f) => s + (f.totalCost || 0), 0);
 
+  // Memoize summary stats to avoid recomputing on every render
+  const summaryStats = useMemo(() => ({
+    inUse: usages.filter(u => u.status === 'IN_USE').length,
+    totalLiters: usages.reduce((s, u) => s + totalFuel(u), 0).toFixed(1) + 'L',
+    withChecklist: usages.filter(u => u.checklist).length,
+  }), [usages]);
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -99,9 +106,9 @@ export default function UsosPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           { label: 'Total de Usos', value: total, icon: Activity, color: 'purple' },
-          { label: 'Em Uso Agora', value: usages.filter(u => u.status === 'IN_USE').length, icon: Clock, color: 'blue' },
-          { label: 'Litros Abastecidos', value: usages.reduce((s, u) => s + totalFuel(u), 0).toFixed(1) + 'L', icon: Fuel, color: 'orange' },
-          { label: 'Com Checklist', value: usages.filter(u => u.checklist).length, icon: ClipboardCheck, color: 'green' },
+          { label: 'Em Uso Agora', value: summaryStats.inUse, icon: Clock, color: 'blue' },
+          { label: 'Litros Abastecidos', value: summaryStats.totalLiters, icon: Fuel, color: 'orange' },
+          { label: 'Com Checklist', value: summaryStats.withChecklist, icon: ClipboardCheck, color: 'green' },
         ].map(({ label, value, icon: Icon, color }) => (
           <div key={label} className="bg-th-card border border-th rounded-xl p-4">
             <div className={`w-8 h-8 rounded-lg bg-${color}-500/10 flex items-center justify-center mb-2`}>

@@ -4,6 +4,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import OpenAI from 'openai';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateFuelLogDto } from './dto/create-fuel-log.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class FuelService {
@@ -15,12 +16,13 @@ export class FuelService {
   constructor(
     private prisma: PrismaService,
     private config: ConfigService,
+    private notificationsService: NotificationsService,
   ) {
     this.genAI = new GoogleGenerativeAI(this.config.get<string>('GEMINI_API_KEY')!);
     this.aiModel = this.config.get<string>('GEMINI_MODEL', 'gemini-2.0-flash');
     const openaiKey = this.config.get<string>('OPENAI_API_KEY');
     if (openaiKey) {
-      this.openai = new OpenAI({ apiKey: openaiKey });
+      this.openai = new OpenAI({ apiKey: openaiKey, baseURL: 'https://api.openai.com/v1' });
     }
   }
 
@@ -117,7 +119,7 @@ export class FuelService {
         const today = new Date();
         today.setHours(23, 59, 59, 999);
         for (const share of targetShares) {
-          await this.prisma.charge.create({
+          const charge = await this.prisma.charge.create({
             data: {
               userId: share.userId,
               description: `Combustível — ${boat.name} (${dto.liters}L)`,
@@ -128,6 +130,16 @@ export class FuelService {
               boatId: dto.boatId,
             },
           });
+
+          // Send push notification for fuel charge
+          this.notificationsService.send({
+            userId: share.userId,
+            type: 'FUEL',
+            title: '⛽ Combustível registrado',
+            body: `Abastecimento de ${dto.liters}L na ${boat.name} — R$ ${costPerShare.toFixed(2)}`,
+            data: { chargeId: charge.id, fuelLogId: fuelLog.id, url: '/faturas' },
+            pushTag: `fuel-${fuelLog.id}-${share.userId}`,
+          }).catch(() => {});
         }
       }
     }

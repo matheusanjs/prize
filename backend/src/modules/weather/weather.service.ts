@@ -59,7 +59,7 @@ export class WeatherService {
     this.genAI = new GoogleGenerativeAI(this.config.get<string>('GEMINI_API_KEY')!);
     this.geminiModel = this.config.get<string>('GEMINI_MODEL', 'gemini-2.0-flash');
     const openaiKey = this.config.get<string>('OPENAI_API_KEY');
-    if (openaiKey) this.openai = new OpenAI({ apiKey: openaiKey });
+    if (openaiKey) this.openai = new OpenAI({ apiKey: openaiKey, baseURL: 'https://api.openai.com/v1' });
   }
 
   classifyWeather(data: HGBrasilCurrentData): ClassificationResult {

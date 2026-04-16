@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Wrench, Plus, Ship, Calendar, CheckCircle, Clock, AlertTriangle, X, Save, DollarSign, Users, Building2, Search, Tag, PlusCircle } from 'lucide-react';
-import { getMaintenances, createMaintenance, updateMaintenance, getBoats, getSharesByBoat, createCharge } from '@/services/api';
+import { Wrench, Plus, Ship, Calendar, CheckCircle, Clock, AlertTriangle, X, Save, DollarSign, Users, Building2, Search, Tag, PlusCircle, ShieldCheck } from 'lucide-react';
+import { getMaintenances, createMaintenance, updateMaintenance, resolveMaintenance, getBoats, getSharesByBoat, createCharge } from '@/services/api';
 
 interface Maintenance {
   id: string;
@@ -77,6 +77,7 @@ export default function MaintenancePage() {
     scheduledAt: '',
     costType: 'INTERNAL',
     category: '',
+    blockBoat: true,
   });
   const [costPreview, setCostPreview] = useState<{ perShareholder: number; totalShares: number; shareholders: ShareHolder[] } | null>(null);
   const [loadingShares, setLoadingShares] = useState(false);
@@ -107,7 +108,7 @@ export default function MaintenancePage() {
   }
 
   async function openCreate() {
-    setForm({ boatId: '', title: '', description: '', priority: 'MEDIUM', estimatedCost: 0, scheduledAt: '', costType: 'INTERNAL', category: '' });
+    setForm({ boatId: '', title: '', description: '', priority: 'MEDIUM', estimatedCost: 0, scheduledAt: '', costType: 'INTERNAL', category: '', blockBoat: true });
     setCostPreview(null);
     setShowCatInput(false);
     setNewCategory('');
@@ -171,6 +172,7 @@ export default function MaintenancePage() {
         priority: form.priority,
         estimatedCost: Number(form.estimatedCost) || undefined,
         scheduledAt: form.scheduledAt || undefined,
+        blockBoat: form.blockBoat,
       };
       await createMaintenance(payload);
 
@@ -332,6 +334,24 @@ export default function MaintenancePage() {
                       <Icon size={14} />
                       {sc.label}
                     </div>
+                    {m.status !== 'COMPLETED' && m.status !== 'CANCELLED' && (
+                      <button
+                        onClick={async () => {
+                          if (!confirm(`Resolver manutenção "${m.title || m.description}"? A embarcação voltará a ficar disponível.`)) return;
+                          try {
+                            await resolveMaintenance(m.id);
+                            loadMaintenances();
+                            loadAllBoats();
+                          } catch (err: any) {
+                            alert(err?.response?.data?.message || 'Erro ao resolver manutenção');
+                          }
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25 transition"
+                        title="Resolver manutenção — liberar embarcação"
+                      >
+                        <ShieldCheck size={14} /> Resolver
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -419,7 +439,14 @@ export default function MaintenancePage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-th-secondary mb-1">Prioridade</label>
-                  <select value={form.priority} onChange={(e) => setForm({...form, priority: e.target.value})} className="w-full border border-th rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 outline-none">
+                  <select
+                    value={form.priority}
+                    onChange={(e) => {
+                      const p = e.target.value;
+                      setForm({...form, priority: p, blockBoat: p === 'CRITICAL' ? true : form.blockBoat});
+                    }}
+                    className="w-full border border-th rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 outline-none"
+                  >
                     <option value="LOW">Baixa</option>
                     <option value="MEDIUM">Média</option>
                     <option value="HIGH">Alta</option>
@@ -430,6 +457,21 @@ export default function MaintenancePage() {
                   <label className="block text-sm font-medium text-th-secondary mb-1">Data agendada</label>
                   <input type="date" value={form.scheduledAt} onChange={(e) => setForm({...form, scheduledAt: e.target.value})} className="w-full border border-th rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 outline-none" />
                 </div>
+              </div>
+
+              {/* Block Boat toggle */}
+              <div className="flex items-center justify-between p-3 rounded-xl border border-th bg-th-surface/50">
+                <div>
+                  <p className="text-sm font-medium text-th">Bloquear embarcação</p>
+                  <p className="text-xs text-th-muted mt-0.5">Impede que usuários criem reservas enquanto a manutenção existe</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setForm({...form, blockBoat: !form.blockBoat})}
+                  className={`relative w-11 h-6 rounded-full transition-colors ${form.blockBoat ? 'bg-primary-500' : 'bg-th-muted/40'}`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${form.blockBoat ? 'translate-x-5' : ''}`} />
+                </button>
               </div>
 
               {/* Cost */}

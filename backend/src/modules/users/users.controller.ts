@@ -36,6 +36,16 @@ export class UsersController {
     return this.usersService.getProfile(userId);
   }
 
+  @Patch('profile')
+  @ApiOperation({ summary: 'Atualizar dados do próprio perfil' })
+  updateProfile(
+    @CurrentUser('id') userId: string,
+    @Body() dto: UpdateUserDto,
+  ) {
+    const { name, phone, avatar } = dto;
+    return this.usersService.updateProfile(userId, { name, phone, avatar });
+  }
+
   @Get(':id')
   @Roles('ADMIN')
   @ApiOperation({ summary: 'Buscar usuário por ID (Admin)' })

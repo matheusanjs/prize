@@ -1,16 +1,25 @@
+import * as dotenv from 'dotenv';
+dotenv.config({ override: true });
+
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
 import * as compression from 'compression';
 import * as bodyParser from 'body-parser';
+import * as express from 'express';
+import { join } from 'path';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // Body size limit (for base64 images)
-  app.use(bodyParser.json({ limit: '100mb' }));
+  // Store raw body buffer for webhook signature verification
+  app.use(bodyParser.json({
+    limit: '100mb',
+    verify: (req: any, res, buf) => { req.rawBody = buf; },
+  }));
   app.use(bodyParser.urlencoded({ limit: '100mb', extended: true }));
 
   // Security
@@ -65,6 +74,9 @@ async function bootstrap() {
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
+
+  // Static files (e.g. default avatar)
+  app.use('/static', express.static(join(process.cwd(), 'public')));
 
   const port = process.env.PORT || 3000;
   await app.listen(port);

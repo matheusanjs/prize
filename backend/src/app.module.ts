@@ -24,6 +24,9 @@ import { OrdersModule } from './modules/orders/orders.module';
 import { PdvModule } from './modules/pdv/pdv.module';
 import { WaiterPanelModule } from './modules/waiter-panel/waiter-panel.module';
 import { WeatherModule } from './modules/weather/weather.module';
+import { PaymentsModule } from './modules/payments/payments.module';
+import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
+import { SocialModule } from './modules/social/social.module';
 
 @Module({
   imports: [
@@ -60,6 +63,9 @@ import { WeatherModule } from './modules/weather/weather.module';
     PdvModule,
     WaiterPanelModule,
     WeatherModule,
+    PaymentsModule,
+    WhatsAppModule,
+    SocialModule,
   ],
 })
 export class AppModule {}

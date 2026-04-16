@@ -4,6 +4,12 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Fuel, Plus, Ship, DollarSign, Camera, Loader2, X, Settings, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { getFuelLogs, getBoats, createFuelLog, getFuelPrice, setFuelPrice, getSharesByBoat, getBoatReservations, getLastReturnInspection } from '@/services/api';
 
+const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || 'https://api.marinaprizeclub.com/api/v1').replace(/\/api\/v1$/, '');
+function resolveMediaUrl(url: string | undefined | null): string {
+  if (!url) return '';
+  if (url.startsWith('/uploads/')) return `${API_ORIGIN}${url}`;
+  return url;
+}
 interface FuelLog {
   id: string;
   boatName?: string;
@@ -178,7 +184,7 @@ export default function FuelPage() {
             <div className="p-5 space-y-4">
               {viewLog.imageUrl && (
                 <img
-                  src={viewLog.imageUrl}
+                  src={resolveMediaUrl(viewLog.imageUrl)}
                   alt="Foto do abastecimento"
                   className="w-full rounded-xl object-contain max-h-72 bg-th-surface border border-th"
                 />
@@ -403,7 +409,7 @@ function NewFuelingModal({ currentPrice, onClose, onSuccess }: { currentPrice: n
                             <span className="text-xs text-blue-500 ml-auto">Cotista: {returnInspection.cotistaName}</span>
                           )}
                         </div>
-                        <img src={returnInspection.returnFuelPhotoUrl || returnInspection.fuelPhotoUrl} alt="Tanque" className="w-full max-h-40 object-contain rounded-lg" />
+                        <img src={resolveMediaUrl(returnInspection.returnFuelPhotoUrl || returnInspection.fuelPhotoUrl)} alt="Tanque" className="w-full max-h-40 object-contain rounded-lg" />
                       </div>
                     )}
 
@@ -495,7 +501,7 @@ function NewFuelingModal({ currentPrice, onClose, onSuccess }: { currentPrice: n
                         {returnInspection.returnFuelPhotoUrl ? 'Foto do tanque — Inspeção de Retorno' : 'Foto do tanque — Checklist de Saída'}
                       </span>
                     </div>
-                    <img src={returnInspection.returnFuelPhotoUrl || returnInspection.fuelPhotoUrl} alt="Tanque" className="w-full max-h-48 object-contain rounded-lg" />
+                    <img src={resolveMediaUrl(returnInspection.returnFuelPhotoUrl || returnInspection.fuelPhotoUrl)} alt="Tanque" className="w-full max-h-48 object-contain rounded-lg" />
                     {returnInspection.cotistaName && (
                       <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">Cotista: {returnInspection.cotistaName}</p>
                     )}

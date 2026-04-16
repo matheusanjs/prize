@@ -251,7 +251,7 @@ function NewFuelingModal({ currentPrice, onClose, onSuccess }: {
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    getBoats().then(res => {
+    getBoats().then((res: any) => {
       const d = res.data;
       setBoats((Array.isArray(d) ? d : d?.data || []).filter((b: Boat) => b.fuelCapacity > 0));
     }).catch(() => setBoats([]));

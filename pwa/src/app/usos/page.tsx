@@ -60,9 +60,10 @@ export default function UsosPage() {
         </div>
       </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>
-      ) : usages.length === 0 ? (
+      <div className="space-y-4">
+        {loading ? (
+          <div className="flex items-center justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>
+        ) : usages.length === 0 ? (
         <div className="text-center py-16">
           <Activity className="w-12 h-12 mx-auto mb-3 text-[var(--text-muted)]" />
           <p className="text-sm text-[var(--text-muted)] font-medium">Nenhum uso registrado</p>
@@ -84,6 +85,7 @@ export default function UsosPage() {
           )}
         </div>
       )}
+      </div>
     </div>
   );
 }

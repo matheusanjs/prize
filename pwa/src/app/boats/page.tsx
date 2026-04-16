@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Ship, AlertTriangle, FileText, ArrowLeftRight, Check, X as XIcon, Calendar, Clock, Anchor, DollarSign, CheckCircle2, AlertCircle } from 'lucide-react';
+import { useEffect, useState, useRef } from 'react';
+import { Ship, AlertTriangle, FileText, ArrowLeftRight, Check, X as XIcon, Calendar, Clock, Anchor, DollarSign, CheckCircle2, AlertCircle, MapPin, ChevronRight, Navigation, Sparkles, Users, Star } from 'lucide-react';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth';
-import { getShares, getBoats, getMyCharges, getPendingSwaps, respondToSwap, getMyReservations, confirmArrival, getWeatherAiSummary } from '@/services/api';
+import { getShares, getMyCharges, getPendingSwaps, respondToSwap, getMyReservations, confirmArrival, cancelReservation, getWeatherHistory } from '@/services/api';
 import { format, parseISO, isToday } from 'date-fns';
 import WeatherWidget from '@/components/WeatherWidget';
+import api from '@/services/api';
 
 interface Boat {
   id: string;
@@ -57,6 +59,7 @@ interface SwapRequest {
 
 export default function BoatsPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const [shares, setShares] = useState<Share[]>([]);
   const [chargesByBoat, setChargesByBoat] = useState<Record<string, { overdue: number; pending: number }>>({});
   const [pendingSwaps, setPendingSwaps] = useState<SwapRequest[]>([]);
@@ -71,28 +74,37 @@ export default function BoatsPage() {
   const [confirmSaving, setConfirmSaving] = useState(false);
   const [confirmError, setConfirmError] = useState('');
   const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [todayHistory, setTodayHistory] = useState<any[]>([]);
+  const [highlightedTrips, setHighlightedTrips] = useState<any[]>([]);
+  const [activeTripIdx, setActiveTripIdx] = useState(0);
+  const [activeCotaIdx, setActiveCotaIdx] = useState(0);
+  const tripScrollRef = useRef<HTMLDivElement>(null);
+  const cotaScrollRef = useRef<HTMLDivElement>(null);
 
   const HOURS = ['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00'];
+  const userId = user?.id;
 
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
+    let cancelled = false;
     (async () => {
-      try {
-        const { data } = await getShares({ userId: user.id });
-        const items = Array.isArray(data) ? data : data.data || [];
-        setShares(items);
-      } catch {
-        try {
-          const { data } = await getBoats();
-          const boats = Array.isArray(data) ? data : data.data || [];
-          setShares(boats.map((b: Boat) => ({ id: b.id, shareNumber: 0, boat: b })));
-        } catch { /* empty */ }
-      }
+      // Run all independent API calls in parallel
+      const [sharesRes, chargesRes, swapsRes, myResRes, weatherRes] = await Promise.allSettled([
+        getShares({ userId }),
+        getMyCharges(),
+        getPendingSwaps(),
+        getMyReservations(),
+        getWeatherHistory(24),
+      ]);
 
-      // Load charges grouped by boat
-      try {
-        const { data: charges } = await getMyCharges();
-        const list: Charge[] = Array.isArray(charges) ? charges : charges.data || [];
+      // Process shares
+      const sharesData = sharesRes.status === 'fulfilled' ? sharesRes.value.data : undefined;
+      const shareItems = Array.isArray(sharesData) ? sharesData : sharesData?.data || [];
+      setShares(shareItems);
+
+      // Process charges
+      if (chargesRes.status === 'fulfilled') {
+        const list: Charge[] = Array.isArray(chargesRes.value.data) ? chargesRes.value.data : chargesRes.value.data?.data || [];
         const grouped: Record<string, { overdue: number; pending: number }> = {};
         list.forEach((c: Charge) => {
           const bid = c.boatId || '_none';
@@ -101,34 +113,50 @@ export default function BoatsPage() {
           if (c.status === 'PENDING') grouped[bid].pending++;
         });
         setChargesByBoat(grouped);
-      } catch { /* empty */ }
+      }
 
-      // Load pending swap requests
-      try {
-        const { data: swaps } = await getPendingSwaps();
-        setPendingSwaps(Array.isArray(swaps) ? swaps : swaps.data || []);
-      } catch { /* empty */ }
+      // Process swaps
+      if (swapsRes.status === 'fulfilled') {
+        setPendingSwaps(Array.isArray(swapsRes.value.data) ? swapsRes.value.data : swapsRes.value.data?.data || []);
+      }
 
-      // Load today's reservations for confirm presence banner
-      try {
-        const { data: resData } = await getMyReservations();
+      // Process today's reservations
+      if (myResRes.status === 'fulfilled') {
+        const resData = myResRes.value.data;
         const resList = Array.isArray(resData) ? resData : resData.data || [];
         const todayRes = resList.filter((r: any) =>
           ['CONFIRMED', 'PENDING'].includes(r.status) &&
           isToday(parseISO(r.startDate))
         );
         setTodayReservations(todayRes);
-      } catch { /* empty */ }
+      }
 
-      // Load AI navigation summary
+      // Process weather history
+      if (weatherRes.status === 'fulfilled') {
+        const histData = weatherRes.value.data;
+        const histList = Array.isArray(histData) ? histData : histData.data || [];
+        const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+        const todayHist = histList.filter((h: any) =>
+          new Date(h.collectedAt).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }) === todayStr
+        );
+        setTodayHistory(todayHist);
+      }
+
+      // Fetch highlighted trips
       try {
-        const { data: aiData } = await getWeatherAiSummary();
-        if (aiData.ok && aiData.data?.summary) setAiSummary(aiData.data.summary);
-      } catch { /* empty */ }
+        const { data } = await api.get('/social/trips');
+        const trips = data.trips || [];
+        setHighlightedTrips(trips.filter((t: any) => t.isHighlighted).slice(0, 5));
+      } catch { /* silent */ }
 
-      setLoading(false);
+      if (!cancelled) setLoading(false);
     })();
-  }, [user]);
+    return () => { cancelled = true; };
+  }, [userId]);
+
+  const handleBoatClick = (boatId: string) => {
+    router.push(`/reservations?boatId=${encodeURIComponent(boatId)}`);
+  };
 
   const openConfirmArrival = (r: any) => {
     setConfirmReservation(r);
@@ -153,6 +181,16 @@ export default function BoatsPage() {
     setConfirmSaving(false);
   };
 
+  const handleDeclineReservation = async (r: any) => {
+    if (!confirm('Tem certeza que deseja cancelar esta reserva?')) return;
+    try {
+      await cancelReservation(r.id, 'Cancelado pelo cotista');
+      setTodayReservations(prev => prev.filter(res => res.id !== r.id));
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Erro ao cancelar reserva');
+    }
+  };
+
   const handleSwapRespond = async (swapId: string, accept: boolean) => {
     setRespondingId(swapId);
     try {
@@ -162,272 +200,383 @@ export default function BoatsPage() {
     setRespondingId(null);
   };
 
+  const handleTripScroll = () => {
+    if (!tripScrollRef.current) return;
+    const el = tripScrollRef.current;
+    const idx = Math.round(el.scrollLeft / el.clientWidth);
+    setActiveTripIdx(idx);
+  };
+
+  const handleCotaScroll = () => {
+    if (!cotaScrollRef.current) return;
+    const el = cotaScrollRef.current;
+    const idx = Math.round(el.scrollLeft / el.clientWidth);
+    setActiveCotaIdx(idx);
+  };
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="animate-spin w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full" />
+      <div className="py-4 space-y-6 pb-28">
+        {/* Shimmer loading */}
+        <style dangerouslySetInnerHTML={{ __html: `
+          @keyframes lxShimmer { 0% { background-position: -400px 0 } 100% { background-position: 400px 0 } }
+          .lx-shimmer { background: linear-gradient(90deg, var(--subtle) 25%, var(--card) 50%, var(--subtle) 75%); background-size: 800px 100%; animation: lxShimmer 1.8s ease-in-out infinite; }
+        `}} />
+        <div className="h-[260px] rounded-3xl lx-shimmer" />
+        <div className="h-6 w-36 rounded-xl lx-shimmer" />
+        <div className="h-[220px] rounded-3xl lx-shimmer" />
+        <div className="h-[220px] rounded-3xl lx-shimmer" />
       </div>
     );
   }
 
+  const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || 'https://api.marinaprizeclub.com/api/v1').replace(/\/api\/v1$/, '');
+  function resolveMediaUrl(url: string | undefined | null): string {
+    if (!url) return '';
+    if (url.startsWith('/uploads/')) return `${API_ORIGIN}${url}`;
+    return url;
+  }
+
   return (
-    <div className="py-4 space-y-5">
+    <>
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes lxFadeUp { from { opacity: 0; transform: translateY(18px) } to { opacity: 1; transform: translateY(0) } }
+        @keyframes lxShimmer { 0% { background-position: -400px 0 } 100% { background-position: 400px 0 } }
+        @keyframes lxGlow { 0%, 100% { opacity: 0.5 } 50% { opacity: 1 } }
+        @keyframes lxFloat { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-4px) } }
+        .lx-fade { animation: lxFadeUp 0.6s ease-out both }
+        .lx-fade-1 { animation-delay: 0.05s }
+        .lx-fade-2 { animation-delay: 0.12s }
+        .lx-fade-3 { animation-delay: 0.2s }
+        .lx-fade-4 { animation-delay: 0.28s }
+        .lx-gold { background: linear-gradient(135deg, #FFC857, #FFD98E, #FFC857); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .lx-gold-bg { background: linear-gradient(135deg, rgba(255,200,87,0.12), rgba(255,200,87,0.04)); border: 1px solid rgba(255,200,87,0.15); }
+        .lx-glass { background: var(--card); backdrop-filter: blur(16px) saturate(1.4); -webkit-backdrop-filter: blur(16px) saturate(1.4); border: 1px solid var(--border); }
+        .lx-card { background: var(--card); border: 1px solid var(--border); box-shadow: 0 8px 32px rgba(0,0,0,0.08), 0 1px 0 rgba(255,255,255,0.03) inset; }
+        .lx-float { animation: lxFloat 4s ease-in-out infinite; }
+      `}} />
 
-      {/* Weather + Today's Reservations unified */}
-      <WeatherWidget variant="client" todayReservations={todayReservations} onConfirmArrival={openConfirmArrival} aiSummary={aiSummary} />
+      <div className="-mx-4 -mt-2 pb-32">
 
-      {/* Pending swap requests */}
-      {pendingSwaps.length > 0 && (
-        <div className="space-y-3">
-          {pendingSwaps.map(swap => {
-            const isResponding = respondingId === swap.id;
-            return (
-              <div key={swap.id} className="bg-gradient-to-br from-amber-500/5 to-primary-500/5 rounded-3xl border border-amber-400/30 p-4 shadow-sm">
-                {/* Header with badge */}
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-7 h-7 rounded-lg bg-amber-500 flex items-center justify-center">
-                    <ArrowLeftRight size={14} className="text-white" />
-                  </div>
-                  <span className="text-xs font-bold text-amber-600 uppercase tracking-wider">Solicitação de Troca</span>
-                </div>
-
-                {/* Requester info */}
-                <p className="text-sm text-[var(--text)]">
-                  <span className="font-bold">{swap.requester.name}</span>
-                  <span className="text-[var(--text-muted)]"> quer trocar uma reserva no </span>
-                  <span className="font-semibold">{swap.reservation.boat.name}</span>
-                </p>
-
-                {/* Swap visualization */}
-                <div className="mt-3 rounded-2xl bg-[var(--card)] border border-[var(--border)] overflow-hidden">
-                  {/* Your reservation */}
-                  <div className="p-3 flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-primary-500/10 flex items-center justify-center flex-shrink-0">
-                      <Calendar size={16} className="text-primary-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">Sua reserva</p>
-                      <p className="text-sm font-bold text-[var(--text)]">
-                        {new Date(swap.reservation.startDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
-                        <span className="font-normal text-[var(--text-muted)]"> • </span>
-                        {new Date(swap.reservation.startDate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} — {new Date(swap.reservation.endDate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Swap arrow divider */}
-                  <div className="flex items-center px-4">
-                    <div className="flex-1 h-px bg-[var(--border)]" />
-                    <div className="mx-3 w-8 h-8 rounded-full bg-primary-500 flex items-center justify-center shadow-md shadow-primary-500/25">
-                      <ArrowLeftRight size={14} className="text-white rotate-90" />
-                    </div>
-                    <div className="flex-1 h-px bg-[var(--border)]" />
-                  </div>
-
-                  {/* Their reservation */}
-                  <div className="p-3 flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center flex-shrink-0">
-                      <Calendar size={16} className="text-amber-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">Reserva de {swap.requester.name}</p>
-                      <p className="text-sm font-bold text-primary-500">
-                        {new Date(swap.offeredReservation.startDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
-                        <span className="font-normal text-[var(--text-muted)]"> • </span>
-                        {new Date(swap.offeredReservation.startDate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} — {new Date(swap.offeredReservation.endDate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {swap.message && (
-                  <p className="text-xs text-[var(--text-muted)] italic mt-3 px-1">&ldquo;{swap.message}&rdquo;</p>
-                )}
-
-                {/* Action buttons */}
-                <div className="flex gap-2.5 mt-4">
-                  <button
-                    onClick={() => handleSwapRespond(swap.id, true)}
-                    disabled={isResponding}
-                    className="flex-1 bg-emerald-500 text-white py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-1.5 active:scale-[0.97] transition-all disabled:opacity-50 shadow-sm shadow-emerald-500/20"
+        {/* ── HERO TRIPS CAROUSEL ── */}
+        {highlightedTrips.length > 0 && (
+          <div className="lx-fade relative">
+            <div
+              ref={tripScrollRef}
+              className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide"
+              onScroll={handleTripScroll}
+            >
+              {highlightedTrips.map((trip: any, i: number) => {
+                const photo = trip.photos?.[0]?.url;
+                return (
+                  <div
+                    key={trip.id}
+                    onClick={() => router.push('/social')}
+                    className="relative w-full h-[300px] overflow-hidden cursor-pointer active:scale-[0.985] transition-transform duration-300 snap-center flex-shrink-0"
+                    style={{ minWidth: '100%' }}
                   >
-                    <Check size={16} strokeWidth={2.5} /> Aceitar
-                  </button>
-                  <button
-                    onClick={() => handleSwapRespond(swap.id, false)}
-                    disabled={isResponding}
-                    className="flex-1 bg-[var(--card)] text-red-500 py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-1.5 active:scale-[0.97] transition-all disabled:opacity-50 border border-red-500/25"
-                  >
-                    <XIcon size={16} strokeWidth={2.5} /> Recusar
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-
-
-      {/* Boats section */}
-      {shares.length === 0 ? (
-        <div className="text-center py-16">
-          <div className="w-16 h-16 rounded-3xl bg-primary-500/10 flex items-center justify-center mx-auto mb-4">
-            <Anchor size={32} className="text-primary-500/40" />
-          </div>
-          <p className="text-sm font-semibold text-[var(--text-secondary)]">Nenhuma embarcação encontrada</p>
-          <p className="text-xs text-[var(--text-muted)] mt-1">Entre em contato com a administração</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {shares.map((share) => {
-            const boat = share.boat;
-            const isOwn = boat.notes?.startsWith('[PRÓPRIA]');
-            const boatCharges = chargesByBoat[boat.id] || { overdue: 0, pending: 0 };
-            return (
-              <div key={share.id} className="bg-[var(--card)] rounded-3xl border border-[var(--border)] overflow-hidden shadow-sm">
-                {/* Boat photo with gradient overlay */}
-                {boat.imageUrl ? (
-                  <div className="relative w-full h-44 bg-[var(--subtle)]">
-                    <Image
-                      src={boat.imageUrl}
-                      alt={boat.name}
-                      fill
-                      className="object-cover"
-                      unoptimized
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                    {/* Boat name overlay */}
-                    <div className="absolute bottom-0 left-0 right-0 p-4">
-                      <div className="flex items-end justify-between">
-                        <div>
-                          <h3 className="font-bold text-white text-lg leading-tight">{boat.name}</h3>
-                          <p className="text-xs text-white/70 mt-0.5">{boat.model} • {boat.year}</p>
-                        </div>
-                        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full backdrop-blur-md ${
-                          isOwn ? 'bg-blue-500/80 text-white' : 'bg-white/20 text-white'
-                        }`}>
-                          {isOwn ? 'PRÓPRIA' : `Cota #${share.shareNumber}`}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="relative w-full h-32 bg-gradient-to-br from-primary-500/10 to-primary-500/5 flex items-center justify-center">
-                    <Ship size={40} className="text-primary-500/25" />
-                    <div className="absolute bottom-0 left-0 right-0 p-4">
-                      <div className="flex items-end justify-between">
-                        <div>
-                          <h3 className="font-bold text-[var(--text)] text-lg leading-tight">{boat.name}</h3>
-                          <p className="text-xs text-[var(--text-muted)] mt-0.5">{boat.model} • {boat.year}</p>
-                        </div>
-                        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${
-                          isOwn ? 'bg-blue-500 text-white' : 'bg-primary-500/10 text-primary-500'
-                        }`}>
-                          {isOwn ? 'PRÓPRIA' : `Cota #${share.shareNumber}`}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Stats row */}
-                <div className="p-4">
-                  <div className="flex gap-2">
-                    {boatCharges.overdue > 0 && (
-                      <div className="flex-1 bg-red-500/10 rounded-2xl p-3 flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-xl bg-red-500/15 flex items-center justify-center flex-shrink-0">
-                          <AlertTriangle size={14} className="text-red-500" />
-                        </div>
-                        <div>
-                          <p className="text-lg font-extrabold text-red-500 leading-none">{boatCharges.overdue}</p>
-                          <p className="text-[9px] text-red-400 font-semibold uppercase tracking-wider mt-0.5">Vencida{boatCharges.overdue > 1 ? 's' : ''}</p>
-                        </div>
-                      </div>
+                    {photo ? (
+                      <img src={resolveMediaUrl(photo)} alt="" className="absolute inset-0 w-full h-full object-cover scale-105" />
+                    ) : (
+                      <div className="absolute inset-0 bg-gradient-to-br from-[#0A2540] via-[#0F3460] to-[#1A3A5C]" />
                     )}
-                    <div className="flex-1 bg-[var(--subtle)] rounded-2xl p-3 flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-xl bg-[var(--subtle-hover)] flex items-center justify-center flex-shrink-0">
-                        <FileText size={14} className="text-[var(--text-muted)]" />
-                      </div>
-                      <div>
-                        <p className="text-lg font-extrabold text-[var(--text)] leading-none">{boatCharges.pending}</p>
-                        <p className="text-[9px] text-[var(--text-muted)] font-semibold uppercase tracking-wider mt-0.5">Fatura{boatCharges.pending !== 1 ? 's' : ''}</p>
+                    <div className="absolute inset-0" style={{ background: 'linear-gradient(0deg, rgba(10,20,35,0.95) 0%, rgba(10,20,35,0.5) 35%, rgba(0,0,0,0.15) 60%, rgba(0,0,0,0.25) 100%)' }} />
+
+                    <div className="absolute top-4 left-5 flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold text-white/80" style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(16px)' }}>
+                        <Sparkles size={10} className="text-[#FFC857]" /> Experiência selecionada para você
                       </div>
                     </div>
-                    <div className="flex-1 bg-[var(--subtle)] rounded-2xl p-3 flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-xl bg-[var(--subtle-hover)] flex items-center justify-center flex-shrink-0">
-                        <DollarSign size={14} className="text-[var(--text-muted)]" />
+
+                    <div className="absolute top-4 right-5">
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold text-white" style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(16px)' }}>
+                        <Calendar size={10} /> {trip.date ? new Date(trip.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).toUpperCase() : ''}
                       </div>
-                      <div>
-                        <p className="text-sm font-extrabold text-[var(--text)] leading-none">R$ {Number(boat.monthlyFee || 0).toLocaleString('pt-BR')}</p>
-                        <p className="text-[9px] text-[var(--text-muted)] font-semibold uppercase tracking-wider mt-0.5">Mensal</p>
-                      </div>
+                    </div>
+
+                    <div className="absolute bottom-0 left-0 right-0 px-5 pb-5">
+                      <h1 className="text-[28px] font-black text-white leading-[1.1] tracking-tight" style={{ textShadow: '0 2px 20px rgba(0,0,0,0.5)' }}>
+                        {trip.title}
+                      </h1>
+                      {trip.destination && (
+                        <div className="flex items-center gap-1.5 mt-2">
+                          <MapPin size={11} className="text-[#FFC857]" />
+                          <span className="text-[12px] text-white/70 font-medium">{trip.destination}</span>
+                        </div>
+                      )}
+                      {trip._count && (
+                        <div className="flex items-center gap-3 mt-3">
+                          <div className="flex items-center gap-1.5 text-[11px] text-white/50">
+                            <Users size={11} /> {trip._count.participants} participante{trip._count.participants !== 1 ? 's' : ''}
+                          </div>
+                          <div className="flex items-center gap-1.5 text-[11px] text-white/50">
+                            <Star size={11} /> {trip._count.likes} like{trip._count.likes !== 1 ? 's' : ''}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Confirm arrival modal */}
-      {showConfirmArrival && confirmReservation && (
-        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-end" onClick={() => setShowConfirmArrival(false)}>
-          <div className="bg-[var(--card)] w-full rounded-t-3xl p-6 max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
-            <div className="w-10 h-1 bg-[var(--subtle-hover)] rounded-full mx-auto mb-4" />
-            <div className="flex items-center justify-between mb-5">
-              <div>
-                <h2 className="text-lg font-bold text-[var(--text)]">Confirmar Presença</h2>
-                <p className="text-sm text-[var(--text-muted)]">
-                  {confirmReservation.boat?.name} · {format(parseISO(confirmReservation.startDate), "dd/MM 'às' HH:mm")} — {format(parseISO(confirmReservation.endDate), 'HH:mm')}
-                </p>
-              </div>
-              <button onClick={() => setShowConfirmArrival(false)} className="w-8 h-8 rounded-full bg-[var(--subtle)] flex items-center justify-center">
-                <XIcon size={16} className="text-[var(--text-secondary)]" />
-              </button>
+                );
+              })}
             </div>
-
-            {confirmError && (
-              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-2xl text-sm text-red-400 flex items-start gap-2">
-                <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
-                <span>{confirmError}</span>
+            {highlightedTrips.length > 1 && (
+              <div className="flex justify-center gap-1.5 mt-3">
+                {highlightedTrips.map((_: any, i: number) => (
+                  <div key={i} className={`h-1.5 rounded-full transition-all duration-300 ${i === activeTripIdx ? 'bg-[#FFC857] w-5' : 'bg-white/20 w-1.5'}`} />
+                ))}
               </div>
             )}
+          </div>
+        )}
 
-            <div className="space-y-5">
-              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4">
-                <p className="text-sm text-emerald-700 dark:text-emerald-400 font-medium mb-1">Confirmando sua presença hoje</p>
-                <p className="text-xs text-[var(--text-muted)]">Informe o horário aproximado que você irá chegar à marina. A equipe será avisada para preparar o jet ski.</p>
+
+        {/* ── MINHAS COTAS ── */}
+        <div className="px-5 mt-8">
+          <div className="flex items-center gap-3 mb-5 lx-fade lx-fade-2">
+            <div className="w-[3px] h-5 rounded-full bg-gradient-to-b from-[#FFC857] to-[#FFB020]" />
+            <h2 className="text-[13px] font-black uppercase tracking-[0.15em] text-[var(--text)]">Minhas Cotas</h2>
+            <div className="flex-1 h-px bg-gradient-to-r from-[var(--border)] to-transparent" />
+          </div>
+
+          {/* Pending swap requests */}
+          {pendingSwaps.length > 0 && (
+            <div className="space-y-3 mb-5 lx-fade lx-fade-2">
+              {pendingSwaps.map(swap => {
+                const isResponding = respondingId === swap.id;
+                return (
+                  <div key={swap.id} className="lx-card rounded-3xl p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/20">
+                        <ArrowLeftRight size={13} className="text-white" />
+                      </div>
+                      <span className="text-[10px] font-black text-amber-500 uppercase tracking-[0.15em]">Solicitação de Troca</span>
+                    </div>
+                    <p className="text-sm text-[var(--text)]">
+                      <span className="font-bold">{swap.requester.name}</span>
+                      <span className="text-[var(--text-muted)]"> quer trocar no </span>
+                      <span className="font-semibold">{swap.reservation.boat.name}</span>
+                    </p>
+                    <div className="mt-3 rounded-2xl overflow-hidden" style={{ background: 'var(--subtle)', border: '1px solid var(--border)' }}>
+                      <div className="p-3 flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-primary-500/10 flex items-center justify-center flex-shrink-0">
+                          <Calendar size={15} className="text-primary-500" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-[0.15em]">Sua reserva</p>
+                          <p className="text-sm font-bold text-[var(--text)]">
+                            {new Date(swap.reservation.startDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+                            <span className="font-normal text-[var(--text-muted)]"> · </span>
+                            {new Date(swap.reservation.startDate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} — {new Date(swap.reservation.endDate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center px-4">
+                        <div className="flex-1 h-px bg-[var(--border)]" />
+                        <div className="mx-3 w-7 h-7 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center shadow-lg shadow-primary-500/25">
+                          <ArrowLeftRight size={12} className="text-white rotate-90" />
+                        </div>
+                        <div className="flex-1 h-px bg-[var(--border)]" />
+                      </div>
+                      <div className="p-3 flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center flex-shrink-0">
+                          <Calendar size={15} className="text-amber-500" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-[0.15em]">Reserva de {swap.requester.name}</p>
+                          <p className="text-sm font-bold text-primary-500">
+                            {new Date(swap.offeredReservation.startDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+                            <span className="font-normal text-[var(--text-muted)]"> · </span>
+                            {new Date(swap.offeredReservation.startDate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} — {new Date(swap.offeredReservation.endDate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    {swap.message && (
+                      <p className="text-xs text-[var(--text-muted)] italic mt-3 px-1">&ldquo;{swap.message}&rdquo;</p>
+                    )}
+                    <div className="flex gap-2.5 mt-4">
+                      <button onClick={() => handleSwapRespond(swap.id, true)} disabled={isResponding}
+                        className="flex-1 bg-gradient-to-r from-emerald-500 to-emerald-400 text-white py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-1.5 active:scale-[0.97] transition-all disabled:opacity-50 shadow-lg shadow-emerald-500/20">
+                        <Check size={15} strokeWidth={2.5} /> Aceitar
+                      </button>
+                      <button onClick={() => handleSwapRespond(swap.id, false)} disabled={isResponding}
+                        className="flex-1 text-red-400 py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-1.5 active:scale-[0.97] transition-all disabled:opacity-50" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}>
+                        <XIcon size={15} strokeWidth={2.5} /> Recusar
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Boats / Cotas */}
+          {shares.length === 0 ? (
+            <div className="text-center py-20 lx-fade lx-fade-2">
+              <div className="w-20 h-20 rounded-[28px] mx-auto mb-5 flex items-center justify-center lx-float" style={{ background: 'linear-gradient(135deg, rgba(0,194,168,0.08), rgba(0,117,119,0.04))', border: '1px solid rgba(0,194,168,0.1)' }}>
+                <Anchor size={36} className="text-primary-500/30" />
               </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-2">Horário previsto de chegada</label>
-                <select
-                  value={arrivalTime}
-                  onChange={e => setArrivalTime(e.target.value)}
-                  className="w-full px-4 py-3 rounded-2xl border border-[var(--border)] text-sm bg-[var(--subtle)] focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500/50 transition"
-                >
-                  {HOURS.map(h => <option key={h} value={h}>{h}</option>)}
-                </select>
-              </div>
-
-              <button
-                onClick={handleConfirmArrival}
-                disabled={confirmSaving}
-                className="w-full bg-emerald-500 text-white py-3.5 rounded-2xl font-semibold disabled:opacity-50 active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
+              <p className="text-sm font-semibold text-[var(--text-secondary)]">Nenhuma embarcação encontrada</p>
+              <p className="text-xs text-[var(--text-muted)] mt-1">Entre em contato com a administração</p>
+            </div>
+          ) : (
+            <>
+              <div
+                ref={cotaScrollRef}
+                className={shares.length > 1 ? 'flex overflow-x-auto snap-x snap-mandatory scrollbar-hide -mx-5' : ''}
+                onScroll={shares.length > 1 ? handleCotaScroll : undefined}
               >
-                {confirmSaving ? (
-                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
-                  <CheckCircle2 size={18} />
-                )}
-                {confirmSaving ? 'Confirmando...' : 'Confirmar Presença'}
-              </button>
+                {shares.map((share, idx) => {
+                  const boat = share.boat;
+                  const isOwn = boat.notes?.startsWith('[PRÓPRIA]');
+                  const boatCharges = chargesByBoat[boat.id] || { overdue: 0, pending: 0 };
+                  const card = (
+                    <div
+                      className={`lx-card rounded-3xl overflow-hidden cursor-pointer active:scale-[0.985] transition-all duration-300 lx-fade lx-fade-${Math.min(idx + 2, 4)}`}
+                      onClick={() => handleBoatClick(boat.id)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleBoatClick(boat.id); } }}
+                    >
+                      {/* Photo */}
+                      {boat.imageUrl ? (
+                        <div className="relative w-full h-48">
+                          <Image src={boat.imageUrl} alt={boat.name} fill className="object-cover" unoptimized />
+                          <div className="absolute inset-0" style={{ background: 'linear-gradient(0deg, rgba(10,20,35,0.9) 0%, rgba(10,20,35,0.2) 40%, transparent 70%)' }} />
+                          <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(10,20,35,0.3) 0%, transparent 30%)' }} />
+                          <div className="absolute top-3.5 right-3.5">
+                            <span className={`text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-full ${
+                              isOwn ? 'bg-blue-500/90 text-white shadow-lg shadow-blue-500/25' : 'bg-black/40 backdrop-blur-md text-white'
+                            }`}>
+                              {isOwn ? '✦ Própria' : `Cota #${share.shareNumber}`}
+                            </span>
+                          </div>
+                          <div className="absolute bottom-0 left-0 right-0 p-5">
+                            <h3 className="text-[22px] font-black text-white leading-tight tracking-tight" style={{ textShadow: '0 2px 12px rgba(0,0,0,0.4)' }}>{boat.name}</h3>
+                            <p className="text-[12px] text-white/50 font-medium mt-0.5">{boat.model} · {boat.year} · {boat.length}ft</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="relative w-full h-36 flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(0,194,168,0.06), rgba(0,117,119,0.02))' }}>
+                          <Ship size={44} className="text-primary-500/15 lx-float" />
+                          <div className="absolute top-3.5 right-3.5">
+                            <span className={`text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-full ${
+                              isOwn ? 'bg-blue-500/90 text-white' : 'lx-gold-bg lx-gold'
+                            }`}>
+                              {isOwn ? '✦ Própria' : `Cota #${share.shareNumber}`}
+                            </span>
+                          </div>
+                          <div className="absolute bottom-0 left-0 right-0 p-5">
+                            <h3 className="text-[22px] font-black text-[var(--text)] leading-tight">{boat.name}</h3>
+                            <p className="text-[12px] text-[var(--text-muted)] font-medium mt-0.5">{boat.model} · {boat.year}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* KPI Stats */}
+                      <div className="px-4 py-4">
+                        <div className="flex gap-2.5">
+                          {boatCharges.overdue > 0 && (
+                            <div className="flex-1 rounded-2xl p-3 flex items-center gap-2.5" style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.1)' }}>
+                              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(239,68,68,0.15), rgba(239,68,68,0.05))' }}>
+                                <AlertTriangle size={15} className="text-red-400" />
+                              </div>
+                              <div>
+                                <p className="text-[18px] font-black text-red-400 leading-none">{boatCharges.overdue}</p>
+                                <p className="text-[8px] font-bold text-red-400/60 uppercase tracking-[0.15em] mt-1">Vencida{boatCharges.overdue > 1 ? 's' : ''}</p>
+                              </div>
+                            </div>
+                          )}
+                          <div className="flex-1 rounded-2xl p-3 flex items-center gap-2.5" style={{ background: 'var(--subtle)', border: '1px solid var(--border)' }}>
+                            <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(0,194,168,0.1), rgba(0,194,168,0.03))' }}>
+                              <FileText size={15} className="text-primary-500/70" />
+                            </div>
+                            <div>
+                              <p className="text-[18px] font-black text-[var(--text)] leading-none">{boatCharges.pending}</p>
+                              <p className="text-[8px] font-bold text-[var(--text-muted)] uppercase tracking-[0.15em] mt-1">Fatura{boatCharges.pending !== 1 ? 's' : ''}</p>
+                            </div>
+                          </div>
+                          <div className="flex-1 rounded-2xl p-3 flex items-center gap-2.5" style={{ background: 'var(--subtle)', border: '1px solid var(--border)' }}>
+                            <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(255,200,87,0.12), rgba(255,200,87,0.04))' }}>
+                              <DollarSign size={15} style={{ color: '#FFC857', opacity: 0.7 }} />
+                            </div>
+                            <div>
+                              <p className="text-[15px] font-black text-[var(--text)] leading-none">R$ {Number(boat.monthlyFee || 0).toLocaleString('pt-BR')}</p>
+                              <p className="text-[8px] font-bold text-[var(--text-muted)] uppercase tracking-[0.15em] mt-1">Mensal</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                  return shares.length > 1 ? (
+                    <div key={share.id} className="flex-shrink-0 snap-center px-5" style={{ minWidth: '100%' }}>
+                      {card}
+                    </div>
+                  ) : (
+                    <div key={share.id}>{card}</div>
+                  );
+                })}
+              </div>
+              {shares.length > 1 && (
+                <div className="flex justify-center gap-1.5 mt-4">
+                  {shares.map((_: any, i: number) => (
+                    <div key={i} className={`h-1.5 rounded-full transition-all duration-300 ${i === activeCotaIdx ? 'bg-[#FFC857] w-5' : 'bg-[var(--border)] w-1.5'}`} />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Confirm arrival modal */}
+        {showConfirmArrival && confirmReservation && (
+          <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-end" onClick={() => setShowConfirmArrival(false)}>
+            <div className="w-full rounded-t-[28px] p-6 max-h-[85vh] overflow-auto lx-card" onClick={e => e.stopPropagation()}>
+              <div className="w-10 h-1 bg-white/10 rounded-full mx-auto mb-5" />
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <h2 className="text-lg font-black text-[var(--text)]">Confirmar Presença</h2>
+                  <p className="text-sm text-[var(--text-muted)]">
+                    {confirmReservation.boat?.name} · {format(parseISO(confirmReservation.startDate), "dd/MM 'às' HH:mm")} — {format(parseISO(confirmReservation.endDate), 'HH:mm')}
+                  </p>
+                </div>
+                <button onClick={() => setShowConfirmArrival(false)} className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: 'var(--subtle)' }}>
+                  <XIcon size={16} className="text-[var(--text-secondary)]" />
+                </button>
+              </div>
+              {confirmError && (
+                <div className="mb-4 p-3 rounded-2xl text-sm text-red-400 flex items-start gap-2" style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.12)' }}>
+                  <AlertCircle size={16} className="mt-0.5 flex-shrink-0" /> <span>{confirmError}</span>
+                </div>
+              )}
+              <div className="space-y-5">
+                <div className="rounded-2xl p-4" style={{ background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.12)' }}>
+                  <p className="text-sm text-emerald-400 font-semibold mb-1">Confirmando sua presença hoje</p>
+                  <p className="text-xs text-[var(--text-muted)]">Informe o horário aproximado de chegada à marina. A equipe preparará o jet ski.</p>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-[0.15em] mb-2">Horário previsto de chegada</label>
+                  <select value={arrivalTime} onChange={e => setArrivalTime(e.target.value)}
+                    className="w-full px-4 py-3 rounded-2xl text-sm focus:ring-2 focus:ring-emerald-500/20 transition" style={{ background: 'var(--subtle)', border: '1px solid var(--border)', color: 'var(--text)' }}>
+                    {HOURS.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                </div>
+                <button onClick={handleConfirmArrival} disabled={confirmSaving}
+                  className="w-full bg-gradient-to-r from-emerald-500 to-emerald-400 text-white py-3.5 rounded-2xl font-bold disabled:opacity-50 active:scale-[0.98] transition-transform flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20">
+                  {confirmSaving ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <CheckCircle2 size={18} />}
+                  {confirmSaving ? 'Confirmando...' : 'Confirmar Presença'}
+                </button>
+              </div>
             </div>
           </div>
+        )}
+
+        {/* Floating Weather Widget */}
+        <div className="fixed bottom-[64px] left-0 right-0 z-40 px-4 safe-area-bottom">
+          <WeatherWidget variant="client" todayReservations={todayReservations} onConfirmArrival={openConfirmArrival} onDeclineReservation={handleDeclineReservation} aiSummary={aiSummary} />
         </div>
-      )}
-    </div>
+      </div>
+    </>
   );
 }

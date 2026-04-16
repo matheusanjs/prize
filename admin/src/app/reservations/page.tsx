@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Calendar, ChevronLeft, ChevronRight, Plus, X, Ship, User, Clock, AlertTriangle, Search, ChevronDown, Wind, Droplets, CloudRain } from 'lucide-react';
 import { getReservations, getBoats, getUsers, createReservation, cancelReservation, getWeatherForecast, getWeatherCurrent } from '@/services/api';
+import { useReservationPolling } from '@/hooks/useReservationPolling';
+import { saveCalendarCache, loadCalendarCache } from '@/utils/calendarCache';
 
 interface Reservation {
   id: string;
@@ -57,7 +59,7 @@ export default function ReservationsPage() {
   const [boats, setBoats] = useState<Boat[]>([]);
   const [users, setUsers] = useState<UserItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set());
   const [showCreate, setShowCreate] = useState(false);
   const [saving, setSaving] = useState(false);
   const [boatSearch, setBoatSearch] = useState('');
@@ -77,7 +79,9 @@ export default function ReservationsPage() {
         getUsers({ limit: 200 }).catch(() => ({ data: [] })),
       ]);
       const r = resRes.data;
-      setReservations(Array.isArray(r) ? r : r?.data || []);
+      const resList = Array.isArray(r) ? r : r?.data || [];
+      setReservations(resList);
+      saveCalendarCache(resList);
       const b = boatsRes.data;
       setBoats(Array.isArray(b) ? b : b?.data || []);
       const u = usersRes.data;
@@ -86,7 +90,32 @@ export default function ReservationsPage() {
     finally { setLoading(false); }
   }
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    // Show cached data immediately for instant display
+    const cached = loadCalendarCache();
+    if (cached && Array.isArray(cached)) {
+      setReservations(cached as Reservation[]);
+      setLoading(false);
+    }
+    loadData();
+  }, []);
+
+  // Poll every 10 seconds to keep calendar fresh across clients
+  useReservationPolling({
+    enabled: true,
+    intervalMs: 10_000,
+    onPoll: useCallback(async () => {
+      try {
+        const resRes = await getReservations();
+        const r = resRes.data;
+        const resList = Array.isArray(r) ? r : r?.data || [];
+        setReservations(resList);
+        saveCalendarCache(resList);
+      } catch {
+        // Network error — keep showing cached data
+      }
+    }, []),
+  });
 
   useEffect(() => {
     (async () => {
@@ -152,8 +181,21 @@ export default function ReservationsPage() {
   function nextMonth() { if (month === 11) { setMonth(0); setYear(year + 1); } else setMonth(month + 1); }
   function goToday() { setMonth(today.getMonth()); setYear(today.getFullYear()); }
 
-  function openDay(date: Date) {
-    setSelectedDate(dateKey(date));
+  function toggleDay(dateKey: string) {
+    setSelectedDates((prev) => {
+      const next = new Set(prev);
+      if (next.has(dateKey)) next.delete(dateKey);
+      else next.add(dateKey);
+      return next;
+    });
+  }
+  function openSingleDay(date: Date) {
+    const key = dateKey(date);
+    setSelectedDates((prev) => {
+      const next = new Set(prev);
+      if (next.size === 1 && next.has(key)) return new Set();
+      return new Set([key]);
+    });
   }
 
   function openCreate(date?: string) {
@@ -178,8 +220,8 @@ export default function ReservationsPage() {
       await createReservation({
         boatId: form.boatId,
         userId: form.userId,
-        startDate: new Date(`${form.startDate}T${form.startTime}:00`).toISOString(),
-        endDate: new Date(`${form.endDate}T${form.endTime}:00`).toISOString(),
+        startDate: new Date(`${form.startDate}T${form.startTime}:00-03:00`).toISOString(),
+        endDate: new Date(`${form.endDate}T${form.endTime}:00-03:00`).toISOString(),
         notes: form.notes || undefined,
       });
       setShowCreate(false);
@@ -204,7 +246,10 @@ export default function ReservationsPage() {
   }
 
   const todayKey = dateKey(today);
-  const selectedDayReservations = selectedDate ? (reservationsByDate[selectedDate] || []) : [];
+  const selectedDatesArray = Array.from(selectedDates);
+  const allSelectedReservations = selectedDatesArray.flatMap(
+    (d) => (reservationsByDate[d] || []).map((r) => ({ ...r, _dateKey: d }))
+  );
   const activeCount = reservations.filter((r) => r.status === 'CONFIRMED' || r.status === 'IN_USE').length;
 
   return (
@@ -248,7 +293,7 @@ export default function ReservationsPage() {
             {calendarDays.map(({ date, current }, i) => {
               const key = dateKey(date);
               const isToday = key === todayKey;
-              const isSelected = key === selectedDate;
+              const isSelected = selectedDates.has(key);
               const dayRes = reservationsByDate[key] || [];
               const hasRes = dayRes.length > 0;
               const forecast = forecastMap[key];
@@ -260,7 +305,8 @@ export default function ReservationsPage() {
               return (
                 <button
                   key={i}
-                  onClick={() => openDay(date)}
+                  onClick={() => toggleDay(key)}
+                  onDoubleClick={() => openSingleDay(date)}
                   className={`relative min-h-[90px] p-2 border-b border-r border-th text-left transition hover:bg-primary-500/5 group
                     ${!current ? 'bg-th-surface' : ''}
                     ${isSelected ? 'bg-primary-500/10 ring-2 ring-primary-400 ring-inset' : ''}
@@ -366,35 +412,56 @@ export default function ReservationsPage() {
 
           {/* Day Detail */}
           <div className="bg-th-card rounded-2xl shadow-black/10 border border-th overflow-hidden flex-1">
-            {selectedDate ? (
+            {selectedDatesArray.length > 0 ? (
               <>
-                <div className="p-5 border-b border-th bg-th-surface">
-                  <h3 className="font-bold text-th capitalize">
-                    {new Date(selectedDate + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric', timeZone: 'America/Sao_Paulo' })}
-                  </h3>
-                  <p className="text-xs text-th-muted mt-0.5">{selectedDayReservations.length} reserva(s) neste dia</p>
-                  {(() => {
-                    const fc = forecastMap[selectedDate];
-                    if (!fc) return null;
-                    const lvlText: Record<string, string> = { BOM: 'text-emerald-500', ATENCAO: 'text-amber-500', RUIM: 'text-orange-500', PERIGOSO: 'text-red-500' };
-                    return (
-                      <p className={`text-[11px] font-medium mt-1 ${lvlText[fc.navigationLevel] || ''}`}>
-                        {fc.navigationLevel === 'BOM' ? '☀️' : fc.navigationLevel === 'ATENCAO' ? '⛅' : fc.navigationLevel === 'RUIM' ? '🌊' : '⛔'}
-                        {' '}{fc.description || fc.clientSummary} · {fc.airTempMin}–{fc.airTempMax}°C
-                      </p>
-                    );
-                  })()}
-                </div>
+                {selectedDatesArray.length === 1 ? (
+                  <div className="p-5 border-b border-th bg-th-surface">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-bold text-th capitalize">
+                        {new Date(selectedDatesArray[0] + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric', timeZone: 'America/Sao_Paulo' })}
+                      </h3>
+                      <button onClick={() => setSelectedDates(new Set())} className="p-1 hover:bg-red-500/10 rounded-lg"><X size={16} className="text-th-muted" /></button>
+                    </div>
+                    <p className="text-xs text-th-muted mt-0.5">{allSelectedReservations.length} reserva(s) neste dia</p>
+                    {(() => {
+                      const fc = forecastMap[selectedDatesArray[0]];
+                      if (!fc) return null;
+                      const lvlText: Record<string, string> = { BOM: 'text-emerald-500', ATENCAO: 'text-amber-500', RUIM: 'text-orange-500', PERIGOSO: 'text-red-500' };
+                      return (
+                        <p className={`text-[11px] font-medium mt-1 ${lvlText[fc.navigationLevel] || ''}`}>
+                          {fc.navigationLevel === 'BOM' ? '☀️' : fc.navigationLevel === 'ATENCAO' ? '⛅' : fc.navigationLevel === 'RUIM' ? '🌊' : '⛔'}
+                          {' '}{fc.description || fc.clientSummary} · {fc.airTempMin}–{fc.airTempMax}°C
+                        </p>
+                      );
+                    })()}
+                  </div>
+                ) : (
+                  <div className="p-5 border-b border-th bg-th-surface">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-bold text-th">{selectedDatesArray.length} dias selecionados</h3>
+                      <button onClick={() => setSelectedDates(new Set())} className="p-1 hover:bg-red-500/10 rounded-lg"><X size={16} className="text-th-muted" /></button>
+                    </div>
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {[...selectedDatesArray].sort().map((d) => (
+                        <span key={d} className="inline-flex items-center gap-1 text-[11px] bg-primary-500/10 text-primary-500 px-2 py-0.5 rounded-full font-medium">
+                          {new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+                          <button onClick={() => { setSelectedDates((prev) => { const n = new Set(prev); n.delete(d); return n; }); }} className="hover:text-red-500"><X size={10} /></button>
+                        </span>
+                      ))}
+                    </div>
+                    <p className="text-xs text-th-muted mt-2">{allSelectedReservations.length} reserva(s) no total</p>
+                  </div>
+                )}
                 <div className="p-4">
-                  {selectedDayReservations.length > 0 ? (
+                  {allSelectedReservations.length > 0 ? (
                     <div className="space-y-2">
-                      {selectedDayReservations.map((r) => {
+                      {allSelectedReservations.map((r, idx) => {
                         const sc = statusConfig[r.status] || statusConfig.CONFIRMED;
                         const start = new Date(r.startDate);
                         const end = new Date(r.endDate);
                         const isExpanded = expandedId === r.id;
                         return (
-                          <div key={r.id} className="border border-th rounded-2xl overflow-hidden">
+                          <div key={`${r.id}-${idx}`} className="border border-th rounded-2xl overflow-hidden">
                             {/* Collapsed header — always visible */}
                             <button
                               onClick={() => setExpandedId(isExpanded ? null : r.id)}
@@ -439,24 +506,23 @@ export default function ReservationsPage() {
                   ) : (
                     <div className="text-center py-8">
                       <Calendar size={32} className="mx-auto text-th-muted mb-2" />
-                      <p className="text-sm text-th-muted mb-3">Nenhuma reserva neste dia</p>
-                      <button onClick={() => openCreate(selectedDate)} className="text-sm text-primary-500 font-medium">
-                        + Criar reserva
-                      </button>
+                      <p className="text-sm text-th-muted mb-3">Nenhuma reserva nos dias selecionados</p>
                     </div>
                   )}
-                  <button
-                    onClick={() => openCreate(selectedDate)}
-                    className="w-full mt-4 flex items-center justify-center gap-2 bg-primary-500/10 text-primary-500 py-2.5 rounded-lg text-sm font-medium hover:bg-primary-500/20 transition"
-                  >
-                    <Plus size={14} /> Nova reserva neste dia
-                  </button>
+                  {selectedDatesArray.length === 1 && (
+                    <button
+                      onClick={() => openCreate(selectedDatesArray[0])}
+                      className="w-full mt-4 flex items-center justify-center gap-2 bg-primary-500/10 text-primary-500 py-2.5 rounded-lg text-sm font-medium hover:bg-primary-500/20 transition"
+                    >
+                      <Plus size={14} /> Nova reserva neste dia
+                    </button>
+                  )}
                 </div>
               </>
             ) : (
               <div className="p-8 text-center">
                 <Calendar size={48} className="mx-auto text-th-muted mb-3" />
-                <p className="text-th-muted text-sm">Selecione um dia no calendário para ver as reservas</p>
+                <p className="text-th-muted text-sm">Selecione um ou mais dias no calendário para ver as reservas</p>
               </div>
             )}
 

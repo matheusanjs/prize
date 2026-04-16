@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsNumber, IsEnum, IsDateString } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsEnum, IsDateString, IsBoolean } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateMaintenanceDto {
@@ -28,4 +28,9 @@ export class CreateMaintenanceDto {
   @IsOptional()
   @IsDateString()
   scheduledAt?: string;
+
+  @ApiPropertyOptional({ description: 'Whether to block the boat from reservations' })
+  @IsOptional()
+  @IsBoolean()
+  blockBoat?: boolean;
 }

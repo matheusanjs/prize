@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3004",
-    "build": "next build",
-    "start": "next start -p 3004 -H 0.0.0.0"
+    "dev": "NODE_OPTIONS='--max-old-space-size=4096' next dev -p 3004",
+    "build": "NODE_OPTIONS='--max-old-space-size=4096' next build",
+    "start": "NODE_OPTIONS='--max-old-space-size=4096' next start -p 3004 -H 0.0.0.0"
   },
   "dependencies": {
     "next": "^15.0.0",

@@ -11,7 +11,7 @@ import {
   LayoutDashboard, Ship, Calendar, Wallet,
   AlertTriangle, BarChart3, Sparkles, Fuel, Wrench, LogOut, Settings, Coins,
   Sun, Moon, HandCoins, Activity, UtensilsCrossed, ClipboardList, Monitor,
-  ChefHat, ChevronRight, Anchor, ShoppingCart,
+  ChefHat, ChevronRight, Anchor, ShoppingCart, MessageCircle, Users, Compass,
 } from 'lucide-react';
 
 type LIcon = React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
@@ -30,6 +30,7 @@ const navEntries: NavEntry[] = [
       { label: 'Venda Cotas',  href: '/share-sales',  icon: HandCoins },
       { label: 'Cotas',        href: '/shares',       icon: Coins },
       { label: 'Operações',    href: '/operations',   icon: Settings },
+      { label: 'Marina KDS',   href: '/kds',          icon: Monitor },
       { label: 'Combustível',  href: '/fuel',         icon: Fuel },
       { label: 'Usos',         href: '/usos',         icon: Activity },
       { label: 'Manutenções',  href: '/maintenance',  icon: Wrench },
@@ -52,8 +53,11 @@ const navEntries: NavEntry[] = [
       { label: 'Inadimplência', href: '/delinquency', icon: AlertTriangle },
     ],
   },
+  { type: 'link', label: 'Clientes',    href: '/clients',     icon: Users },
   { type: 'link', label: 'Relatórios', href: '/reports',    icon: BarChart3 },
   { type: 'link', label: 'IA Insights', href: '/ai-insights', icon: Sparkles },
+  { type: 'link', label: 'Prize Social', href: '/social', icon: Compass },
+  { type: 'link', label: 'WhatsApp',   href: '/whatsapp',    icon: MessageCircle },
 ];
 
 function isGroupActive(children: NavItem[], pathname: string) {

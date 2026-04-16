@@ -21,6 +21,7 @@ module.exports = {
         PORT: 3001,
         TZ: 'America/Sao_Paulo',
       },
+      node_args: '--max-old-space-size=4096',
     },
     {
       name: 'pwa',
@@ -32,6 +33,7 @@ module.exports = {
         PORT: 3002,
         TZ: 'America/Sao_Paulo',
       },
+      node_args: '--max-old-space-size=4096',
     },
     {
       name: 'site',
@@ -43,6 +45,7 @@ module.exports = {
         PORT: 3003,
         TZ: 'America/Sao_Paulo',
       },
+      node_args: '--max-old-space-size=4096',
     },
     {
       name: 'garcom',
@@ -54,6 +57,7 @@ module.exports = {
         PORT: 3004,
         TZ: 'America/Sao_Paulo',
       },
+      node_args: '--max-old-space-size=4096',
     },
   ],
 };

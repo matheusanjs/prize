@@ -93,11 +93,11 @@ function BoatModal({ boat, onClose }: { boat: BoatMarketplace; onClose: () => vo
 
             {/* Prices */}
             <div className="grid grid-cols-2 gap-3 mb-4">
-              <div className="bg-[var(--subtle)] border border-[var(--border)] rounded-xl p-3.5">
+              <div className="bg-[var(--subtle)] border border-[var(--border)] rounded-2xl p-3.5">
                 <p className="text-[var(--text-muted)] text-[10px] uppercase tracking-wider mb-1">Valor da cota</p>
                 <p className="text-[var(--text)] font-black text-xl">{formatCurrency(boat.shareValue)}</p>
               </div>
-              <div className="bg-[var(--subtle)] border border-[var(--border)] rounded-xl p-3.5">
+              <div className="bg-[var(--subtle)] border border-[var(--border)] rounded-2xl p-3.5">
                 <p className="text-[var(--text-muted)] text-[10px] uppercase tracking-wider mb-1">Mensalidade</p>
                 <p className="text-[var(--text)] font-black text-xl">{formatCurrency(boat.monthlyFee)}<span className="text-sm font-semibold text-[var(--text-muted)]">/mês</span></p>
               </div>
@@ -105,22 +105,22 @@ function BoatModal({ boat, onClose }: { boat: BoatMarketplace; onClose: () => vo
 
             {/* Specs */}
             <div className="grid grid-cols-4 gap-2 mb-4">
-              <div className="bg-[var(--subtle)] border border-[var(--border)] rounded-xl p-3 text-center">
+              <div className="bg-[var(--subtle)] border border-[var(--border)] rounded-2xl p-3 text-center">
                 <Users2 size={16} className="text-primary-500 mx-auto mb-1" />
                 <p className="text-[var(--text)] font-bold text-sm">{boat.capacity}</p>
                 <p className="text-[var(--text-muted)] text-[10px]">Pessoas</p>
               </div>
-              <div className="bg-[var(--subtle)] border border-[var(--border)] rounded-xl p-3 text-center">
+              <div className="bg-[var(--subtle)] border border-[var(--border)] rounded-2xl p-3 text-center">
                 <Fuel size={16} className="text-primary-500 mx-auto mb-1" />
                 <p className="text-[var(--text)] font-bold text-sm">{boat.fuelCapacity}L</p>
                 <p className="text-[var(--text-muted)] text-[10px]">Tanque</p>
               </div>
-              <div className="bg-[var(--subtle)] border border-[var(--border)] rounded-xl p-3 text-center">
+              <div className="bg-[var(--subtle)] border border-[var(--border)] rounded-2xl p-3 text-center">
                 <Gauge size={16} className="text-primary-500 mx-auto mb-1" />
                 <p className="text-[var(--text)] font-bold text-sm">{boat.fuelType === 'GASOLINE' ? 'Gasolina' : boat.fuelType}</p>
                 <p className="text-[var(--text-muted)] text-[10px]">Combustível</p>
               </div>
-              <div className={`bg-[var(--subtle)] border rounded-xl p-3 text-center ${boat.hasSound ? 'border-primary-500/30' : 'border-[var(--border)]'}`}>
+              <div className={`bg-[var(--subtle)] border rounded-2xl p-3 text-center ${boat.hasSound ? 'border-primary-500/30' : 'border-[var(--border)]'}`}>
                 {boat.hasSound ? <Volume2 size={16} className="text-primary-500 mx-auto mb-1" /> : <VolumeX size={16} className="text-[var(--text-muted)] mx-auto mb-1" />}
                 <p className="text-[var(--text)] font-bold text-sm">{boat.hasSound ? 'Sim' : 'Não'}</p>
                 <p className="text-[var(--text-muted)] text-[10px]">Som</p>
@@ -147,7 +147,7 @@ function BoatModal({ boat, onClose }: { boat: BoatMarketplace; onClose: () => vo
             href={`${WHATSAPP_URL}?text=${encodeURIComponent(`Olá! Tenho interesse na cota do ${boat.name} (${boat.model} ${boat.year}). Gostaria de mais informações.`)}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 w-full py-3.5 bg-[#25D366] text-white font-bold text-base rounded-xl active:scale-[0.98] transition-transform"
+            className="flex items-center justify-center gap-2 w-full py-3.5 bg-[#25D366] text-white font-bold text-base rounded-2xl active:scale-[0.98] transition-transform shadow-[0_4px_14px_rgba(37,211,102,0.25)]"
           >
             <MessageCircle size={20} />
             Tenho interesse nesta cota
@@ -180,18 +180,7 @@ export default function ComprasPage() {
   }, []);
 
   return (
-    <div className="min-h-screen pt-14 pb-20 bg-[var(--bg)]">
-      {/* Header */}
-      <div className="px-4 py-5">
-        <div className="flex items-center gap-2 mb-1">
-          <Anchor className="w-5 h-5 text-primary-500" />
-          <h1 className="text-xl font-bold text-[var(--text)]">Compre sua Cota</h1>
-        </div>
-        <p className="text-sm text-[var(--text-secondary)]">
-          Embarcações disponíveis para venda de cotas
-        </p>
-      </div>
-
+    <div className="min-h-screen pt-4 pb-20 bg-[var(--bg)]">
       <div className="px-4 space-y-4">
         {loading ? (
           <div className="flex items-center justify-center py-20">
@@ -204,7 +193,7 @@ export default function ComprasPage() {
           </div>
         ) : (
           boats.map((boat) => (
-            <div key={boat.id} className="bg-[var(--card)] rounded-2xl border border-[var(--border)] overflow-hidden">
+            <div key={boat.id} className="bg-[var(--card)] rounded-3xl border border-[var(--border)] overflow-hidden shadow-[0_2px_20px_var(--calendar-shadow)]">
               {/* Image */}
               <div className="relative aspect-[16/10] overflow-hidden">
                 <img
@@ -267,10 +256,10 @@ export default function ComprasPage() {
                 )}
 
                 {/* Buttons */}
-                <div className="flex gap-2">
+                <div className="flex gap-2.5">
                   <button
                     onClick={() => setSelectedBoat(boat)}
-                    className="flex items-center justify-center gap-1.5 flex-1 py-3 bg-[var(--subtle)] border border-[var(--border)] text-[var(--text)] font-semibold text-sm rounded-xl active:scale-[0.98] transition-transform"
+                    className="flex items-center justify-center gap-1.5 flex-1 py-3 bg-[var(--subtle)] border border-[var(--border)] text-[var(--text)] font-semibold text-sm rounded-2xl active:scale-[0.98] transition-transform"
                   >
                     <Eye size={16} />
                     Ver detalhes
@@ -279,7 +268,7 @@ export default function ComprasPage() {
                     href={`${WHATSAPP_URL}?text=${encodeURIComponent(`Olá! Tenho interesse na cota do ${boat.name} (${boat.model} ${boat.year}). Gostaria de mais informações.`)}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-1.5 flex-1 py-3 bg-[#25D366] text-white font-bold text-sm rounded-xl active:scale-[0.98] transition-transform"
+                    className="flex items-center justify-center gap-1.5 flex-1 py-3 bg-[#25D366] text-white font-bold text-sm rounded-2xl active:scale-[0.98] transition-transform shadow-[0_4px_14px_rgba(37,211,102,0.25)]"
                   >
                     <MessageCircle size={16} />
                     Quero essa cota

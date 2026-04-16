@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import {
   Settings, ArrowUp, ArrowDown, CheckCircle2, Clock, User, RefreshCw,
@@ -18,6 +18,13 @@ const JetSkiViewer3D = dynamic(() => import('@/components/JetSkiViewer3D'), { ss
 import type { JetSki3DSketchRef, InitialMark } from '@/components/JetSki3DSketch';
 const JetSki3DSketch = dynamic(() => import('@/components/JetSki3DSketch'), { ssr: false }) as any;
 const JetSki3DMarkViewer = dynamic(() => import('@/components/JetSki3DMarkViewer'), { ssr: false }) as any;
+
+const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || 'https://api.marinaprizeclub.com/api/v1').replace(/\/api\/v1$/, '');
+function resolveMediaUrl(url: string | undefined | null): string {
+  if (!url) return '';
+  if (url.startsWith('/uploads/')) return `${API_ORIGIN}${url}`;
+  return url;
+}
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 interface ChecklistFull {
@@ -140,11 +147,22 @@ export default function OperationsPage() {
   const approvedCL  = checklists.filter(c => c.status === 'APPROVED');
   const pendingCL   = checklists.filter(c => c.status === 'PENDING');
 
-  // Search filter helper
-  const s = searchTerm.toLowerCase();
-  const matchQueue = (q: QueueItem) => !s || [q.boat?.name, q.boat?.model, q.client?.name, q.reservation?.user?.name].some(v => v?.toLowerCase().includes(s));
-  const matchRes = (r: TodayRes) => !s || [r.boat?.name, r.boat?.model, r.user?.name].some(v => v?.toLowerCase().includes(s));
-  const matchCL = (c: ChecklistEntry) => !s || [c.boat?.name, c.operator?.name].some(v => v?.toLowerCase().includes(s));
+  // Search filter helper — memoized to avoid recomputing on every render
+  const matchQueue = useMemo(() => {
+    if (!searchTerm) return () => true;
+    const s = searchTerm.toLowerCase();
+    return (q: QueueItem) => [q.boat?.name, q.boat?.model, q.client?.name, q.reservation?.user?.name].some(v => v?.toLowerCase().includes(s));
+  }, [searchTerm]);
+  const matchRes = useMemo(() => {
+    if (!searchTerm) return () => true;
+    const s = searchTerm.toLowerCase();
+    return (r: TodayRes) => [r.boat?.name, r.boat?.model, r.user?.name].some(v => v?.toLowerCase().includes(s));
+  }, [searchTerm]);
+  const matchCL = useMemo(() => {
+    if (!searchTerm) return () => true;
+    const s = searchTerm.toLowerCase();
+    return (c: ChecklistEntry) => [c.boat?.name, c.operator?.name].some(v => v?.toLowerCase().includes(s));
+  }, [searchTerm]);
 
   const filteredIW  = (filterBoat ? inWater.filter(q => q.boat?.id === filterBoat) : inWater).filter(matchQueue);
   const filteredWaiting = waiting.filter(matchQueue);
@@ -786,7 +804,7 @@ function CLDetailModal({ cl, onClose }: { cl: ChecklistEntry; onClose: () => voi
                       </div>
                       {cl.hullSketchUrl && (
                         <div className="rounded-xl overflow-hidden border border-th">
-                          <img src={cl.hullSketchUrl} alt="Croqui" className="w-full object-contain bg-white" />
+                          <img src={resolveMediaUrl(cl.hullSketchUrl)} alt="Croqui" className="w-full object-contain bg-white" />
                         </div>
                       )}
                     </>
@@ -801,7 +819,7 @@ function CLDetailModal({ cl, onClose }: { cl: ChecklistEntry; onClose: () => voi
                 <span className="flex items-center gap-2"><Video className="w-4 h-4 text-purple-500" />Vídeo de Inspeção</span>
                 <ChevronDown className={`w-4 h-4 transition-transform ${showVideo ? 'rotate-180' : ''}`} />
               </button>
-              {showVideo && <div className="mt-2 rounded-xl overflow-hidden border border-th bg-black"><video src={cl.videoUrl} controls className="w-full max-h-64" /></div>}
+              {showVideo && <div className="mt-2 rounded-xl overflow-hidden border border-th bg-black"><video src={resolveMediaUrl(cl.videoUrl)} controls className="w-full max-h-64" /></div>}
             </div>
           )}
           {cl.fuelPhotoUrl && (
@@ -810,7 +828,7 @@ function CLDetailModal({ cl, onClose }: { cl: ChecklistEntry; onClose: () => voi
                 <span className="flex items-center gap-2"><span className="text-base">⛽</span>Foto do Tanque</span>
                 <ChevronDown className={`w-4 h-4 transition-transform ${showFuel ? 'rotate-180' : ''}`} />
               </button>
-              {showFuel && <div className="mt-2 rounded-xl overflow-hidden border border-th"><img src={cl.fuelPhotoUrl} alt="Tanque de Combustível" className="w-full object-contain max-h-72" /></div>}
+              {showFuel && <div className="mt-2 rounded-xl overflow-hidden border border-th"><img src={resolveMediaUrl(cl.fuelPhotoUrl)} alt="Tanque de Combustível" className="w-full object-contain max-h-72" /></div>}
             </div>
           )}
           {(cl.lifeVestsLoaned ?? 0) > 0 && (
@@ -1708,7 +1726,7 @@ function InspectionFullModal({ cl, onClose }: { cl: ChecklistEntry; onClose: () 
                   {cl.hullSketchMarks ? (
                     <JetSki3DMarkViewer marksJson={cl.hullSketchMarks} height={260} />
                   ) : cl.hullSketchUrl ? (
-                    <img src={cl.hullSketchUrl} alt="Croqui" style={{ width: '100%', borderRadius: 10, border: '1px solid #e5e7eb' }} />
+                    <img src={resolveMediaUrl(cl.hullSketchUrl)} alt="Croqui" style={{ width: '100%', borderRadius: 10, border: '1px solid #e5e7eb' }} />
                   ) : null}
                 </div>
               )}
@@ -1719,7 +1737,7 @@ function InspectionFullModal({ cl, onClose }: { cl: ChecklistEntry; onClose: () 
           {cl.fuelPhotoUrl && (
             <div style={{ marginBottom: 20 }}>
               <p style={{ fontSize: 14, fontWeight: 700, color: '#111', margin: '0 0 8px' }}>⛽ Foto do Tanque — Saída</p>
-              <img src={cl.fuelPhotoUrl} alt="Tanque saída" style={{ width: '100%', maxHeight: 220, objectFit: 'contain', borderRadius: 10, border: '1px solid #e5e7eb' }} />
+              <img src={resolveMediaUrl(cl.fuelPhotoUrl)} alt="Tanque saída" style={{ width: '100%', maxHeight: 220, objectFit: 'contain', borderRadius: 10, border: '1px solid #e5e7eb' }} />
             </div>
           )}
 
@@ -1764,7 +1782,7 @@ function InspectionFullModal({ cl, onClose }: { cl: ChecklistEntry; onClose: () 
                   {cl.returnFuelPhotoUrl && (
                     <div>
                       <p style={{ fontSize: 14, fontWeight: 700, color: '#111', margin: '0 0 8px' }}>⛽ Foto do Tanque — Retorno</p>
-                      <img src={cl.returnFuelPhotoUrl} alt="Tanque retorno" style={{ width: '100%', maxHeight: 220, objectFit: 'contain', borderRadius: 10, border: '1px solid #e5e7eb' }} />
+                      <img src={resolveMediaUrl(cl.returnFuelPhotoUrl)} alt="Tanque retorno" style={{ width: '100%', maxHeight: 220, objectFit: 'contain', borderRadius: 10, border: '1px solid #e5e7eb' }} />
                     </div>
                   )}
 
@@ -1795,7 +1813,7 @@ function InspectionFullModal({ cl, onClose }: { cl: ChecklistEntry; onClose: () 
         {cl.videoUrl && (
           <div className="px-6 pb-4">
             <p className="text-xs text-th-muted mb-2">🎥 Vídeo de Inspeção</p>
-            <video src={cl.videoUrl} controls className="w-full max-h-56 rounded-xl border border-th bg-black" />
+            <video src={resolveMediaUrl(cl.videoUrl)} controls className="w-full max-h-56 rounded-xl border border-th bg-black" />
           </div>
         )}
       </div>

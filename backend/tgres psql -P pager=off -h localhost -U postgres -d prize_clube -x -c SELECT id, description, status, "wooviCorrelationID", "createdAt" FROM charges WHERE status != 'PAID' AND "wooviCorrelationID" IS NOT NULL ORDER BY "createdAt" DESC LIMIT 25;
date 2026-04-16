@@ -1,0 +1,34 @@
+-[ RECORD 1 ]------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                 | cmo074dft0004v7882fdy8csa
+description        | Combustível — 0001 - GTX 230 (0.11L)
+amount             | 0.11
+status             | PENDING
+dueDate            | 2026-04-16 02:59:59.999
+paidAt             | 
+wooviCorrelationID | prizeclub-charge-cmo074dft0004v7882fdy8csa-1776266486154
+wooviBrCode        | 00020101021226810014br.gov.bcb.pix2559qr.woovi.com/qr/v2/cob/fd5cc76b-63cf-4c88-a3ab-a7b6852ea6e552040000530398654040.115802BR592562.017.763_LEONARDO_ALMAD6014BELO_HORIZONTE622905250156e3d584854eeb82512e0a3630451EF
+userId             | cmnt8mpqt0002j18yfgqx30tj
+createdAt          | 2026-04-15 15:19:07.529
+-[ RECORD 2 ]------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                 | cmo06vbh600048gmmxzna0pm3
+description        | Combustível — 0001 - GTX 230 (0.1L)
+amount             | 0.1
+status             | PAID
+dueDate            | 2026-04-16 02:59:59.999
+paidAt             | 2026-04-15 15:12:23
+wooviCorrelationID | prizeclub-charge-cmo06vbh600048gmmxzna0pm3-1776265930490
+wooviBrCode        | 00020101021226810014br.gov.bcb.pix2559qr.woovi.com/qr/v2/cob/84f29a8c-f2da-460b-9b21-6e43f5c3e0bc52040000530398654040.105802BR592562.017.763_LEONARDO_ALMAD6014BELO_HORIZONTE622905259e2d8d312acc465391cbc69836304A4C1
+userId             | cmnt8mpqt0002j18yfgqx30tj
+createdAt          | 2026-04-15 15:12:05.082
+-[ RECORD 3 ]------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                 | cmo06bq7t0005rpggtxnprelx
+description        | Combustível — 0001 - GTX 230 (0.1L)
+amount             | 0.1
+status             | PAID
+dueDate            | 2026-04-16 02:59:59.999
+paidAt             | 2026-04-15 15:08:26
+wooviCorrelationID | prizeclub-charge-cmo06bq7t0005rpggtxnprelx-1776265693392
+wooviBrCode        | 00020101021226810014br.gov.bcb.pix2559qr.woovi.com/qr/v2/cob/8acc46c9-b22d-4d5a-adfd-418bdc4a9c4652040000530398654040.105802BR592562.017.763_LEONARDO_ALMAD6014BELO_HORIZONTE62290525b2b7326bac694989aa98c70b363047832
+userId             | cmnt8mpqt0002j18yfgqx30tj
+createdAt          | 2026-04-15 14:56:51.065
+

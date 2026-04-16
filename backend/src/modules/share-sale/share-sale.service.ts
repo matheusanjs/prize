@@ -1,10 +1,16 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Optional, Inject, Logger } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
+import { WhatsAppAutomationService } from '../whatsapp/whatsapp-automation.service';
 import { CreateShareSaleDto } from './dto/create-share-sale.dto';
 
 @Injectable()
 export class ShareSaleService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(ShareSaleService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    @Optional() @Inject(WhatsAppAutomationService) private whatsapp?: WhatsAppAutomationService,
+  ) {}
 
   async create(dto: CreateShareSaleDto) {
     const boat = await this.prisma.boat.findUnique({ where: { id: dto.boatId } });
@@ -147,6 +153,15 @@ export class ShareSaleService {
     });
 
     await this.prisma.$transaction([...installmentCharges, mensalidadeCharge]);
+
+    // Send WhatsApp notification
+    if (this.whatsapp) {
+      this.whatsapp.sendSharePurchaseNotification(
+        dto.userId, boat.name, dto.shareNumber, dto.totalValue, dto.installments,
+      ).catch((err) => {
+        this.logger.error(`Failed to send share purchase notification: ${err.message}`);
+      });
+    }
 
     return {
       sale,

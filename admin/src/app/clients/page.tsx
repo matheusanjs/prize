@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Search, UserPlus, MoreHorizontal, Mail, Phone, Eye, Edit, Ban, Trash2, X, Save } from 'lucide-react';
-import { getUsers, createUser, updateUser, deleteUser } from '@/services/api';
+import { getUsers, createUser, updateUser, deleteUser, resolveStaticUrl } from '@/services/api';
 
 interface Client {
   id: string;
@@ -15,6 +15,7 @@ interface Client {
   status?: string;
   lastLogin?: string;
   createdAt?: string;
+  avatar?: string;
 }
 
 export default function ClientsPage() {
@@ -177,8 +178,12 @@ export default function ClientsPage() {
               <tr key={client.id} className="hover:bg-th-hover transition-colors">
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-primary-100 text-primary-500 flex items-center justify-center font-semibold text-sm">
-                      {client.name.charAt(0)}
+                    <div className="w-9 h-9 rounded-full overflow-hidden bg-primary-100 text-primary-500 flex items-center justify-center font-semibold text-sm shrink-0">
+                      {client.avatar ? (
+                        <img src={resolveStaticUrl(client.avatar) || ''} alt={client.name} className="w-full h-full object-cover" />
+                      ) : (
+                        client.name.charAt(0)
+                      )}
                     </div>
                     <span className="font-medium text-th text-sm">{client.name}</span>
                   </div>
@@ -242,8 +247,12 @@ export default function ClientsPage() {
               <button onClick={() => setViewingClient(null)} className="text-th-muted hover:text-th-secondary"><X size={20} /></button>
             </div>
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-full bg-primary-100 text-primary-500 flex items-center justify-center font-bold text-lg">
-                {viewingClient.name.charAt(0)}
+              <div className="w-12 h-12 rounded-full overflow-hidden bg-primary-100 text-primary-500 flex items-center justify-center font-bold text-lg shrink-0">
+                {viewingClient.avatar ? (
+                  <img src={resolveStaticUrl(viewingClient.avatar) || ''} alt={viewingClient.name} className="w-full h-full object-cover" />
+                ) : (
+                  viewingClient.name.charAt(0)
+                )}
               </div>
               <div>
                 <p className="font-semibold text-th">{viewingClient.name}</p>

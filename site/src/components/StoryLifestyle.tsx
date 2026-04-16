@@ -7,6 +7,7 @@ import { Sun, Users, Music } from 'lucide-react';
 const MOMENTS = [
   {
     video: '/life1.mp4',
+    videoDesktop: '/life1-desktop.mp4',
     mobileImg: '/life1-mobile.webp',
     icon: Sun,
     tag: 'Golden Hour',
@@ -15,6 +16,7 @@ const MOMENTS = [
   },
   {
     video: '/life2.mp4',
+    videoDesktop: '/life2-desktop.mp4',
     mobileImg: '/life2-mobile.webp',
     icon: Users,
     tag: 'Momentos',
@@ -23,6 +25,7 @@ const MOMENTS = [
   },
   {
     video: '/life3.mp4',
+    videoDesktop: '/life3-desktop.mp4',
     mobileImg: '/life3-mobile.webp',
     icon: Music,
     tag: 'Vibe Prize',
@@ -139,16 +142,17 @@ function VideoCard({ moment, index }: { moment: (typeof MOMENTS)[0]; index: numb
 
   useEffect(() => {
     if (!videoRef.current || isMobile) return;
+    const src = moment.videoDesktop;
     if (isInView) {
-      if (!videoRef.current.src.includes(moment.video)) {
-        videoRef.current.src = moment.video;
+      if (!videoRef.current.src.includes(src)) {
+        videoRef.current.src = src;
         videoRef.current.load();
       }
       videoRef.current.play().catch(() => {});
     } else {
       videoRef.current.pause();
     }
-  }, [isInView, moment.video, isMobile]);
+  }, [isInView, moment.videoDesktop, isMobile]);
 
   return (
     <div
@@ -174,6 +178,7 @@ function VideoCard({ moment, index }: { moment: (typeof MOMENTS)[0]; index: numb
           preload="none"
           poster={moment.video.replace('.mp4', '-poster.jpg')}
           className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+          style={{ filter: 'contrast(1.08) saturate(1.15) brightness(1.05)' }}
         />
       )}
 

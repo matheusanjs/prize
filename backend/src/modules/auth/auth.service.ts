@@ -1,18 +1,23 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, Optional, Inject, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../database/prisma.service';
+import { WhatsAppAutomationService } from '../whatsapp/whatsapp-automation.service';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
     private config: ConfigService,
+    @Optional() @Inject(WhatsAppAutomationService) private whatsapp?: WhatsAppAutomationService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -39,11 +44,19 @@ export class AuthService {
         cpfCnpj: dto.cpfCnpj,
         passwordHash,
         role: (dto.role as any) || 'CLIENT',
+        avatar: '/static/default-avatar.png',
       },
     });
 
     const tokens = await this.generateTokens(user.id, user.role);
     await this.saveRefreshToken(user.id, tokens.refreshToken);
+
+    // Send WhatsApp welcome notification
+    if (this.whatsapp && user.phone) {
+      this.whatsapp.sendWelcomeNotification(user.id).catch((err) => {
+        this.logger.error(`Failed to send welcome notification: ${err.message}`);
+      });
+    }
 
     return {
       user: { id: user.id, name: user.name, email: user.email, role: user.role },
@@ -105,6 +118,24 @@ export class AuthService {
   async logout(userId: string) {
     await this.prisma.refreshToken.deleteMany({ where: { userId } });
     return { message: 'Logout realizado com sucesso' };
+  }
+
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException('Usuário não encontrado');
+
+    const passwordValid = await bcrypt.compare(dto.currentPassword, user.passwordHash);
+    if (!passwordValid) {
+      throw new UnauthorizedException('Senha atual incorreta');
+    }
+
+    const newPasswordHash = await bcrypt.hash(dto.newPassword, 12);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: newPasswordHash },
+    });
+
+    return { message: 'Senha alterada com sucesso' };
   }
 
   private async generateTokens(userId: string, role: string) {

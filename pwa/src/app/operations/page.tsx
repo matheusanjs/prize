@@ -22,6 +22,13 @@ import type { JetSki3DSketchRef, InitialMark } from '@/components/JetSki3DSketch
 const JetSki3DSketch = dynamic(() => import('@/components/JetSki3DSketch'), { ssr: false }) as any;
 const JetSki3DMarkViewer = dynamic(() => import('@/components/JetSki3DMarkViewer'), { ssr: false }) as any;
 
+const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || 'https://api.marinaprizeclub.com/api/v1').replace(/\/api\/v1$/, '');
+function resolveMediaUrl(url: string | undefined | null): string {
+  if (!url) return '';
+  if (url.startsWith('/uploads/')) return `${API_ORIGIN}${url}`;
+  return url;
+}
+
 /* ─── Shared constants ───────────────────────────────────────────────────── */
 const PRE_LAUNCH_ITEMS = [
   'Âncora e cabo presentes',
@@ -115,6 +122,15 @@ function OperatorView() {
 
   const initialLoadDone = useRef(false);
 
+  // Lightweight array equality — avoids JSON.stringify on large arrays
+  const shallowEqualArrays = useCallback((a: any[], b: any[]) => {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (a[i]?.id !== b[i]?.id) return false;
+    }
+    return true;
+  }, []);
+
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
@@ -130,11 +146,11 @@ function OperatorView() {
       const t = tRes.data;
       const newTodayRes = Array.isArray(t) ? t : t?.data || [];
       // Only update state if data actually changed (avoids unnecessary re-renders)
-      setChecklists(prev => JSON.stringify(prev) === JSON.stringify(newChecklists) ? prev : newChecklists);
-      setQueue(prev => JSON.stringify(prev) === JSON.stringify(newQueue) ? prev : newQueue);
-      setTodayRes(prev => JSON.stringify(prev) === JSON.stringify(newTodayRes) ? prev : newTodayRes);
+      setChecklists(prev => shallowEqualArrays(prev, newChecklists) ? prev : newChecklists);
+      setQueue(prev => shallowEqualArrays(prev, newQueue) ? prev : newQueue);
+      setTodayRes(prev => shallowEqualArrays(prev, newTodayRes) ? prev : newTodayRes);
     } finally { if (!silent) setLoading(false); }
-  }, []);
+  }, [shallowEqualArrays]);
 
   useEffect(() => { load().then(() => { initialLoadDone.current = true; }); }, [load]);
   useEffect(() => { const t = setInterval(() => load(true), 15000); return () => clearInterval(t); }, [load]);
@@ -213,31 +229,28 @@ function OperatorView() {
       {/* Header */}
       <div className="flex items-center justify-between pt-2">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center">
-            <ClipboardCheck className="w-5 h-5 text-orange-500" />
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-primary-500/15 to-primary-400/5 border border-primary-500/10 flex items-center justify-center">
+            <ClipboardCheck className="w-5 h-5 text-primary-500" />
           </div>
-          <div>
-            <h1 className="text-lg font-bold text-[var(--text)]">Operações</h1>
-            <p className="text-xs text-[var(--text-secondary)]">
-              <span className="font-medium text-orange-400">{needsCheckin.length}</span> check-in ·{' '}
-              <span className="font-medium text-emerald-400">{inWaterQ.length}</span> na água
-            </p>
-          </div>
+          <p className="text-xs text-[var(--text-secondary)]">
+            <span className="font-medium text-primary-400">{needsCheckin.length}</span> check-in ·{' '}
+            <span className="font-medium text-emerald-400">{inWaterQ.length}</span> na água
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => load(true)} className="p-2 hover:bg-[var(--subtle)] rounded-xl text-[var(--text-muted)]"><RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /></button>
           <button onClick={() => setShowWizard(true)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-orange-500 text-white rounded-xl text-xs font-bold ">
+            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-gradient-to-r from-primary-500 to-primary-400 text-white rounded-xl text-xs font-bold shadow-[0_4px_14px_rgba(0,117,119,0.3)]">
             <Plus className="w-4 h-4" />Checklist
           </button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-[var(--subtle)] p-1 rounded-xl overflow-x-auto">
+      <div className="flex gap-1.5 bg-[var(--subtle)] p-1.5 rounded-2xl overflow-x-auto">
         {tabs.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            className={`relative flex-1 whitespace-nowrap px-3 py-2 rounded-lg text-xs font-semibold transition-all ${tab === t.id ? 'bg-[var(--card)] text-[var(--text)]' : 'text-[var(--text-secondary)]'}`}>
+            className={`relative flex-1 whitespace-nowrap px-3 py-2 rounded-xl text-xs font-semibold transition-all ${tab === t.id ? 'bg-[var(--card)] text-[var(--text)] shadow-sm' : 'text-[var(--text-secondary)]'}`}>
             {t.label}
             {'badge' in t && (t.badge ?? 0) > 0 && (
               <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">{t.badge}</span>
@@ -246,7 +259,7 @@ function OperatorView() {
         ))}
       </div>
 
-      {loading && <div className="flex items-center justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>}
+      {loading && <div className="flex items-center justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-primary-500" /></div>}
 
       {/* CHECK-IN TAB */}
       {!loading && tab === 'checkin' && (
@@ -262,28 +275,28 @@ function OperatorView() {
             {needsCheckin.length > 0 && (
               <div>
                 <p className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-orange-500" />Aguardando Check-in ({needsCheckin.length})
+                  <Clock className="w-3.5 h-3.5 text-primary-500" />Aguardando Check-in ({needsCheckin.length})
                 </p>
                 {needsCheckin.map(r => {
                   const hasPendingCL = r.checklist?.status === 'PENDING';
                   const matchingCl = hasPendingCL ? checklists.find(c => c.id === r.checklist?.id) : null;
                   return (
-                    <div key={r.id} className={`bg-[var(--card)] border-2 rounded-2xl p-4 mb-2 ${hasPendingCL ? 'border-yellow-400/40' : 'border-orange-400/40'}`}>
+                    <div key={r.id} className={`bg-[var(--card)] border-2 rounded-2xl p-4 mb-2 ${hasPendingCL ? 'border-yellow-400/40' : 'border-primary-400/40'}`}>
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex items-center gap-2.5">
-                          <div className="w-9 h-9 rounded-xl bg-orange-500/10 flex items-center justify-center flex-shrink-0"><Ship className="w-4.5 h-4.5 text-orange-500" /></div>
+                          <div className="w-9 h-9 rounded-xl bg-primary-500/10 flex items-center justify-center flex-shrink-0"><Ship className="w-4.5 h-4.5 text-primary-500" /></div>
                           <div>
                             <p className="font-bold text-sm text-[var(--text)]">{r.boat?.name || '—'}</p>
                             <p className="text-[11px] text-[var(--text-secondary)]">{r.boat?.model}</p>
                           </div>
                         </div>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${hasPendingCL ? 'bg-yellow-500/10 text-yellow-500' : 'bg-orange-500/10 text-orange-500'}`}>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${hasPendingCL ? 'bg-yellow-500/10 text-yellow-500' : 'bg-primary-500/10 text-primary-500'}`}>
                           {hasPendingCL ? 'Pendente' : 'Reservado'}
                         </span>
                       </div>
                       <div className="space-y-1 mb-3">
                         <p className="text-xs text-[var(--text-secondary)] flex items-center gap-1.5"><User className="w-3 h-3" />{r.user?.name || '—'}</p>
-                        <p className="text-xs text-orange-500 font-medium flex items-center gap-1.5"><Clock className="w-3 h-3" />{fmt(r.startDate)} → {fmt(r.endDate)}</p>
+                        <p className="text-xs text-primary-500 font-medium flex items-center gap-1.5"><Clock className="w-3 h-3" />{fmt(r.startDate)} → {fmt(r.endDate)}</p>
                       </div>
                       {hasPendingCL && matchingCl ? (
                         <button onClick={() => handleContinueChecklist(matchingCl)}
@@ -292,7 +305,7 @@ function OperatorView() {
                         </button>
                       ) : (
                         <button onClick={() => handleStartCheckin(r)}
-                          className="w-full py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5">
+                          className="w-full py-2 bg-gradient-to-r from-primary-500 to-primary-400 hover:from-primary-600 hover:to-primary-500 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5">
                           <ClipboardCheck className="w-3.5 h-3.5" />Realizar Check-in
                         </button>
                       )}
@@ -373,7 +386,7 @@ function OperatorView() {
                   {!item.reservation?.checklist && (
                     <button
                       onClick={() => handleStartCheckinFromQueue(item)}
-                      className="w-full py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2"
+                      className="w-full py-2.5 bg-gradient-to-r from-primary-500 to-primary-400 hover:from-primary-600 hover:to-primary-500 text-white rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2"
                     >
                       <ClipboardCheck className="w-4 h-4" />Realizar Checklist
                     </button>
@@ -416,7 +429,7 @@ function OperatorView() {
                 <div className="space-y-1 mb-3">
                   {item.client?.name && <p className="text-sm text-[var(--text)] flex items-center gap-2"><User className="w-3.5 h-3.5 text-[var(--text-muted)]" />{item.client.name}</p>}
                   {item.startedAt && <p className="text-xs text-[var(--text-secondary)] flex items-center gap-2"><Clock className="w-3.5 h-3.5" />Desceu às {fmt(item.startedAt)}</p>}
-                  {item.reservation?.endDate && <p className="text-xs text-orange-400 font-medium flex items-center gap-2"><Clock className="w-3.5 h-3.5" />Retorno: {fmt(item.reservation.endDate)}</p>}
+                  {item.reservation?.endDate && <p className="text-xs text-primary-400 font-medium flex items-center gap-2"><Clock className="w-3.5 h-3.5" />Retorno: {fmt(item.reservation.endDate)}</p>}
                 </div>
                 <button disabled={liftingId === item.id} onClick={() => handleLift(item)}
                   className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2">
@@ -439,7 +452,7 @@ function OperatorView() {
           <div className="space-y-2">
             {completedQ.map(item => (
               <button key={item.id} onClick={() => setDetailQ(item)}
-                className="w-full text-left bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 flex items-center gap-3 hover:border-orange-500/20 transition-colors">
+                className="w-full text-left bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 flex items-center gap-3 hover:border-primary-500/20 transition-colors">
                 <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center flex-shrink-0">
                   <CheckCircle2 className="w-5 h-5 text-teal-500" />
                 </div>
@@ -570,13 +583,13 @@ function CLCardMobile({ cl, onView, onContinue, onDelete }: { cl: ChecklistEntry
       <div className="flex items-center gap-3 mb-2.5 text-xs text-[var(--text-secondary)]">
         <span>{checked}/{total} itens</span>
         {(cl.hullSketchMarks || cl.hullSketchUrl || cl.hasSketchUrl) && <span className="flex items-center gap-1 text-blue-500"><PenLine className="w-3 h-3" />Croqui</span>}
-        {(cl.fuelPhotoUrl || cl.hasFuelPhoto) && <span className="flex items-center gap-1 text-orange-500"><Camera className="w-3 h-3" />Tanque</span>}
+        {(cl.fuelPhotoUrl || cl.hasFuelPhoto) && <span className="flex items-center gap-1 text-primary-500"><Camera className="w-3 h-3" />Tanque</span>}
         {(cl.videoUrl || cl.hasVideo) && <span className="flex items-center gap-1 text-purple-500"><Video className="w-3 h-3" />Vídeo</span>}
       </div>
       {(cl.lifeVestsLoaned ?? 0) > 0 && (
-        <div className="mb-2 flex items-center gap-2 px-3 py-1.5 bg-orange-500/10 border border-orange-500/20 rounded-xl">
+        <div className="mb-2 flex items-center gap-2 px-3 py-1.5 bg-primary-500/10 border border-primary-500/20 rounded-xl">
           <span className="text-base">🦺</span>
-          <span className="text-xs font-bold text-orange-400">{cl.lifeVestsLoaned} colete{(cl.lifeVestsLoaned ?? 0) > 1 ? 's' : ''} emprestado{(cl.lifeVestsLoaned ?? 0) > 1 ? 's' : ''}</span>
+          <span className="text-xs font-bold text-primary-400">{cl.lifeVestsLoaned} colete{(cl.lifeVestsLoaned ?? 0) > 1 ? 's' : ''} emprestado{(cl.lifeVestsLoaned ?? 0) > 1 ? 's' : ''}</span>
         </div>
       )}
       <div className="w-full bg-[var(--subtle)] rounded-full h-1.5 mb-3">
@@ -587,7 +600,7 @@ function CLCardMobile({ cl, onView, onContinue, onDelete }: { cl: ChecklistEntry
           <Eye className="w-3.5 h-3.5" />Detalhes
         </button>
         {onContinue && cl.status === 'PENDING' && (
-          <button onClick={() => onContinue(cl)} className="flex-1 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1">
+          <button onClick={() => onContinue(cl)} className="flex-1 py-1.5 bg-gradient-to-r from-primary-500 to-primary-400 hover:from-primary-600 hover:to-primary-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1">
             <ChevronRight className="w-3.5 h-3.5" />Continuar
           </button>
         )}
@@ -611,7 +624,7 @@ function CLDetailSheet({ cl: initialCL, onClose }: { cl: ChecklistEntry; onClose
     // Lazy-fetch media when first expanding a media section
     if (!cl.videoUrl && !cl.fuelPhotoUrl && (cl.hasVideo || cl.hasFuelPhoto || cl.hasSketchUrl || cl.hasReturnFuelPhoto) && !mediaLoading) {
       setMediaLoading(true);
-      getChecklistById(cl.id).then(res => {
+      getChecklistById(cl.id).then((res: any) => {
         const full = res.data;
         if (full) setCl(prev => ({ ...prev, videoUrl: full.videoUrl, fuelPhotoUrl: full.fuelPhotoUrl, hullSketchUrl: full.hullSketchUrl, returnFuelPhotoUrl: full.returnFuelPhotoUrl }));
       }).catch(() => {}).finally(() => setMediaLoading(false));
@@ -630,7 +643,7 @@ function CLDetailSheet({ cl: initialCL, onClose }: { cl: ChecklistEntry; onClose
       {zoomImg && (
         <div className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-4" onClick={() => setZoomImg(null)}>
           <button onClick={() => setZoomImg(null)} className="absolute top-4 right-4 text-white/70 hover:text-white z-10"><X className="w-7 h-7" /></button>
-          <img src={zoomImg} alt="Zoom" className="max-w-full max-h-full object-contain rounded-xl" onClick={e => e.stopPropagation()} />
+          <img src={resolveMediaUrl(zoomImg)} alt="Zoom" className="max-w-full max-h-full object-contain rounded-xl" onClick={e => e.stopPropagation()} />
         </div>
       )}
       <div className="bg-[var(--card)] rounded-t-3xl w-full max-h-[85vh] overflow-y-auto">
@@ -689,10 +702,10 @@ function CLDetailSheet({ cl: initialCL, onClose }: { cl: ChecklistEntry; onClose
                   {openSection === 'd-fuel' && (
                     <div className="grid grid-cols-2 gap-px bg-[var(--border)]">
                       <div className="bg-[var(--card)] p-2">
-                        {cl.fuelPhotoUrl ? <img src={cl.fuelPhotoUrl} alt="Saída" className="w-full rounded-lg object-contain max-h-36 cursor-pointer active:scale-95 transition-transform" onClick={() => setZoomImg(cl.fuelPhotoUrl!)} /> : <p className="text-xs text-[var(--text-muted)] text-center py-6">—</p>}
+                        {cl.fuelPhotoUrl ? <img src={resolveMediaUrl(cl.fuelPhotoUrl)} alt="Saída" className="w-full rounded-lg object-contain max-h-36 cursor-pointer active:scale-95 transition-transform" onClick={() => setZoomImg(cl.fuelPhotoUrl!)} /> : <p className="text-xs text-[var(--text-muted)] text-center py-6">—</p>}
                       </div>
                       <div className="bg-[var(--card)] p-2">
-                        {cl.returnFuelPhotoUrl ? <img src={cl.returnFuelPhotoUrl} alt="Retorno" className="w-full rounded-lg object-contain max-h-36 cursor-pointer active:scale-95 transition-transform" onClick={() => setZoomImg(cl.returnFuelPhotoUrl!)} /> : <p className="text-xs text-[var(--text-muted)] text-center py-6">—</p>}
+                        {cl.returnFuelPhotoUrl ? <img src={resolveMediaUrl(cl.returnFuelPhotoUrl)} alt="Retorno" className="w-full rounded-lg object-contain max-h-36 cursor-pointer active:scale-95 transition-transform" onClick={() => setZoomImg(cl.returnFuelPhotoUrl!)} /> : <p className="text-xs text-[var(--text-muted)] text-center py-6">—</p>}
                       </div>
                     </div>
                   )}
@@ -746,7 +759,7 @@ function CLDetailSheet({ cl: initialCL, onClose }: { cl: ChecklistEntry; onClose
                   </button>
                   {openSection === 'd-sketch' && (
                     <div className="p-3 pt-0 bg-[var(--card)]">
-                      {cl.hullSketchMarks ? <JetSki3DMarkViewer marksJson={cl.hullSketchMarks} height={220} /> : cl.hullSketchUrl ? <img src={cl.hullSketchUrl} alt="Croqui" className="w-full" /> : null}
+                      {cl.hullSketchMarks ? <JetSki3DMarkViewer marksJson={cl.hullSketchMarks} height={220} /> : cl.hullSketchUrl ? <img src={resolveMediaUrl(cl.hullSketchUrl)} alt="Croqui" className="w-full" /> : null}
                     </div>
                   )}
                 </div>
@@ -758,7 +771,7 @@ function CLDetailSheet({ cl: initialCL, onClose }: { cl: ChecklistEntry; onClose
                     <ChevronRight className={`w-4 h-4 text-[var(--text-muted)] transition-transform ${openSection === 'd-fuel' ? 'rotate-90' : ''}`} />
                   </button>
                   {openSection === 'd-fuel' && <div className="p-3 pt-0 bg-[var(--card)]">
-                    {cl.fuelPhotoUrl ? <img src={cl.fuelPhotoUrl} alt="Tanque" className="w-full object-contain max-h-48 rounded-xl cursor-pointer active:scale-95 transition-transform" onClick={() => setZoomImg(cl.fuelPhotoUrl!)} />
+                    {cl.fuelPhotoUrl ? <img src={resolveMediaUrl(cl.fuelPhotoUrl)} alt="Tanque" className="w-full object-contain max-h-48 rounded-xl cursor-pointer active:scale-95 transition-transform" onClick={() => setZoomImg(cl.fuelPhotoUrl!)} />
                       : mediaLoading ? <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-[var(--text-muted)]" /></div>
                       : <p className="text-xs text-[var(--text-muted)] text-center py-4">Carregando...</p>}
                   </div>}
@@ -779,11 +792,11 @@ function CLDetailSheet({ cl: initialCL, onClose }: { cl: ChecklistEntry; onClose
           {(cl.videoUrl || cl.hasVideo) && (
             <div className="bg-[var(--subtle)] rounded-2xl overflow-hidden">
               <button onClick={() => toggle('d-video')} className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium text-[var(--text)]">
-                <span className="flex items-center gap-2"><Video className="w-4 h-4 text-orange-500" /> Vídeo</span>
+                <span className="flex items-center gap-2"><Video className="w-4 h-4 text-primary-500" /> Vídeo</span>
                 <ChevronRight className={`w-4 h-4 text-[var(--text-muted)] transition-transform ${openSection === 'd-video' ? 'rotate-90' : ''}`} />
               </button>
               {openSection === 'd-video' && <div className="p-3 pt-0 bg-[var(--card)]">
-                {cl.videoUrl ? <video src={cl.videoUrl} controls className="w-full rounded-xl" style={{ maxHeight: 200 }} />
+                {cl.videoUrl ? <video src={resolveMediaUrl(cl.videoUrl)} controls className="w-full rounded-xl" style={{ maxHeight: 200 }} />
                   : mediaLoading ? <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-[var(--text-muted)]" /></div>
                   : <p className="text-xs text-[var(--text-muted)] text-center py-4">Carregando...</p>}
               </div>}
@@ -829,7 +842,7 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
   useEffect(() => {
     const boatId = existingChecklist?.boat?.id || preSelectedReservation?.boat?.id;
     if (boatId) {
-      getLastMarksForBoat(boatId).then(r => {
+      getLastMarksForBoat(boatId).then((r: any) => {
         const marks = Array.isArray(r.data) ? r.data : [];
         setLastBoatMarks(marks);
       }).catch(() => setLastBoatMarks([]));
@@ -853,7 +866,7 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
       setPendingReservation(preSelectedReservation);
       setBoatName(preSelectedReservation.boat?.name || '');
       setSelectedBoatId(preSelectedReservation.boat?.id || '');
-      getSharesByBoat(preSelectedReservation.boat.id).then(res => {
+      getSharesByBoat(preSelectedReservation.boat.id).then((res: any) => {
         const shares = res.data?.data || res.data || [];
         setShareholders(Array.isArray(shares) ? shares : []);
         const userId = preSelectedReservation.user?.id;
@@ -919,7 +932,7 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
       if (!boatName && pendingReservation?.boat?.name) setBoatName(pendingReservation.boat.name);
       fetchOverdueCharges(boatIdToUse, selectedCotistaId);
       // Fetch last damage marks for this boat
-      getLastMarksForBoat(boatIdToUse).then(r => {
+      getLastMarksForBoat(boatIdToUse).then((r: any) => {
         const marks = Array.isArray(r.data) ? r.data : [];
         setLastBoatMarks(marks);
       }).catch(() => setLastBoatMarks([]));
@@ -961,7 +974,7 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--border)] flex-shrink-0">
           <div className="flex items-center gap-3">
-            <ClipboardCheck className="w-5 h-5 text-orange-500" />
+            <ClipboardCheck className="w-5 h-5 text-primary-500" />
             <div>
               <p className="font-bold text-[var(--text)] text-sm">Realizar Checklist Pré-Saída</p>
               {boatName && <p className="text-xs text-[var(--text-secondary)]">{boatName}</p>}
@@ -975,12 +988,12 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
           <div className="px-5 py-3 flex-shrink-0">
             <div className="flex gap-1.5 mb-1">
               {wizSteps.map((s, i) => (
-                <div key={s} className={`flex-1 h-1.5 rounded-full ${i <= stepIdx ? 'bg-orange-500' : 'bg-[var(--subtle)]'}`} />
+                <div key={s} className={`flex-1 h-1.5 rounded-full ${i <= stepIdx ? 'bg-primary-500' : 'bg-[var(--subtle)]'}`} />
               ))}
             </div>
             <div className="flex justify-between text-[10px] text-[var(--text-muted)]">
               {['Cotista','Itens','Croqui','Comb.','Vídeo','Conf.'].map((l, i) => (
-                <span key={l} className={i <= stepIdx ? 'text-orange-500 font-medium' : ''}>{l}</span>
+                <span key={l} className={i <= stepIdx ? 'text-primary-500 font-medium' : ''}>{l}</span>
               ))}
             </div>
           </div>
@@ -993,7 +1006,7 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
             <JetSki3DSketch ref={sketchRef} fillHeight initialMarks={lastBoatMarks.length > 0 ? lastBoatMarks : undefined} />
             <div className="flex-shrink-0 flex gap-2 px-4 py-3 bg-[var(--card)] border-t border-[var(--border)]">
               <button onClick={() => setStep('items')} className="flex items-center gap-2 px-4 py-2.5 border border-[var(--border)] text-[var(--text-secondary)] rounded-xl text-sm hover:bg-[var(--subtle)]"><ChevronLeft className="w-4 h-4" />Voltar</button>
-              <button onClick={captureAndGoFuel} className="flex-1 py-2.5 bg-orange-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
+              <button onClick={captureAndGoFuel} className="flex-1 py-2.5 bg-gradient-to-r from-primary-500 to-primary-400 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
                 Próximo: Combustível <ChevronRight className="w-4 h-4" />
               </button>
             </div>
@@ -1006,7 +1019,7 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
               <div className="flex gap-2">
                 {(['today', 'adhoc'] as const).map(m => (
                   <button key={m} onClick={() => setPickMode(m)}
-                    className={`flex-1 py-2.5 rounded-xl text-sm font-medium border-2 transition-all ${pickMode === m ? 'border-orange-400 bg-orange-500/10 text-orange-400' : 'border-[var(--border)] text-[var(--text-secondary)]'}`}>
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-medium border-2 transition-all ${pickMode === m ? 'border-primary-400 bg-primary-500/10 text-primary-400' : 'border-[var(--border)] text-[var(--text-secondary)]'}`}>
                     {m === 'today' ? 'Agendadas Hoje' : 'Sem Agendamento'}
                   </button>
                 ))}
@@ -1014,7 +1027,7 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
 
               {pickMode === 'today' && (
                 loadingPick ? (
-                  <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-orange-500" /></div>
+                  <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-primary-500" /></div>
                 ) : todayRes.length === 0 ? (
                   <div className="text-center py-10">
                     <Ship className="w-10 h-10 mx-auto mb-2 text-[var(--text-muted)]" />
@@ -1023,12 +1036,12 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
                   </div>
                 ) : todayRes.map(r => (
                   <button key={r.id} onClick={() => handlePickReservation(r)}
-                    className="w-full text-left bg-[var(--subtle)] hover:bg-orange-500/10 border border-[var(--border)] hover:border-orange-300 rounded-2xl p-4 flex items-center gap-3 transition-all">
-                    <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center flex-shrink-0"><Ship className="w-5 h-5 text-orange-400" /></div>
+                    className="w-full text-left bg-[var(--subtle)] hover:bg-primary-500/10 border border-[var(--border)] hover:border-primary-300 rounded-2xl p-4 flex items-center gap-3 transition-all">
+                    <div className="w-10 h-10 rounded-xl bg-primary-500/10 flex items-center justify-center flex-shrink-0"><Ship className="w-5 h-5 text-primary-400" /></div>
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-[var(--text)] text-sm">{r.boat?.name || '—'}</p>
                       <p className="text-xs text-[var(--text-secondary)]">{r.boat?.model} · {r.user?.name || '—'}</p>
-                      <p className="text-xs text-orange-500 mt-0.5">{fmt(r.startDate)} → {fmt(r.endDate)}</p>
+                      <p className="text-xs text-primary-500 mt-0.5">{fmt(r.startDate)} → {fmt(r.endDate)}</p>
                     </div>
                     {r.checklist ? (
                       <span className={`text-xs px-2 py-1 rounded-full flex-shrink-0 ${r.checklist.status === 'APPROVED' ? 'bg-green-100 text-emerald-400' : 'bg-yellow-100 text-yellow-400'}`}>
@@ -1042,12 +1055,12 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
               {pickMode === 'adhoc' && (
                 <div className="space-y-3">
                   <select value={selectedBoatId} onChange={e => setSelectedBoatId(e.target.value)}
-                    className="w-full px-3 py-3 bg-[var(--subtle)] border border-[var(--border)] rounded-xl text-[var(--text)] focus:outline-none focus:border-orange-400 text-sm">
+                    className="w-full px-3 py-3 bg-[var(--subtle)] border border-[var(--border)] rounded-xl text-[var(--text)] focus:outline-none focus:border-primary-400 text-sm">
                     <option value="">— Selecione a embarcação —</option>
                     {allBoats.map(b => <option key={b.id} value={b.id}>{b.name}{b.model ? ` (${b.model})` : ''}</option>)}
                   </select>
                   <button onClick={handlePickBoatAdhoc} disabled={!selectedBoatId}
-                    className="w-full py-3.5 bg-orange-500 disabled:bg-[var(--subtle-hover)] disabled:text-[var(--text-muted)] text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
+                    className="w-full py-3.5 bg-gradient-to-r from-primary-500 to-primary-400 disabled:opacity-50 disabled:text-[var(--text-muted)] text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
                     <ClipboardCheck className="w-4 h-4" />Iniciar Checklist
                   </button>
                 </div>
@@ -1071,16 +1084,16 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
                 <div className="space-y-2">
                   {shareholders.map(s => (
                     <button key={s.id} onClick={() => setSelectedCotistaId(selectedCotistaId === s.user.id ? null : s.user.id)}
-                      className={`w-full text-left rounded-2xl p-4 border-2 flex items-center gap-3 transition-all ${selectedCotistaId === s.user.id ? 'border-orange-400 bg-orange-500/10' : 'border-[var(--border)] bg-[var(--subtle)] hover:border-orange-300'}`}>
-                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${selectedCotistaId === s.user.id ? 'bg-orange-500 text-white' : 'bg-[var(--card)] text-[var(--text-muted)]'}`}>
+                      className={`w-full text-left rounded-2xl p-4 border-2 flex items-center gap-3 transition-all ${selectedCotistaId === s.user.id ? 'border-primary-400 bg-primary-500/10' : 'border-[var(--border)] bg-[var(--subtle)] hover:border-primary-300'}`}>
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${selectedCotistaId === s.user.id ? 'bg-gradient-to-r from-primary-500 to-primary-400 text-white' : 'bg-[var(--card)] text-[var(--text-muted)]'}`}>
                         {s.user.name.charAt(0).toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-[var(--text)] text-sm truncate">{s.user.name}</p>
                         <p className="text-xs text-[var(--text-muted)] truncate">{s.user.email}{s.user.phone ? ` · ${s.user.phone}` : ''}</p>
-                        <p className="text-xs text-orange-500 mt-0.5">Cota #{s.shareNumber} · {s.sharePercentage}%</p>
+                        <p className="text-xs text-primary-500 mt-0.5">Cota #{s.shareNumber} · {s.sharePercentage}%</p>
                       </div>
-                      {selectedCotistaId === s.user.id && <CheckCircle2 className="w-5 h-5 text-orange-500 flex-shrink-0" />}
+                      {selectedCotistaId === s.user.id && <CheckCircle2 className="w-5 h-5 text-primary-500 flex-shrink-0" />}
                     </button>
                   ))}
                 </div>
@@ -1090,7 +1103,7 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
                   <ChevronLeft className="w-4 h-4" />Voltar
                 </button>
                 <button onClick={handleConfirmCotista}
-                  className="flex-1 py-2.5 bg-orange-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-orange-600 transition-colors">
+                  className="flex-1 py-2.5 bg-gradient-to-r from-primary-500 to-primary-400 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:from-primary-600 hover:to-primary-500 transition-colors">
                   {selectedCotistaId
                     ? <><CheckCircle2 className="w-4 h-4" />Confirmar Cotista</>
                     : <>Continuar sem cotista <ChevronRight className="w-4 h-4" /></>
@@ -1119,7 +1132,7 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
               <div className="flex items-center justify-between mb-1">
                 <p className="text-xs text-[var(--text-secondary)]">Marque todos os itens verificados</p>
                 <button onClick={() => setItemsData(p => p.map(x => ({ ...x, checked: true })))}
-                  className="text-xs font-bold text-orange-500 px-2 py-1 rounded-lg hover:bg-orange-500/10">
+                  className="text-xs font-bold text-primary-500 px-2 py-1 rounded-lg hover:bg-primary-500/10">
                   Selecionar tudo
                 </button>
               </div>
@@ -1133,11 +1146,11 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
                 </button>
               ))}
               {/* Life vest loan */}
-              <div className="pt-1 p-3 bg-orange-500/10 border border-orange-500/20 rounded-xl">
-                <p className="text-xs font-bold text-orange-400 mb-2">🦺 Coletes emprestados pela marina</p>
+              <div className="pt-1 p-3 bg-primary-500/10 border border-primary-500/20 rounded-xl">
+                <p className="text-xs font-bold text-primary-400 mb-2">🦺 Coletes emprestados pela marina</p>
                 <div className="flex items-center gap-3">
                   <button onClick={() => setLifeVestsLoaned(v => Math.max(0, v - 1))} className="w-9 h-9 rounded-full border border-[var(--border)] bg-[var(--card)] flex items-center justify-center text-[var(--text-secondary)] font-bold text-lg">−</button>
-                  <span className="text-3xl font-black text-orange-500 w-12 text-center">{lifeVestsLoaned}</span>
+                  <span className="text-3xl font-black text-primary-500 w-12 text-center">{lifeVestsLoaned}</span>
                   <button onClick={() => setLifeVestsLoaned(v => v + 1)} className="w-9 h-9 rounded-full border border-[var(--border)] bg-[var(--card)] flex items-center justify-center text-[var(--text-secondary)] font-bold text-lg">+</button>
                   <span className="text-xs text-[var(--text-secondary)] ml-1">{lifeVestsLoaned === 0 ? 'Nenhum' : `${lifeVestsLoaned} emprestado${lifeVestsLoaned > 1 ? 's' : ''}`}</span>
                 </div>
@@ -1146,10 +1159,10 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
                 <p className="text-xs text-[var(--text-secondary)] mb-1.5">Observações (opcional)</p>
                 <textarea value={observations} onChange={e => setObservations(e.target.value)} rows={2}
                   placeholder="Descreva qualquer problema..."
-                  className="w-full px-3 py-2.5 text-sm bg-[var(--subtle)] border border-[var(--border)] rounded-xl resize-none focus:outline-none focus:border-orange-400" />
+                  className="w-full px-3 py-2.5 text-sm bg-[var(--subtle)] border border-[var(--border)] rounded-xl resize-none focus:outline-none focus:border-primary-400" />
               </div>
               <button onClick={() => setStep('sketch')} disabled={!allChecked}
-                className="w-full py-3.5 bg-orange-500 disabled:bg-[var(--subtle-hover)] disabled:text-[var(--text-muted)] text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
+                className="w-full py-3.5 bg-gradient-to-r from-primary-500 to-primary-400 disabled:opacity-50 disabled:text-[var(--text-muted)] text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
                 Próximo: Croqui <ChevronRight className="w-4 h-4" />
               </button>
               {!allChecked && <p className="text-xs text-center text-[var(--text-muted)]">Marque todos os {itemsData.length} itens</p>}
@@ -1190,7 +1203,7 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
               <div className="flex gap-2">
                 <button onClick={() => setStep('sketch')} className="flex items-center gap-2 px-4 py-2.5 border border-[var(--border)] text-[var(--text-secondary)] rounded-xl text-sm hover:bg-[var(--subtle)]"><ChevronLeft className="w-4 h-4" />Voltar</button>
                 <button onClick={() => setStep('video')} disabled={!fuelPhotoFile}
-                  className="flex-1 py-2.5 bg-orange-500 disabled:bg-[var(--subtle-hover)] disabled:text-[var(--text-muted)] text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
+                  className="flex-1 py-2.5 bg-gradient-to-r from-primary-500 to-primary-400 disabled:opacity-50 disabled:text-[var(--text-muted)] text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
                   Próximo: Vídeo <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
@@ -1212,14 +1225,14 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
                 </label>
               ) : (
                 <div className="bg-[var(--subtle)] border border-[var(--border)] rounded-2xl p-4 flex items-center gap-3">
-                  <Video className="w-8 h-8 text-orange-500 flex-shrink-0" />
+                  <Video className="w-8 h-8 text-primary-500 flex-shrink-0" />
                   <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-[var(--text)] truncate">{videoFile.name}</p><p className="text-xs text-[var(--text-secondary)]">{(videoFile.size/1024/1024).toFixed(1)} MB</p></div>
                   <button onClick={() => setVideoFile(null)} className="p-1.5 hover:bg-[var(--subtle-hover)] rounded-lg"><X className="w-4 h-4 text-[var(--text-secondary)]" /></button>
                 </div>
               )}
               <div className="flex gap-2">
                 <button onClick={() => setStep('fuel')} className="flex items-center gap-2 px-4 py-2.5 border border-[var(--border)] text-[var(--text-secondary)] rounded-xl text-sm hover:bg-[var(--subtle)]"><ChevronLeft className="w-4 h-4" />Voltar</button>
-                <button onClick={() => setStep('confirm')} className="flex-1 py-2.5 bg-orange-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
+                <button onClick={() => setStep('confirm')} className="flex-1 py-2.5 bg-gradient-to-r from-primary-500 to-primary-400 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
                   {videoFile ? 'Próximo' : 'Pular'} <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
@@ -1233,17 +1246,17 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
                 {[['Embarcação', boatName], ['Itens', `${itemsData.filter(i=>i.checked).length}/${itemsData.length} ✓`], ['Croqui', 'Incluído'], ['⛽ Tanque', fuelPhotoFile ? fuelPhotoFile.name : 'Não incluído'], ['Vídeo', videoFile ? videoFile.name : 'Não incluído'], ...(lifeVestsLoaned > 0 ? [['🦺 Coletes emprestados', `${lifeVestsLoaned}`]] : [])].map(([k,v])=>(
                   <div key={k} className="flex justify-between px-4 py-3">
                     <span className="text-sm text-[var(--text-secondary)]">{k}</span>
-                    <span className={`text-sm font-semibold ${k==='Itens' ? 'text-emerald-400' : k?.toString().includes('Colete') ? 'text-orange-400' : 'text-[var(--text)]'}`}>{v}</span>
+                    <span className={`text-sm font-semibold ${k==='Itens' ? 'text-emerald-400' : k?.toString().includes('Colete') ? 'text-primary-400' : 'text-[var(--text)]'}`}>{v}</span>
                   </div>
                 ))}
                 {observations && <div className="px-4 py-3"><p className="text-xs text-[var(--text-secondary)] mb-1">Observações</p><p className="text-sm text-[var(--text)]">{observations}</p></div>}
               </div>
-              <div className="p-3 bg-orange-500/10 border border-orange-100 rounded-xl">
-                <p className="text-xs text-orange-700">⚠️ Ao enviar, a reserva (se houver) será marcada como <strong>Em Uso</strong>.</p>
+              <div className="p-3 bg-primary-500/10 border border-primary-100 rounded-xl">
+                <p className="text-xs text-primary-700">⚠️ Ao enviar, a reserva (se houver) será marcada como <strong>Em Uso</strong>.</p>
               </div>
               <div className="flex gap-2">
                 <button onClick={() => setStep('video')} className="flex items-center gap-2 px-4 py-2.5 border border-[var(--border)] text-[var(--text-secondary)] rounded-xl text-sm hover:bg-[var(--subtle)]"><ChevronLeft className="w-4 h-4" />Voltar</button>
-                <button onClick={handleSubmit} disabled={submitting} className="flex-1 py-3 bg-orange-500 disabled:opacity-60 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
+                <button onClick={handleSubmit} disabled={submitting} className="flex-1 py-3 bg-gradient-to-r from-primary-500 to-primary-400 disabled:opacity-60 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
                   {submitting ? <><Loader2 className="w-4 h-4 animate-spin" />Enviando...</> : <><CheckCircle className="w-4 h-4" />Enviar Checklist</>}
                 </button>
               </div>
@@ -1260,7 +1273,7 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
                 <h3 className="text-lg font-bold text-[var(--text)]">Checklist Enviado!</h3>
                 <p className="text-sm text-[var(--text-secondary)] mt-1">Checklist de <strong>{boatName}</strong> concluído.</p>
               </div>
-              <button onClick={onSuccess} className="px-8 py-3 bg-orange-500 text-white rounded-xl font-bold text-sm">Feito</button>
+              <button onClick={onSuccess} className="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-400 text-white rounded-xl font-bold text-sm">Feito</button>
             </div>
           )}
         </div>
@@ -1300,7 +1313,7 @@ function ChecklistComparisonView({ selected, onBack }: { selected: ClientCheckli
       {zoomImg && (
         <div className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-4" onClick={() => setZoomImg(null)}>
           <button onClick={() => setZoomImg(null)} className="absolute top-4 right-4 text-white/70 hover:text-white z-10"><X className="w-7 h-7" /></button>
-          <img src={zoomImg} alt="Zoom" className="max-w-full max-h-full object-contain rounded-xl" onClick={e => e.stopPropagation()} />
+          <img src={resolveMediaUrl(zoomImg)} alt="Zoom" className="max-w-full max-h-full object-contain rounded-xl" onClick={e => e.stopPropagation()} />
         </div>
       )}
 
@@ -1342,7 +1355,7 @@ function ChecklistComparisonView({ selected, onBack }: { selected: ClientCheckli
             </div>
             {(selected.lifeVestsLoaned ?? 0) > 0 && (
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-lg bg-primary-500/10 flex items-center justify-center">
                   <span className="text-sm">🦺</span>
                 </div>
                 <div>
@@ -1401,12 +1414,12 @@ function ChecklistComparisonView({ selected, onBack }: { selected: ClientCheckli
                   <div className="grid grid-cols-2 gap-px bg-[var(--border)]">
                     <div className="bg-[var(--card)] p-2">
                       {selected.fuelPhotoUrl
-                        ? <img src={selected.fuelPhotoUrl} alt="Tanque saída" className="w-full rounded-xl object-contain max-h-40 cursor-pointer active:scale-95 transition-transform" onClick={() => setZoomImg(selected.fuelPhotoUrl!)} />
+                        ? <img src={resolveMediaUrl(selected.fuelPhotoUrl)} alt="Tanque saída" className="w-full rounded-xl object-contain max-h-40 cursor-pointer active:scale-95 transition-transform" onClick={() => setZoomImg(selected.fuelPhotoUrl!)} />
                         : <p className="text-xs text-[var(--text-muted)] text-center py-8">Sem foto</p>}
                     </div>
                     <div className="bg-[var(--card)] p-2">
                       {selected.returnFuelPhotoUrl
-                        ? <img src={selected.returnFuelPhotoUrl} alt="Tanque retorno" className="w-full rounded-xl object-contain max-h-40 cursor-pointer active:scale-95 transition-transform" onClick={() => setZoomImg(selected.returnFuelPhotoUrl!)} />
+                        ? <img src={resolveMediaUrl(selected.returnFuelPhotoUrl)} alt="Tanque retorno" className="w-full rounded-xl object-contain max-h-40 cursor-pointer active:scale-95 transition-transform" onClick={() => setZoomImg(selected.returnFuelPhotoUrl!)} />
                         : <p className="text-xs text-[var(--text-muted)] text-center py-8">Sem foto</p>}
                     </div>
                   </div>
@@ -1473,7 +1486,7 @@ function ChecklistComparisonView({ selected, onBack }: { selected: ClientCheckli
                   <div className="p-3 pt-0">
                     {selected.hullSketchMarks
                       ? <JetSki3DMarkViewer marksJson={selected.hullSketchMarks} height={260} />
-                      : <img src={selected.hullSketchUrl} alt="Croqui" className="w-full object-contain max-h-60 rounded-xl cursor-pointer active:scale-95 transition-transform" onClick={() => setZoomImg(selected.hullSketchUrl!)} />}
+                      : <img src={resolveMediaUrl(selected.hullSketchUrl)} alt="Croqui" className="w-full object-contain max-h-60 rounded-xl cursor-pointer active:scale-95 transition-transform" onClick={() => setZoomImg(selected.hullSketchUrl!)} />}
                   </div>
                 )}
               </div>
@@ -1486,7 +1499,7 @@ function ChecklistComparisonView({ selected, onBack }: { selected: ClientCheckli
                 </button>
                 {openSection === 'fuel' && (
                   <div className="p-3 pt-0">
-                    <img src={selected.fuelPhotoUrl} alt="Tanque" className="w-full object-contain max-h-60 rounded-xl cursor-pointer active:scale-95 transition-transform" onClick={() => setZoomImg(selected.fuelPhotoUrl!)} />
+                    <img src={resolveMediaUrl(selected.fuelPhotoUrl)} alt="Tanque" className="w-full object-contain max-h-60 rounded-xl cursor-pointer active:scale-95 transition-transform" onClick={() => setZoomImg(selected.fuelPhotoUrl!)} />
                   </div>
                 )}
               </div>
@@ -1511,12 +1524,12 @@ function ChecklistComparisonView({ selected, onBack }: { selected: ClientCheckli
         {selected.videoUrl && (
           <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl overflow-hidden">
             <button onClick={() => toggle('video')} className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-[var(--text)] hover:bg-[var(--subtle)] transition">
-              <span className="flex items-center gap-2"><Video className="w-4 h-4 text-orange-500" /> Vídeo de Inspeção</span>
+              <span className="flex items-center gap-2"><Video className="w-4 h-4 text-primary-500" /> Vídeo de Inspeção</span>
               <ChevronRight className={`w-4 h-4 text-[var(--text-muted)] transition-transform ${openSection === 'video' ? 'rotate-90' : ''}`} />
             </button>
             {openSection === 'video' && (
               <div className="p-3 pt-0">
-                <video src={selected.videoUrl} controls className="w-full rounded-xl" style={{ maxHeight: 240 }} />
+                <video src={resolveMediaUrl(selected.videoUrl)} controls className="w-full rounded-xl" style={{ maxHeight: 240 }} />
               </div>
             )}
           </div>
@@ -1802,16 +1815,6 @@ function ClientView() {
 
   return (
     <div className="p-4 pb-24 space-y-4">
-      <div className="flex items-center gap-3 pt-2">
-        <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center">
-          <ClipboardCheck className="w-5 h-5 text-orange-500" />
-        </div>
-        <div>
-          <h1 className="text-lg font-bold text-[var(--text)]">Minhas Reservas</h1>
-          <p className="text-xs text-[var(--text-secondary)]">Checklists, consumo e histórico de uso</p>
-        </div>
-      </div>
-
       {/* Tabs */}
       <div className="flex gap-2 bg-[var(--subtle)] rounded-xl p-1">
         <button
@@ -1829,7 +1832,7 @@ function ClientView() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>
+        <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-primary-500" /></div>
       ) : items.length === 0 ? (
         <div className="text-center py-16">
           <Ship className="w-12 h-12 mx-auto mb-3 text-[var(--text-muted)]" />
@@ -1874,7 +1877,7 @@ function ClientView() {
                   {/* Info row */}
                   <div className="mt-3 flex items-center gap-4 text-[11px] text-[var(--text-secondary)]">
                     <span className="flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5 text-orange-400" />
+                      <Clock className="w-3.5 h-3.5 text-primary-400" />
                       {fmtShort(r.startDate)}
                     </span>
                     {totalFuel > 0 && (
@@ -1945,7 +1948,7 @@ function ClientView() {
                           {hasChecklist && (
                             <button
                               onClick={(e) => { e.stopPropagation(); setSelected(r.checklist!); }}
-                              className="text-[11px] bg-orange-500/10 text-orange-500 px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1"
+                              className="text-[11px] bg-primary-500/10 text-primary-500 px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1"
                             >
                               <Eye className="w-3.5 h-3.5" /> Detalhes
                             </button>

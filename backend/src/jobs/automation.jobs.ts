@@ -17,7 +17,7 @@ export class AutomationJobs {
   // ================================================================
   // COBRANÇA AUTOMÁTICA — todo dia 1 às 6h
   // ================================================================
-  @Cron('0 6 1 * *')
+  @Cron('0 6 1 * *', { timeZone: 'America/Sao_Paulo' })
   async autoGenerateMonthlyCharges() {
     this.logger.log('🔄 Gerando cobranças mensais automáticas...');
     try {
@@ -31,7 +31,7 @@ export class AutomationJobs {
   // ================================================================
   // PROCESSAR INADIMPLÊNCIA — todo dia às 7h
   // ================================================================
-  @Cron('0 7 * * *')
+  @Cron('0 7 * * *', { timeZone: 'America/Sao_Paulo' })
   async processDelinquencies() {
     this.logger.log('🔄 Processando inadimplências...');
     try {
@@ -45,7 +45,7 @@ export class AutomationJobs {
   // ================================================================
   // LEMBRETES DE PAGAMENTO — todo dia às 9h
   // ================================================================
-  @Cron('0 9 * * *')
+  @Cron('0 9 * * *', { timeZone: 'America/Sao_Paulo' })
   async sendPaymentReminders() {
     this.logger.log('🔔 Enviando lembretes de pagamento...');
 
@@ -64,13 +64,13 @@ export class AutomationJobs {
     });
 
     for (const charge of upcomingCharges) {
-      await this.notificationsService.send(
-        charge.userId,
-        'PAYMENT',
-        'Lembrete de pagamento',
-        `Sua cobrança "${charge.description}" de R$ ${charge.amount.toFixed(2)} vence em ${charge.dueDate.toLocaleDateString('pt-BR')}`,
-        { chargeId: charge.id },
-      );
+      await this.notificationsService.send({
+        userId: charge.userId,
+        type: 'GENERAL',
+        title: 'Lembrete de pagamento',
+        body: `Sua cobrança "${charge.description}" de R$ ${charge.amount.toFixed(2)} vence em ${charge.dueDate.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`,
+        data: { chargeId: charge.id },
+      });
     }
 
     this.logger.log(`✅ ${upcomingCharges.length} lembretes enviados`);
@@ -79,7 +79,7 @@ export class AutomationJobs {
   // ================================================================
   // LEMBRETES DE RESERVA — todo dia às 8h
   // ================================================================
-  @Cron('0 8 * * *')
+  @Cron('0 8 * * *', { timeZone: 'America/Sao_Paulo' })
   async sendReservationReminders() {
     this.logger.log('🔔 Enviando lembretes de reserva...');
 
@@ -101,13 +101,13 @@ export class AutomationJobs {
     });
 
     for (const reservation of tomorrowReservations) {
-      await this.notificationsService.send(
-        reservation.userId,
-        'RESERVATION',
-        'Reserva amanhã!',
-        `Sua reserva do ${reservation.boat.name} é amanhã. Não esqueça!`,
-        { reservationId: reservation.id },
-      );
+      await this.notificationsService.send({
+        userId: reservation.userId,
+        type: 'RESERVATION_REMINDER',
+        title: 'Reserva amanhã!',
+        body: `Sua reserva do ${reservation.boat.name} é amanhã. Não esqueça!`,
+        data: { reservationId: reservation.id },
+      });
     }
 
     this.logger.log(`✅ ${tomorrowReservations.length} lembretes de reserva enviados`);
@@ -116,7 +116,7 @@ export class AutomationJobs {
   // ================================================================
   // BLOQUEIO AUTOMÁTICO POR INADIMPLÊNCIA — todo dia às 7:30
   // ================================================================
-  @Cron('30 7 * * *')
+  @Cron('30 7 * * *', { timeZone: 'America/Sao_Paulo' })
   async autoBlockDelinquents() {
     this.logger.log('🚫 Verificando bloqueios por inadimplência...');
 
@@ -149,12 +149,12 @@ export class AutomationJobs {
         data: { status: 'CANCELLED', cancelReason: 'Bloqueio por inadimplência' },
       });
 
-      await this.notificationsService.send(
-        delinquency.userId,
-        'GENERAL',
-        'Conta bloqueada',
-        `Sua conta foi bloqueada por inadimplência de R$ ${delinquency.totalAmount.toFixed(2)}. Regularize para reativar.`,
-      );
+      await this.notificationsService.send({
+        userId: delinquency.userId,
+        type: 'GENERAL',
+        title: 'Conta bloqueada',
+        body: `Sua conta foi bloqueada por inadimplência de R$ ${delinquency.totalAmount.toFixed(2)}. Regularize para reativar.`,
+      });
 
       this.logger.warn(`🚫 Usuário ${delinquency.user.name} bloqueado por inadimplência`);
     }
@@ -165,7 +165,7 @@ export class AutomationJobs {
   // ================================================================
   // ALERTA DE MANUTENÇÃO — todo dia às 10h
   // ================================================================
-  @Cron('0 10 * * *')
+  @Cron('0 10 * * *', { timeZone: 'America/Sao_Paulo' })
   async maintenanceAlerts() {
     this.logger.log('🔧 Verificando alertas de manutenção...');
 
@@ -184,12 +184,12 @@ export class AutomationJobs {
       });
 
       for (const admin of admins) {
-        await this.notificationsService.send(
-          admin.id,
-          'MAINTENANCE',
-          '⚠️ Manutenções críticas pendentes',
-          `${criticalMaintenance.length} manutenções críticas: ${criticalMaintenance.map(m => `${m.boat.name} — ${m.title}`).join(', ')}`,
-        );
+        await this.notificationsService.send({
+          userId: admin.id,
+          type: 'GENERAL',
+          title: '⚠️ Manutenções críticas pendentes',
+          body: `${criticalMaintenance.length} manutenções críticas: ${criticalMaintenance.map(m => `${m.boat.name} — ${m.title}`).join(', ')}`,
+        });
       }
     }
 
@@ -199,7 +199,7 @@ export class AutomationJobs {
   // ================================================================
   // RELATÓRIO DIÁRIO — todo dia às 20h
   // ================================================================
-  @Cron('0 20 * * *')
+  @Cron('0 20 * * *', { timeZone: 'America/Sao_Paulo' })
   async dailyReport() {
     this.logger.log('📊 Gerando relatório diário...');
 
@@ -232,7 +232,12 @@ export class AutomationJobs {
 • Operações na fila: ${queueOperations}`;
 
     for (const admin of admins) {
-      await this.notificationsService.send(admin.id, 'GENERAL', 'Relatório Diário', reportBody);
+      await this.notificationsService.send({
+        userId: admin.id,
+        type: 'GENERAL',
+        title: 'Relatório Diário',
+        body: reportBody,
+      });
     }
 
     this.logger.log('✅ Relatório diário enviado');
