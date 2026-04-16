@@ -34,8 +34,7 @@ workflows:
           keychain initialize
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
-            --create \
-            --certificate-key=@env:CM_CERTIFICATE_PRIVATE_KEY
+            --create
           keychain add-certificates
 
           # Get installed profile UUID from filename
