@@ -37,15 +37,21 @@ workflows:
           keychain add-certificates
           xcode-project use-profiles --project pwa/ios/App/App.xcodeproj
 
-          # Extract profile info and persist for build step
+          # Extract profile info using temp file (PlistBuddy + stdin is unreliable)
           PROFILES_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
           PROFILE_PATH=$(ls "$PROFILES_DIR"/*.mobileprovision 2>/dev/null | head -1)
-          DECODED=$(security cms -D -i "$PROFILE_PATH")
-          PP_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< "$DECODED")
-          PP_NAME=$(/usr/libexec/PlistBuddy -c "Print Name" /dev/stdin <<< "$DECODED")
-          PP_TEAM=$(/usr/libexec/PlistBuddy -c "Print TeamIdentifier:0" /dev/stdin <<< "$DECODED")
-          echo "CM_PROFILE_UUID=$PP_UUID" >> $CM_ENV
-          echo "CM_PROFILE_NAME=$PP_NAME" >> $CM_ENV
+          echo "📄 Profile file: $PROFILE_PATH"
+
+          DECODED_PLIST=$(mktemp /tmp/profile.XXXXXX.plist)
+          security cms -D -i "$PROFILE_PATH" > "$DECODED_PLIST"
+
+          PP_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" "$DECODED_PLIST")
+          PP_NAME=$(/usr/libexec/PlistBuddy -c "Print Name" "$DECODED_PLIST")
+          PP_TEAM=$(/usr/libexec/PlistBuddy -c "Print TeamIdentifier:0" "$DECODED_PLIST")
+          rm -f "$DECODED_PLIST"
+
+          echo "CM_PROVISIONING_PROFILE_UUID=$PP_UUID" >> $CM_ENV
+          echo "CM_PROVISIONING_PROFILE_NAME=$PP_NAME" >> $CM_ENV
           echo "CM_TEAM_ID=$PP_TEAM" >> $CM_ENV
           echo "✅ Profile: $PP_NAME | UUID: $PP_UUID | Team: $PP_TEAM"
 
@@ -59,10 +65,11 @@ workflows:
           agvtool new-version -all $((LATEST_BUILD + 1))
       - name: Build IPA
         script: |
+          echo "🔑 Team: $CM_TEAM_ID | Profile: $CM_PROVISIONING_PROFILE_NAME"
           xcode-project build-ipa \
             --workspace "$XCODE_WORKSPACE" \
             --scheme "$XCODE_SCHEME" \
-            --archive-flags="CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=$CM_TEAM_ID PROVISIONING_PROFILE_SPECIFIER=$CM_PROFILE_NAME CODE_SIGN_IDENTITY=Apple Distribution"
+            --archive-flags="CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=$CM_TEAM_ID PROVISIONING_PROFILE_SPECIFIER=$CM_PROVISIONING_PROFILE_NAME CODE_SIGN_IDENTITY=Apple\ Distribution"
     artifacts:
       - pwa/ios/App/build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
