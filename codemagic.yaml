@@ -6,12 +6,10 @@ workflows:
     integrations:
       app_store_connect: "Codemagic"
     environment:
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.marinaprizeclub.app
       vars:
         XCODE_WORKSPACE: "pwa/ios/App/App.xcworkspace"
         XCODE_SCHEME: "App"
+        BUNDLE_ID: "com.marinaprizeclub.app"
       node: 20
       xcode: latest
       cocoapods: default
@@ -30,15 +28,10 @@ workflows:
         script: |
           cd pwa/ios/App
           pod install
-      - name: Fetch signing files
-        script: |
-          app-store-connect fetch-signing-files com.marinaprizeclub.app \
-            --type IOS_APP_STORE \
-            --create
       - name: Set up code signing
         script: |
           keychain initialize
-          app-store-connect fetch-signing-files com.marinaprizeclub.app \
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
             --create
           keychain add-certificates
@@ -46,7 +39,7 @@ workflows:
       - name: Increment build number
         script: |
           cd pwa/ios/App
-          LATEST_BUILD=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_ID" || echo 0)
+          LATEST_BUILD=$(app-store-connect get-latest-testflight-build-number "$BUNDLE_ID" 2>/dev/null || echo 0)
           agvtool new-version -all $((LATEST_BUILD + 1))
       - name: Build IPA
         script: |
