@@ -10,7 +10,7 @@ workflows:
         XCODE_WORKSPACE: "pwa/ios/App/App.xcworkspace"
         XCODE_SCHEME: "App"
         BUNDLE_ID: "com.marinaprizeclub.app"
-      node: 20
+      node: 22
       xcode: latest
       cocoapods: default
     scripts:
