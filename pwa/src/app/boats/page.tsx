@@ -261,7 +261,15 @@ export default function BoatsPage() {
                     style={{ minWidth: '100%' }}
                   >
                     {photo ? (
-                      <img src={resolveMediaUrl(photo)} alt="" className="absolute inset-0 w-full h-full object-cover scale-105" />
+                      <Image
+                        src={resolveMediaUrl(photo)}
+                        alt=""
+                        fill
+                        className="object-cover scale-105"
+                        sizes="100vw"
+                        priority={i === 0}
+                        loading={i === 0 ? 'eager' : 'lazy'}
+                      />
                     ) : (
                       <div className="absolute inset-0 bg-gradient-to-br from-[#0A2540] via-[#0F3460] to-[#1A3A5C]" />
                     )}
@@ -426,7 +434,7 @@ export default function BoatsPage() {
                       {/* Photo */}
                       {boat.imageUrl ? (
                         <div className="relative w-full h-48">
-                          <Image src={boat.imageUrl} alt={boat.name} fill className="object-cover" unoptimized />
+                          <Image src={boat.imageUrl} alt={boat.name} fill className="object-cover" sizes="(max-width: 768px) 100vw, 50vw" priority={idx === 0} loading={idx === 0 ? 'eager' : 'lazy'} />
                           <div className="absolute inset-0" style={{ background: 'linear-gradient(0deg, rgba(10,20,35,0.9) 0%, rgba(10,20,35,0.2) 40%, transparent 70%)' }} />
                           <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(10,20,35,0.3) 0%, transparent 30%)' }} />
                           <div className="absolute top-3.5 right-3.5">

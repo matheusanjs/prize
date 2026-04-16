@@ -1,6 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  images: {
+    remotePatterns: [
+      { protocol: 'https', hostname: 'api.marinaprizeclub.com' },
+      { protocol: 'https', hostname: '*.amazonaws.com' },
+      { protocol: 'https', hostname: '*.cloudfront.net' },
+    ],
+    deviceSizes: [640, 750, 828, 1080],
+    imageSizes: [128, 256, 384],
+  },
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.optimization.splitChunks = {
