@@ -35,30 +35,21 @@ workflows:
             --type IOS_APP_STORE \
             --create
           keychain add-certificates
-          xcode-project use-profiles --project pwa/ios/App/App.xcodeproj
 
-          # Extract profile info using temp file
-          PROFILES_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
-          PROFILE_PATH=$(ls "$PROFILES_DIR"/*.mobileprovision 2>/dev/null | head -1)
-          echo "📄 Profile file: $PROFILE_PATH"
-
-          DECODED_PLIST=/tmp/decoded_profile.plist
-          security cms -D -i "$PROFILE_PATH" > "$DECODED_PLIST"
-          cat "$DECODED_PLIST" | head -5
-
-          PP_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" "$DECODED_PLIST")
-          PP_NAME=$(/usr/libexec/PlistBuddy -c "Print Name" "$DECODED_PLIST")
-          PP_TEAM=$(/usr/libexec/PlistBuddy -c "Print TeamIdentifier:0" "$DECODED_PLIST")
-          rm -f "$DECODED_PLIST"
-
-          echo "CM_PROVISIONING_PROFILE_UUID=$PP_UUID" >> $CM_ENV
-          echo "CM_PROVISIONING_PROFILE_NAME=$PP_NAME" >> $CM_ENV
-          echo "CM_TEAM_ID=$PP_TEAM" >> $CM_ENV
-          echo "✅ Profile: $PP_NAME | UUID: $PP_UUID | Team: $PP_TEAM"
-
-          # Force Manual signing in pbxproj (cap sync may have reset it)
+          # Force Manual signing before use-profiles (cap sync resets to Automatic)
           sed -i '' 's/ProvisioningStyle = Automatic/ProvisioningStyle = Manual/g' pwa/ios/App/App.xcodeproj/project.pbxproj
           sed -i '' 's/CODE_SIGN_STYLE = Automatic/CODE_SIGN_STYLE = Manual/g' pwa/ios/App/App.xcodeproj/project.pbxproj
+
+          # Debug: list installed profiles
+          echo "📄 Installed profiles:"
+          ls -la "$HOME/Library/MobileDevice/Provisioning Profiles/" 2>/dev/null || echo "No profiles dir"
+
+          # Apply profiles to Xcode project
+          xcode-project use-profiles --project pwa/ios/App/App.xcodeproj
+
+          # Debug: verify pbxproj was updated
+          echo "🔍 Signing settings after use-profiles:"
+          grep -A1 "CODE_SIGN_STYLE\|PROVISIONING_PROFILE\|DEVELOPMENT_TEAM" pwa/ios/App/App.xcodeproj/project.pbxproj || true
       - name: Increment build number
         script: |
           cd pwa/ios/App
@@ -66,11 +57,9 @@ workflows:
           agvtool new-version -all $((LATEST_BUILD + 1))
       - name: Build IPA
         script: |
-          echo "🔑 Team: $CM_TEAM_ID | Profile: $CM_PROVISIONING_PROFILE_NAME"
           xcode-project build-ipa \
             --workspace "$XCODE_WORKSPACE" \
-            --scheme "$XCODE_SCHEME" \
-            --archive-flags="CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=$CM_TEAM_ID PROVISIONING_PROFILE_SPECIFIER=$CM_PROVISIONING_PROFILE_NAME CODE_SIGN_IDENTITY=Apple\ Distribution"
+            --scheme "$XCODE_SCHEME"
     artifacts:
       - pwa/ios/App/build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
