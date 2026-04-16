@@ -77,30 +77,17 @@ workflows:
           sed -i '' 's/ProvisioningStyle = Automatic/ProvisioningStyle = Manual/g' "$PBXPROJ"
           sed -i '' 's/CODE_SIGN_STYLE = Automatic/CODE_SIGN_STYLE = Manual/g' "$PBXPROJ"
 
-          # Inject DEVELOPMENT_TEAM and PROVISIONING_PROFILE into each target build config
-          export INJECT_TEAM="$TEAM_ID"
-          export INJECT_UUID="$PROFILE_UUID"
-          python3 << 'PYEOF'
-import os
-path = "pwa/ios/App/App.xcodeproj/project.pbxproj"
-team = os.environ["INJECT_TEAM"]
-uuid = os.environ["INJECT_UUID"]
-with open(path, 'r') as f:
-    content = f.read()
-if 'DEVELOPMENT_TEAM' not in content:
-    content = content.replace(
-        'CODE_SIGN_STYLE = Manual;',
-        f'CODE_SIGN_STYLE = Manual;\n\t\t\t\tDEVELOPMENT_TEAM = {team};'
-    )
-if 'PROVISIONING_PROFILE_SPECIFIER' not in content:
-    content = content.replace(
-        f'DEVELOPMENT_TEAM = {team};',
-        f'DEVELOPMENT_TEAM = {team};\n\t\t\t\tPROVISIONING_PROFILE_SPECIFIER = "{uuid}";'
-    )
-with open(path, 'w') as f:
-    f.write(content)
-print(f"Injected DEVELOPMENT_TEAM={team} PROVISIONING_PROFILE_SPECIFIER={uuid}")
-PYEOF
+          # Inject DEVELOPMENT_TEAM after CODE_SIGN_STYLE = Manual (if not already present)
+          if ! grep -q 'DEVELOPMENT_TEAM' "$PBXPROJ"; then
+            sed -i '' "s/CODE_SIGN_STYLE = Manual;/CODE_SIGN_STYLE = Manual;\\
+          DEVELOPMENT_TEAM = $TEAM_ID;/g" "$PBXPROJ"
+          fi
+
+          # Inject PROVISIONING_PROFILE_SPECIFIER (if not already present)
+          if ! grep -q 'PROVISIONING_PROFILE_SPECIFIER' "$PBXPROJ"; then
+            sed -i '' "s/DEVELOPMENT_TEAM = $TEAM_ID;/DEVELOPMENT_TEAM = $TEAM_ID;\\
+          PROVISIONING_PROFILE_SPECIFIER = \"$PROFILE_UUID\";/g" "$PBXPROJ"
+          fi
 
           echo "🔍 Final signing settings:"
           grep "CODE_SIGN_STYLE\|DEVELOPMENT_TEAM\|PROVISIONING_PROFILE" "$PBXPROJ" || true
