@@ -17,7 +17,7 @@ const WS_URL = API_ORIGIN;
 
 function resolveMediaUrl(url: string | undefined | null): string {
   if (!url) return '';
-  if (url.startsWith('/uploads/')) return `${API_ORIGIN}${url}`;
+  if (url.startsWith('/')) return `${API_ORIGIN}${url}`;
   return url;
 }
 

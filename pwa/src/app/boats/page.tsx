@@ -218,7 +218,7 @@ export default function BoatsPage() {
   const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || 'https://api.marinaprizeclub.com/api/v1').replace(/\/api\/v1$/, '');
   function resolveMediaUrl(url: string | undefined | null): string {
     if (!url) return '';
-    if (url.startsWith('/uploads/')) return `${API_ORIGIN}${url}`;
+    if (url.startsWith('/')) return `${API_ORIGIN}${url}`;
     return url;
   }
 

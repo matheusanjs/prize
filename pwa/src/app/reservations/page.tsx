@@ -49,6 +49,13 @@ interface WeatherHistoryItem {
   precipitation?: number;
 }
 
+const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || 'https://api.marinaprizeclub.com/api/v1').replace(/\/api\/v1$/, '');
+function resolveMediaUrl(url: string | undefined | null): string {
+  if (!url) return '';
+  if (url.startsWith('/')) return `${API_ORIGIN}${url}`;
+  return url;
+}
+
 const HOURS = ['10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00'];
 
 function getBoatLocationLabel(boatName: string) {
@@ -737,7 +744,7 @@ export default function ReservationsPage() {
                           isMine ? 'bg-gradient-to-br from-primary-500/15 to-primary-400/5' : 'bg-[var(--subtle)]'
                         }`}>
                           {r.user?.avatar ? (
-                            <img src={r.user.avatar} alt={r.user.name || ''} className="w-full h-full object-cover" />
+                            <img src={resolveMediaUrl(r.user.avatar)} alt={r.user.name || ''} className="w-full h-full object-cover" />
                           ) : (
                             <User size={16} className={isMine ? 'text-primary-500' : 'text-[var(--text-muted)]'} />
                           )}
