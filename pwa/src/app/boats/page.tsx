@@ -5,9 +5,8 @@ import { Ship, AlertTriangle, FileText, ArrowLeftRight, Check, X as XIcon, Calen
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth';
-import { getShares, getMyCharges, getPendingSwaps, respondToSwap, getMyReservations, confirmArrival, cancelReservation, getWeatherHistory } from '@/services/api';
+import { getShares, getMyCharges, getPendingSwaps, respondToSwap, getMyReservations, confirmArrival, cancelReservation } from '@/services/api';
 import { format, parseISO, isToday } from 'date-fns';
-import WeatherWidget from '@/components/WeatherWidget';
 import api from '@/services/api';
 
 interface Boat {
@@ -73,8 +72,6 @@ export default function BoatsPage() {
   const [arrivalTime, setArrivalTime] = useState('10:00');
   const [confirmSaving, setConfirmSaving] = useState(false);
   const [confirmError, setConfirmError] = useState('');
-  const [aiSummary, setAiSummary] = useState<string | null>(null);
-  const [todayHistory, setTodayHistory] = useState<any[]>([]);
   const [highlightedTrips, setHighlightedTrips] = useState<any[]>([]);
   const [activeTripIdx, setActiveTripIdx] = useState(0);
   const [activeCotaIdx, setActiveCotaIdx] = useState(0);
@@ -89,12 +86,11 @@ export default function BoatsPage() {
     let cancelled = false;
     (async () => {
       // Run all independent API calls in parallel
-      const [sharesRes, chargesRes, swapsRes, myResRes, weatherRes] = await Promise.allSettled([
+      const [sharesRes, chargesRes, swapsRes, myResRes] = await Promise.allSettled([
         getShares({ userId }),
         getMyCharges(),
         getPendingSwaps(),
         getMyReservations(),
-        getWeatherHistory(24),
       ]);
 
       // Process shares
@@ -129,17 +125,6 @@ export default function BoatsPage() {
           isToday(parseISO(r.startDate))
         );
         setTodayReservations(todayRes);
-      }
-
-      // Process weather history
-      if (weatherRes.status === 'fulfilled') {
-        const histData = weatherRes.value.data;
-        const histList = Array.isArray(histData) ? histData : histData.data || [];
-        const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
-        const todayHist = histList.filter((h: any) =>
-          new Date(h.collectedAt).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }) === todayStr
-        );
-        setTodayHistory(todayHist);
       }
 
       // Fetch highlighted trips
@@ -572,10 +557,7 @@ export default function BoatsPage() {
           </div>
         )}
 
-        {/* Floating Weather Widget */}
-        <div className="fixed bottom-[64px] left-0 right-0 z-40 px-4 safe-area-bottom">
-          <WeatherWidget variant="client" todayReservations={todayReservations} onConfirmArrival={openConfirmArrival} onDeclineReservation={handleDeclineReservation} aiSummary={aiSummary} />
-        </div>
+        {/* Floating Weather Widget removed */}
       </div>
     </>
   );
