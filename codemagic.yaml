@@ -35,7 +35,7 @@ workflows:
             --type IOS_APP_STORE \
             --create
           keychain add-certificates
-          xcode-project use-profiles
+          xcode-project use-profiles --project pwa/ios/App/App.xcodeproj
       - name: Increment build number
         script: |
           cd pwa/ios/App
@@ -45,7 +45,8 @@ workflows:
         script: |
           xcode-project build-ipa \
             --workspace "$XCODE_WORKSPACE" \
-            --scheme "$XCODE_SCHEME"
+            --scheme "$XCODE_SCHEME" \
+            --archive-flags="CODE_SIGN_STYLE=Manual"
     artifacts:
       - pwa/ios/App/build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
