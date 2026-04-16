@@ -56,6 +56,13 @@ export default function Footer() {
               ))}
             </div>
 
+            {/* Legal links */}
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-foreground/25 mb-5">
+              <Link href="/privacidade" className="hover:text-primary-400 transition-colors">Privacidade</Link>
+              <Link href="/termos" className="hover:text-primary-400 transition-colors">Termos de Uso</Link>
+              <Link href="/exclusao-de-dados" className="hover:text-primary-400 transition-colors">Exclusão de Dados</Link>
+            </div>
+
             {/* Copyright */}
             <div className="border-t border-foreground/[0.06] pt-4">
               <p className="text-[10px] text-foreground/20 text-center">
@@ -104,6 +111,18 @@ export default function Footer() {
               </Link>
               <Link href="/cadastro" className="block text-sm text-foreground/40 hover:text-primary-400 transition-colors duration-200">
                 Criar Conta
+              </Link>
+            </div>
+            <h4 className="font-bold text-xs uppercase tracking-wider text-foreground/50 mb-4 mt-6">Legal</h4>
+            <div className="space-y-2.5">
+              <Link href="/privacidade" className="block text-sm text-foreground/40 hover:text-primary-400 transition-colors duration-200">
+                Privacidade
+              </Link>
+              <Link href="/termos" className="block text-sm text-foreground/40 hover:text-primary-400 transition-colors duration-200">
+                Termos de Uso
+              </Link>
+              <Link href="/exclusao-de-dados" className="block text-sm text-foreground/40 hover:text-primary-400 transition-colors duration-200">
+                Exclusão de Dados
               </Link>
             </div>
           </div>

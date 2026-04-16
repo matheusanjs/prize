@@ -1,0 +1,51 @@
+workflows:
+  ios-release:
+    name: Prize Clube iOS Release
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.marinaprizeclub.app
+      vars:
+        XCODE_WORKSPACE: "pwa/ios/App/App.xcworkspace"
+        XCODE_SCHEME: "App"
+      node: 20
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Install Node dependencies
+        script: |
+          cd pwa
+          npm ci --legacy-peer-deps
+      - name: Prepare Capacitor web assets
+        script: |
+          cd pwa
+          mkdir -p out
+          echo '<html><head><meta http-equiv="refresh" content="0;url=https://app.marinaprizeclub.com/login"></head></html>' > out/index.html
+          npx cap sync ios
+      - name: Install CocoaPods
+        script: |
+          cd pwa/ios/App
+          pod install
+      - name: Set up code signing
+        script: |
+          xcode-project use-profiles
+      - name: Increment build number
+        script: |
+          cd pwa/ios/App
+          LATEST_BUILD=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_ID" || echo 0)
+          agvtool new-version -all $((LATEST_BUILD + 1))
+      - name: Build IPA
+        script: |
+          xcode-project build-ipa \
+            --workspace "$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - pwa/ios/App/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        submit_to_app_store: false
