@@ -201,4 +201,6 @@ export const updateProfile = (data: { name?: string; phone?: string; avatar?: st
 export const changePassword = (data: { currentPassword: string; newPassword: string }) =>
   api.post('/auth/change-password', data);
 
+export const deleteAccount = () => api.delete('/users/profile');
+
 export default api;

@@ -46,6 +46,12 @@ export class UsersController {
     return this.usersService.updateProfile(userId, { name, phone, avatar });
   }
 
+  @Delete('profile')
+  @ApiOperation({ summary: 'Excluir própria conta (soft delete)' })
+  deleteMyAccount(@CurrentUser('id') userId: string) {
+    return this.usersService.softDelete(userId);
+  }
+
   @Get(':id')
   @Roles('ADMIN')
   @ApiOperation({ summary: 'Buscar usuário por ID (Admin)' })

@@ -1,16 +1,16 @@
 'use client';
 
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { Camera, Lock, Save, User, Check, AlertCircle, FileText, Clock, TrendingUp, ChevronDown } from 'lucide-react';
+import { Camera, Lock, Save, User, Check, AlertCircle, FileText, Clock, TrendingUp, ChevronDown, Trash2 } from 'lucide-react';
 import Image from 'next/image';
 import { useAuth } from '@/contexts/auth';
-import { updateProfile, changePassword, getMyCharges } from '@/services/api';
+import { updateProfile, changePassword, getMyCharges, deleteAccount } from '@/services/api';
 import api from '@/services/api';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 export default function ProfilePage() {
-  const { user, refreshUser } = useAuth();
+  const { user, refreshUser, logout } = useAuth();
 
   // Collapsible sections state
   const [openSection, setOpenSection] = useState<'profile' | 'password' | 'invoices' | null>('invoices');
@@ -40,6 +40,12 @@ export default function ProfilePage() {
     nextDueDate: string | null;
   } | null>(null);
   const [loadingCharges, setLoadingCharges] = useState(true);
+
+  // Delete account state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteMsg, setDeleteMsg] = useState<{ type: 'error'; text: string } | null>(null);
 
   const loadProfileData = useCallback(async () => {
     try {
@@ -150,6 +156,22 @@ export default function ProfilePage() {
       setPasswordMsg({ type: 'error', text: Array.isArray(msg) ? msg.join(', ') : msg });
     } finally {
       setSavingPassword(false);
+    }
+  };
+
+  // Delete account handler
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText !== 'EXCLUIR') return;
+    setDeletingAccount(true);
+    setDeleteMsg(null);
+    try {
+      await deleteAccount();
+      logout();
+    } catch (err: unknown) {
+      const msg = (err as any)?.response?.data?.message || 'Erro ao excluir conta';
+      setDeleteMsg({ type: 'error', text: Array.isArray(msg) ? msg.join(', ') : msg });
+    } finally {
+      setDeletingAccount(false);
     }
   };
 
@@ -420,6 +442,79 @@ export default function ProfilePage() {
         )}
         </div>
         )}
+      </div>
+
+      {/* Delete Account */}
+      <div className="bg-[var(--card)] rounded-3xl border border-red-500/20 overflow-hidden shadow-[0_2px_20px_var(--calendar-shadow)]">
+        <div className="px-5 py-4">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-8 h-8 rounded-xl bg-red-500/10 flex items-center justify-center">
+              <Trash2 size={14} className="text-red-500" />
+            </div>
+            <span className="text-sm font-semibold text-red-500">Excluir Conta</span>
+          </div>
+          <p className="text-xs text-[var(--text-muted)] mb-3">
+            Esta ação é irreversível. Todos os seus dados serão removidos permanentemente.
+          </p>
+
+          {!showDeleteConfirm ? (
+            <button
+              type="button"
+              onClick={() => setShowDeleteConfirm(true)}
+              className="w-full border border-red-500/30 text-red-500 rounded-xl px-4 py-3 text-sm font-medium hover:bg-red-500/5 active:scale-[0.98] transition-transform"
+            >
+              Quero excluir minha conta
+            </button>
+          ) : (
+            <div className="space-y-3">
+              <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-3">
+                <p className="text-xs text-red-500 font-medium mb-2">
+                  Digite <span className="font-bold">EXCLUIR</span> para confirmar:
+                </p>
+                <input
+                  type="text"
+                  value={deleteConfirmText}
+                  onChange={e => setDeleteConfirmText(e.target.value)}
+                  className="w-full bg-[var(--input-bg)] border border-red-500/30 rounded-xl px-4 py-3 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-red-500/20 transition"
+                  placeholder="EXCLUIR"
+                  autoComplete="off"
+                />
+              </div>
+
+              {deleteMsg && (
+                <div className="flex items-center gap-2 text-xs text-red-500">
+                  <AlertCircle size={14} />
+                  {deleteMsg.text}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText(''); setDeleteMsg(null); }}
+                  className="flex-1 border border-[var(--border)] text-[var(--text-muted)] rounded-xl px-4 py-3 text-sm font-medium active:scale-[0.98] transition-transform"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteAccount}
+                  disabled={deleteConfirmText !== 'EXCLUIR' || deletingAccount}
+                  className="flex-1 bg-red-500 text-white rounded-xl px-4 py-3 text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+                >
+                  {deletingAccount ? (
+                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                  ) : (
+                    <>
+                      <Trash2 size={14} />
+                      Confirmar
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
