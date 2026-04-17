@@ -4,6 +4,11 @@ const config: CapacitorConfig = {
   appId: 'com.marinaprizeclub.app',
   appName: 'Prize Clube',
   webDir: 'out',
+  server: {
+    url: 'https://app.marinaprizeclub.com',
+    cleartext: false,
+    androidScheme: 'https',
+  },
   ios: {
     contentInset: 'automatic',
     scheme: 'Prize Clube',
