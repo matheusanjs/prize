@@ -821,7 +821,7 @@ function TripChat({ trip, userId, onBack }: { trip: Trip; userId: string; onBack
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col bg-[var(--bg)]" style={{ height: keyboardOffset > 0 ? `calc(100% - ${keyboardOffset}px)` : '100%' }}>
+    <div className="fixed inset-0 z-[10000] flex flex-col bg-[var(--bg)]" style={{ height: keyboardOffset > 0 ? `calc(100% - ${keyboardOffset}px)` : '100%' }}>
       <div className="px-4 py-3 flex items-center gap-3 header-safe-top shrink-0" style={{ background: 'var(--header-bg)', borderBottom: '1px solid var(--border)' }}>
         <button onClick={onBack} className="p-1"><ChevronLeft size={22} className="text-[var(--text)]" /></button>
         <div className="flex-1 min-w-0">
