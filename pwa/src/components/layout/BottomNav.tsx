@@ -13,14 +13,13 @@ const clientNav = [
   { label: 'Reservas', href: '/reservations', icon: Calendar },
   { label: 'Social', href: '/social', icon: Compass },
   { label: 'Faturas', href: '/invoices', icon: FileText },
-  { label: 'Perfil', href: '/profile', icon: User },
+  { label: 'Checklist', href: '/operations', icon: ClipboardCheck },
 ];
 
 const operatorNav = [
   { label: 'Combustível', href: '/fuel', icon: Fuel },
-  { label: 'Operações', href: '/operations', icon: Settings },
+  { label: 'Checklist', href: '/operations', icon: ClipboardCheck },
   { label: 'Manutenção', href: '/maintenance', icon: Wrench },
-  { label: 'Perfil', href: '/profile', icon: User },
 ];
 
 export function BottomNav() {
@@ -71,9 +70,13 @@ export function BottomNav() {
           <button onClick={toggleTheme} className="p-1.5 rounded-lg bg-[var(--subtle)] text-[var(--text-secondary)] hover:bg-[var(--subtle-hover)] transition">
             {isDark ? <Sun size={14} /> : <Moon size={14} />}
           </button>
-          <button onClick={logout} className="p-1.5 hover:bg-[var(--subtle-hover)] rounded-lg transition">
-            <LogOut size={14} className="text-[var(--text-muted)]" />
-          </button>
+          <Link href="/profile" className="block w-8 h-8 rounded-full overflow-hidden bg-[var(--subtle)] flex items-center justify-center">
+            {user.avatar ? (
+              <Image src={user.avatar} alt="" width={32} height={32} className="w-full h-full object-cover" unoptimized />
+            ) : (
+              <User size={16} className="text-[var(--text-muted)]" />
+            )}
+          </Link>
         </div>
       </header>
 

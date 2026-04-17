@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { Camera, Lock, Save, User, Check, AlertCircle, FileText, Clock, TrendingUp, ChevronDown, Trash2 } from 'lucide-react';
+import { Camera, Lock, Save, User, Check, AlertCircle, FileText, Clock, TrendingUp, ChevronDown, Trash2, LogOut } from 'lucide-react';
 import Image from 'next/image';
 import { useAuth } from '@/contexts/auth';
 import { updateProfile, changePassword, getMyCharges, deleteAccount } from '@/services/api';
@@ -444,6 +444,18 @@ export default function ProfilePage() {
         </div>
         )}
       </div>
+
+      {/* Logout */}
+      <button
+        type="button"
+        onClick={logout}
+        className="w-full bg-[var(--card)] rounded-3xl border border-[var(--border)] overflow-hidden shadow-[0_2px_20px_var(--calendar-shadow)] flex items-center gap-3 px-5 py-4 active:bg-[var(--subtle)] transition"
+      >
+        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary-500/15 to-primary-400/5 border border-primary-500/10 flex items-center justify-center">
+          <LogOut size={14} className="text-primary-500" />
+        </div>
+        <span className="text-sm font-semibold text-[var(--text)]">Sair da Conta</span>
+      </button>
 
       {/* Delete Account */}
       <div className="bg-[var(--card)] rounded-3xl border border-red-500/20 overflow-hidden shadow-[0_2px_20px_var(--calendar-shadow)]">
