@@ -71,6 +71,10 @@ export class AutomationJobs {
         body: `Sua cobrança "${charge.description}" de R$ ${charge.amount.toFixed(2)} vence em ${charge.dueDate.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`,
         data: { chargeId: charge.id },
       });
+
+      // Send email reminder
+      this.financeService.sendReminderEmail(charge.id).catch((err) =>
+        this.logger.error(`Email reminder failed for charge ${charge.id}: ${err.message}`));
     }
 
     this.logger.log(`✅ ${upcomingCharges.length} lembretes enviados`);
@@ -241,5 +245,45 @@ export class AutomationJobs {
     }
 
     this.logger.log('✅ Relatório diário enviado');
+  }
+
+  // ================================================================
+  // E-MAIL DE FATURAS VENCIDAS — todo dia às 10h
+  // ================================================================
+  @Cron('0 10 * * *', { timeZone: 'America/Sao_Paulo' })
+  async sendOverdueEmails() {
+    this.logger.log('📧 Enviando e-mails de faturas vencidas...');
+
+    const overdueCharges = await this.prisma.charge.findMany({
+      where: {
+        status: 'OVERDUE',
+        dueDate: { lt: new Date() },
+      },
+      select: { id: true },
+    });
+
+    for (const charge of overdueCharges) {
+      this.financeService.sendOverdueEmail(charge.id).catch((err) =>
+        this.logger.error(`Overdue email failed for charge ${charge.id}: ${err.message}`));
+    }
+
+    this.logger.log(`✅ ${overdueCharges.length} e-mails de faturas vencidas enviados`);
+  }
+
+  // ================================================================
+  // LIMPEZA DE TOKENS EXPIRADOS — todo dia às 3h
+  // ================================================================
+  @Cron('0 3 * * *', { timeZone: 'America/Sao_Paulo' })
+  async cleanupExpiredTokens() {
+    this.logger.log('🧹 Limpando tokens expirados...');
+    const result = await this.prisma.passwordResetToken.deleteMany({
+      where: {
+        OR: [
+          { expiresAt: { lt: new Date() } },
+          { used: true },
+        ],
+      },
+    });
+    this.logger.log(`✅ ${result.count} tokens de reset removidos`);
   }
 }

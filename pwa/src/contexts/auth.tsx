@@ -103,7 +103,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Redirect to login only when auth has settled and user is null
   useEffect(() => {
-    if (!isLoading && !user && pathname !== '/login' && !pathname.startsWith('/social/share/')) {
+    const publicPages = ['/login', '/forgot-password', '/reset-password', '/social/share/'];
+    const isPublicPage = publicPages.some(p => pathname === p || pathname.startsWith(p));
+    if (!isLoading && !user && !isPublicPage) {
       window.location.href = '/login';
     }
   }, [isLoading, user, pathname]);

@@ -83,7 +83,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!isLoading) {
-      if (!user && pathname !== '/login') {
+      const publicPages = ['/login', '/forgot-password', '/reset-password'];
+      const isPublicPage = publicPages.some(p => pathname.startsWith(p));
+      if (!user && !isPublicPage) {
         window.location.href = 'https://marinaprizeclub.com/login';
       } else if (user && pathname === '/login') {
         router.replace('/dashboard');

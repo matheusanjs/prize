@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useAuth } from '@/contexts/auth';
 
 export default function LoginPage() {
@@ -205,6 +206,21 @@ export default function LoginPage() {
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
+          </div>
+
+          {/* Forgot password link */}
+          <div style={{ textAlign: 'right', marginTop: -8 }}>
+            <Link
+              href="/forgot-password"
+              style={{
+                fontSize: 13,
+                color: 'rgba(0,177,181,0.8)',
+                textDecoration: 'none',
+                fontWeight: 500,
+              }}
+            >
+              Esqueci minha senha
+            </Link>
           </div>
 
           {/* Botão */}

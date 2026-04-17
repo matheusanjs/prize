@@ -12,6 +12,7 @@ import {
   AlertTriangle, BarChart3, Sparkles, Fuel, Wrench, LogOut, Settings, Coins,
   Sun, Moon, HandCoins, Activity, UtensilsCrossed, ClipboardList, Monitor,
   ChefHat, ChevronRight, Anchor, ShoppingCart, MessageCircle, Users, Compass,
+  Mail,
 } from 'lucide-react';
 
 type LIcon = React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
@@ -58,6 +59,7 @@ const navEntries: NavEntry[] = [
   { type: 'link', label: 'IA Insights', href: '/ai-insights', icon: Sparkles },
   { type: 'link', label: 'Prize Social', href: '/social', icon: Compass },
   { type: 'link', label: 'WhatsApp',   href: '/whatsapp',    icon: MessageCircle },
+  { type: 'link', label: 'E-mail',     href: '/email',       icon: Mail },
 ];
 
 function isGroupActive(children: NavItem[], pathname: string) {

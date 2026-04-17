@@ -6,6 +6,8 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 @ApiTags('auth')
@@ -53,5 +55,21 @@ export class AuthController {
   @ApiOperation({ summary: 'Alterar senha do usuário logado' })
   async changePassword(@Req() req: any, @Body() dto: ChangePasswordDto) {
     return this.authService.changePassword(req.user.id, dto);
+  }
+
+  @Post('forgot-password')
+  @Throttle({ auth: { limit: 5, ttl: 60_000 } })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Solicitar redefinição de senha por e-mail' })
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto.email);
+  }
+
+  @Post('reset-password')
+  @Throttle({ auth: { limit: 5, ttl: 60_000 } })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Redefinir senha com token enviado por e-mail' })
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto.token, dto.newPassword);
   }
 }

@@ -5,6 +5,7 @@ import { RegisterPaymentDto } from './dto/register-payment.dto';
 import type { WooviService } from '../payments/woovi.service';
 import { WhatsAppAutomationService } from '../whatsapp/whatsapp-automation.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class FinanceService {
@@ -15,6 +16,7 @@ export class FinanceService {
   constructor(
     prisma: PrismaService,
     private notificationsService: NotificationsService,
+    private mailService: MailService,
     @Optional() @Inject(WhatsAppAutomationService) private whatsapp?: WhatsAppAutomationService,
   ) {
     this.prisma = prisma;
@@ -62,6 +64,10 @@ export class FinanceService {
       data: { chargeId: charge.id, url: '/faturas' },
       pushTag: `charge-new-${charge.id}`,
     }).catch((err) => this.logger.error(`Push charge notification failed: ${err.message}`));
+
+    // Send email notification
+    this.sendChargeEmail(charge.id).catch((err) =>
+      this.logger.error(`Email charge notification failed: ${err.message}`));
 
     return charge;
   }
@@ -135,6 +141,12 @@ export class FinanceService {
         data: { chargeId: charge.id, url: '/faturas' },
         pushTag: `charge-new-${charge.id}`,
       }).catch((err) => this.logger.error(`Push monthly charge notification failed: ${err.message}`));
+    }
+
+    // Send email notifications for all generated charges
+    for (const charge of charges) {
+      this.sendChargeEmail(charge.id).catch((err) =>
+        this.logger.error(`Email monthly charge notification failed: ${err.message}`));
     }
 
     return { generated: charges.length, charges };
@@ -410,5 +422,50 @@ export class FinanceService {
         data: { status: 'RESOLVED', resolvedAt: new Date() },
       });
     }
+  }
+
+  // ─── Email helpers ──────────────────────────────────────────
+
+  async sendChargeEmail(chargeId: string): Promise<void> {
+    const charge = await this.prisma.charge.findUnique({
+      where: { id: chargeId },
+      include: { user: { select: { email: true, name: true } } },
+    });
+    if (!charge || !charge.user?.email) return;
+
+    await this.mailService.sendInvoice(charge.user.email, charge.user.name, {
+      description: charge.description,
+      amount: charge.amount,
+      dueDate: charge.dueDate,
+      wooviBrCode: charge.wooviBrCode,
+    });
+  }
+
+  async sendReminderEmail(chargeId: string): Promise<void> {
+    const charge = await this.prisma.charge.findUnique({
+      where: { id: chargeId },
+      include: { user: { select: { email: true, name: true } } },
+    });
+    if (!charge || !charge.user?.email) return;
+
+    await this.mailService.sendInvoiceReminder(charge.user.email, charge.user.name, {
+      description: charge.description,
+      amount: charge.amount,
+      dueDate: charge.dueDate,
+    });
+  }
+
+  async sendOverdueEmail(chargeId: string): Promise<void> {
+    const charge = await this.prisma.charge.findUnique({
+      where: { id: chargeId },
+      include: { user: { select: { email: true, name: true } } },
+    });
+    if (!charge || !charge.user?.email) return;
+
+    await this.mailService.sendOverdueNotice(charge.user.email, charge.user.name, {
+      description: charge.description,
+      amount: charge.amount,
+      dueDate: charge.dueDate,
+    });
   }
 }
