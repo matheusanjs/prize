@@ -17,10 +17,10 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (isPublicPage) return;
     const sync = () => {
-      const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
-      if (bg) {
-        document.documentElement.style.backgroundColor = bg;
-        document.body.style.backgroundColor = bg;
+      const navBg = getComputedStyle(document.documentElement).getPropertyValue('--nav-bg').trim();
+      if (navBg) {
+        document.documentElement.style.backgroundColor = navBg;
+        document.body.style.backgroundColor = navBg;
       }
     };
     sync();

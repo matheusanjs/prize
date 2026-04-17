@@ -80,7 +80,7 @@
    2. Let the main content area handle its own overflow
    This way, the WKWebView scrollView has no content to bounce. */
 html {
-  background-color: var(--bg);
+  background-color: var(--nav-bg);
   overscroll-behavior: none;
   -webkit-overflow-scrolling: auto;
   height: 100%;
@@ -91,7 +91,7 @@ body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
-  background-color: var(--bg);
+  background-color: var(--nav-bg);
   color: var(--text);
   height: 100%;
   overflow: hidden;
