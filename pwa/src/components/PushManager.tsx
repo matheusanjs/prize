@@ -72,16 +72,9 @@ export function PushManager() {
     try {
       const { PushNotifications } = await import('@capacitor/push-notifications');
 
-      // Request permission (provisional allowed too — iOS will deliver silently to
-      // the Notification Center until the user approves).
-      const permResult = await PushNotifications.requestPermissions();
-      if (permResult.receive !== 'granted' && permResult.receive !== 'prompt') {
-        console.warn('Push notification permission denied');
-        return;
-      }
-
-      // Register for push
-      await PushNotifications.register();
+      // Set up listeners first (before register) so token arrives even when the
+      // banner triggers register() independently.
+      // PushPermissionBanner handles requestPermissions() + register() for first-time users.
 
       // Listen for token — called every launch; upsert on the backend is idempotent.
       PushNotifications.addListener('registration', async (token) => {
@@ -103,7 +96,7 @@ export function PushManager() {
         console.error('Push registration error:', error);
       });
 
-      // Foreground delivery → post DELIVERED for analytics.
+      // Foreground delivery → record DELIVERED analytics (system banner shown by iOS via AppDelegate).
       PushNotifications.addListener('pushNotificationReceived', (notification) => {
         const data = notification.data || {};
         api.post('/notifications/push/events/delivered', {
@@ -133,6 +126,13 @@ export function PushManager() {
           }
         }
       });
+
+      // If permission already granted (returning user), register immediately.
+      // First-time users: PushPermissionBanner calls register() after granting.
+      const perm = await PushNotifications.checkPermissions();
+      if (perm.receive === 'granted') {
+        await PushNotifications.register();
+      }
     } catch (err) {
       console.error('Native push setup failed:', err);
     }

@@ -13,6 +13,12 @@ const config: CapacitorConfig = {
     scheme: 'Prize Clube',
     preferredContentMode: 'mobile',
   },
+  plugins: {
+    PushNotifications: {
+      // Show banner + play sound + update badge even when the app is open (foreground).
+      presentationOptions: ['badge', 'sound', 'alert'],
+    },
+  },
 };
 
 export default config;

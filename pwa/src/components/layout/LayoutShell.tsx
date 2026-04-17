@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 import { AuthProvider } from '@/contexts/auth';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { PushManager } from '@/components/PushManager';
+import { PushPermissionBanner } from '@/components/PushPermissionBanner';
 
 export function LayoutShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -13,6 +14,7 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
   return (
     <AuthProvider>
       <PushManager />
+      <PushPermissionBanner />
       {isPublicPage ? (
         <>{children}</>
       ) : (

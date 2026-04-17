@@ -45,7 +45,7 @@ export class PushProcessor extends WorkerHost implements OnModuleDestroy {
       }
       this.apnProvider = new apn.Provider({
         token: { key: Buffer.from(keyContent), keyId: apnKeyId, teamId: apnTeamId },
-        production: true,
+        production: (this.config.get<string>('APN_ENV') ?? 'production') !== 'sandbox',
       });
       this.logger.log('APNs provider configured (push processor)');
     } catch (err: any) {
