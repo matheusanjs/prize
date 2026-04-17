@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Activity, Ship, Clock, Fuel, ClipboardCheck, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { getMyUsages } from '@/services/api';
 import dynamic from 'next/dynamic';
+import { useCachedState, hasCached } from '@/hooks/useCachedState';
 
 const JetSki3DMarkViewer = dynamic(() => import('@/components/JetSki3DMarkViewer'), { ssr: false }) as any;
 
@@ -26,12 +27,12 @@ const statusConfig: Record<string, { label: string; bg: string; text: string }> 
 const fmt = (s: string) => new Date(s).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
 
 export default function UsosPage() {
-  const [usages, setUsages] = useState<UsageItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [usages, setUsages] = useCachedState<UsageItem[]>('pc:usos:list', []);
+  const [loading, setLoading] = useState(() => !hasCached('pc:usos:list'));
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const load = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
+    if (!silent && !hasCached('pc:usos:list')) setLoading(true);
     try {
       const res = await getMyUsages();
       const data = res.data;

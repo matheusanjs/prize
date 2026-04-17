@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { MessageCircle, Anchor, Loader2, Users2, Fuel, Gauge, Eye, X, MapPin, Volume2, VolumeX } from 'lucide-react';
 import { getMarketplaceBoats } from '@/services/api';
+import { useCachedState, hasCached } from '@/hooks/useCachedState';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 const WHATSAPP_URL = 'https://wa.me/5522981581555';
@@ -166,8 +167,8 @@ function BoatModal({ boat, onClose }: { boat: BoatMarketplace; onClose: () => vo
 }
 
 export default function ComprasPage() {
-  const [boats, setBoats] = useState<BoatMarketplace[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [boats, setBoats] = useCachedState<BoatMarketplace[]>('pc:compras:boats', []);
+  const [loading, setLoading] = useState(() => !hasCached('pc:compras:boats'));
   const [selectedBoat, setSelectedBoat] = useState<BoatMarketplace | null>(null);
 
   const handleCloseModal = useCallback(() => setSelectedBoat(null), []);

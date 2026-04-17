@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/auth';
 import { getMyCharges, getFuelLog, createWooviCharge, getWooviChargeStatus, invalidateCache } from '@/services/api';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { useCachedState, hasCached } from '@/hooks/useCachedState';
 
 interface Charge {
   id: string;
@@ -41,8 +42,8 @@ const typeConfig: Record<string, { icon: typeof CreditCard; color: string }> = {
 
 export default function InvoicesPage() {
   const { user } = useAuth();
-  const [charges, setCharges] = useState<Charge[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [charges, setCharges] = useCachedState<Charge[]>('pc:invoices:charges', []);
+  const [loading, setLoading] = useState(() => !hasCached('pc:invoices:charges'));
   const [filter, setFilter] = useState<string>('ALL');
   const [fuelPhoto, setFuelPhoto] = useState<{ imageUrl: string; liters: number; totalCost: number; notes?: string } | null>(null);
   const [loadingPhoto, setLoadingPhoto] = useState(false);

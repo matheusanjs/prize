@@ -13,6 +13,7 @@ import {
 import ReactCrop, { type Crop as CropType } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import WeatherWidget from '@/components/WeatherWidget';
+import { useCachedState, hasCached } from '@/hooks/useCachedState';
 
 interface FuelLog {
   id: string;
@@ -52,15 +53,15 @@ const fmtDate = (s?: string) =>
   s ? new Date(s).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'America/Sao_Paulo' }) : '—';
 
 export default function FuelPage() {
-  const [logs, setLogs]           = useState<FuelLog[]>([]);
-  const [loading, setLoading]     = useState(true);
+  const [logs, setLogs]           = useCachedState<FuelLog[]>('pc:fuel:logs', []);
+  const [loading, setLoading]     = useState(() => !hasCached('pc:fuel:logs'));
   const [showModal, setShowModal] = useState(false);
   const [viewLog, setViewLog]     = useState<FuelLog | null>(null);
-  const [currentPrice, setCurrentPrice] = useState(0);
+  const [currentPrice, setCurrentPrice] = useCachedState<number>('pc:fuel:currentPrice', 0);
   const [showPriceModal, setShowPriceModal] = useState(false);
 
   const loadData = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
+    if (!silent && !hasCached('pc:fuel:logs')) setLoading(true);
     try {
       const [logsRes, priceRes] = await Promise.all([
         getMyFuelLogs(),

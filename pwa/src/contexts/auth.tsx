@@ -125,6 +125,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('token');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('cachedUser');
+    // Clear per-page snapshot caches so the next user on this device
+    // starts with a clean state (no flash of previous user's data).
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('pc:')) localStorage.removeItem(k);
+      }
+    } catch { /* ignore */ }
     setUser(null);
     window.location.href = 'https://marinaprizeclub.com/login';
   };

@@ -8,6 +8,7 @@ import { updateProfile, changePassword, getMyCharges, deleteAccount } from '@/se
 import api from '@/services/api';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { useCachedState, hasCached } from '@/hooks/useCachedState';
 
 export default function ProfilePage() {
   const { user, refreshUser, logout } = useAuth();
@@ -17,9 +18,9 @@ export default function ProfilePage() {
 
   // Profile state
   const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [cpfCnpj, setCpfCnpj] = useState<string | null>(null);
-  const [avatar, setAvatar] = useState<string | null>(null);
+  const [phone, setPhone] = useCachedState<string>('pc:profile:phone', '');
+  const [cpfCnpj, setCpfCnpj] = useCachedState<string | null>('pc:profile:cpfCnpj', null);
+  const [avatar, setAvatar] = useCachedState<string | null>('pc:profile:avatar', null);
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileMsg, setProfileMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -32,14 +33,14 @@ export default function ProfilePage() {
   const [passwordMsg, setPasswordMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Invoice summary state
-  const [chargesSummary, setChargesSummary] = useState<{
+  const [chargesSummary, setChargesSummary] = useCachedState<{
     totalPending: number;
     countPending: number;
     countOverdue: number;
     countPaid: number;
     nextDueDate: string | null;
-  } | null>(null);
-  const [loadingCharges, setLoadingCharges] = useState(true);
+  } | null>('pc:profile:chargesSummary', null);
+  const [loadingCharges, setLoadingCharges] = useState(() => !hasCached('pc:profile:chargesSummary'));
 
   // Delete account state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);

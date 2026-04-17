@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/auth';
 import { getShares, getMyCharges, getPendingSwaps, respondToSwap, getMyReservations, confirmArrival, cancelReservation } from '@/services/api';
 import { format, parseISO, isToday } from 'date-fns';
 import api from '@/services/api';
+import { useCachedState, hasCached } from '@/hooks/useCachedState';
 
 interface Boat {
   id: string;
@@ -59,20 +60,20 @@ interface SwapRequest {
 export default function BoatsPage() {
   const { user } = useAuth();
   const router = useRouter();
-  const [shares, setShares] = useState<Share[]>([]);
-  const [chargesByBoat, setChargesByBoat] = useState<Record<string, { overdue: number; pending: number }>>({});
-  const [pendingSwaps, setPendingSwaps] = useState<SwapRequest[]>([]);
+  const [shares, setShares] = useCachedState<Share[]>('pc:boats:shares', []);
+  const [chargesByBoat, setChargesByBoat] = useCachedState<Record<string, { overdue: number; pending: number }>>('pc:boats:chargesByBoat', {});
+  const [pendingSwaps, setPendingSwaps] = useCachedState<SwapRequest[]>('pc:boats:pendingSwaps', []);
   const [respondingId, setRespondingId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !hasCached('pc:boats:shares'));
 
   // Confirm arrival state
-  const [todayReservations, setTodayReservations] = useState<any[]>([]);
+  const [todayReservations, setTodayReservations] = useCachedState<any[]>('pc:boats:todayReservations', []);
   const [showConfirmArrival, setShowConfirmArrival] = useState(false);
   const [confirmReservation, setConfirmReservation] = useState<any | null>(null);
   const [arrivalTime, setArrivalTime] = useState('10:00');
   const [confirmSaving, setConfirmSaving] = useState(false);
   const [confirmError, setConfirmError] = useState('');
-  const [highlightedTrips, setHighlightedTrips] = useState<any[]>([]);
+  const [highlightedTrips, setHighlightedTrips] = useCachedState<any[]>('pc:boats:highlightedTrips', []);
   const [activeTripIdx, setActiveTripIdx] = useState(0);
   const [activeCotaIdx, setActiveCotaIdx] = useState(0);
   const tripScrollRef = useRef<HTMLDivElement>(null);

@@ -16,6 +16,7 @@ import {
 } from '@/services/api';
 import api from '@/services/api';
 import { useAuth } from '@/contexts/auth';
+import { useCachedState, hasCached } from '@/hooks/useCachedState';
 
 const JetSkiViewer3D = dynamic(() => import('@/components/JetSkiViewer3D'), { ssr: false });
 import type { JetSki3DSketchRef, InitialMark } from '@/components/JetSki3DSketch';
@@ -106,10 +107,10 @@ export default function OperationsPage() {
 ═══════════════════════════════════════════════════════════════════════════ */
 function OperatorView() {
   const [tab, setTab]               = useState<'checkin' | 'confirmados' | 'onwater' | 'completed'>('checkin');
-  const [checklists, setChecklists] = useState<ChecklistEntry[]>([]);
-  const [queue, setQueue]           = useState<QueueEntry[]>([]);
-  const [todayRes, setTodayRes]     = useState<TodayRes[]>([]);
-  const [loading, setLoading]       = useState(true);
+  const [checklists, setChecklists] = useCachedState<ChecklistEntry[]>('pc:operations:checklists', []);
+  const [queue, setQueue]           = useCachedState<QueueEntry[]>('pc:operations:queue', []);
+  const [todayRes, setTodayRes]     = useCachedState<TodayRes[]>('pc:operations:todayRes', []);
+  const [loading, setLoading]       = useState(() => !hasCached('pc:operations:checklists'));
   const [showWizard, setShowWizard] = useState(false);
   const [continueChecklist, setContinueChecklist] = useState<ChecklistEntry | null>(null);
   const [wizardReservation, setWizardReservation] = useState<TodayRes | null>(null);
@@ -132,7 +133,7 @@ function OperatorView() {
   }, []);
 
   const load = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
+    if (!silent && !hasCached('pc:operations:checklists')) setLoading(true);
     try {
       const [cRes, qRes, tRes] = await Promise.all([
         getChecklists().catch(() => ({ data: [] })),
@@ -1757,15 +1758,15 @@ const statusConf: Record<string, { label: string; bg: string; text: string; dot:
 };
 
 function ClientView() {
-  const [reservations, setReservations] = useState<ClientReservation[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [reservations, setReservations] = useCachedState<ClientReservation[]>('pc:operations:clientReservations', []);
+  const [loading, setLoading] = useState(() => !hasCached('pc:operations:clientReservations'));
   const [selected, setSelected] = useState<ClientChecklist | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [tab, setTab] = useState<'active' | 'history'>('active');
 
   useEffect(() => {
     (async () => {
-      setLoading(true);
+      if (!hasCached('pc:operations:clientReservations')) setLoading(true);
       try {
         const res = await getMyReservationsForChecklist();
         const checklistData: ClientReservation[] = Array.isArray(res.data) ? res.data : res.data?.data || [];

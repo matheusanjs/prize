@@ -12,6 +12,7 @@ import {
 import { io, Socket } from 'socket.io-client';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { useCachedState, hasCached } from '@/hooks/useCachedState';
 
 const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || 'https://api.marinaprizeclub.com/api/v1').replace(/\/api\/v1$/, '');
 const WS_URL = API_ORIGIN;
@@ -75,9 +76,9 @@ export default function SocialPage() {
 
 function SocialPageInner() {
   const { user } = useAuth();
-  const [trips, setTrips] = useState<Trip[]>([]);
-  const [hasShare, setHasShare] = useState(true);
-  const [loading, setLoading] = useState(true);
+  const [trips, setTrips] = useCachedState<Trip[]>('pc:social:trips', []);
+  const [hasShare, setHasShare] = useCachedState<boolean>('pc:social:hasShare', true);
+  const [loading, setLoading] = useState(() => !hasCached('pc:social:trips'));
   const [view, setView] = useState<'feed' | 'create' | 'detail'>('feed');
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
   const [showChat, setShowChat] = useState(false);

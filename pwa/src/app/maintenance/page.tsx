@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Wrench, Plus, X, CheckCircle, Clock, AlertTriangle, Ship } from 'lucide-react';
 import { getMaintenances, createMaintenance, updateMaintenance, getBoats } from '@/services/api';
 import { format, parseISO } from 'date-fns';
+import { useCachedState, hasCached } from '@/hooks/useCachedState';
 
 interface Maintenance {
   id: string;
@@ -37,9 +38,9 @@ const priorityConfig: Record<string, { label: string; color: string }> = {
 };
 
 export default function MaintenancePage() {
-  const [items, setItems] = useState<Maintenance[]>([]);
-  const [boats, setBoats] = useState<BoatOption[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useCachedState<Maintenance[]>('pc:maintenance:items', []);
+  const [boats, setBoats] = useCachedState<BoatOption[]>('pc:maintenance:boats', []);
+  const [loading, setLoading] = useState(() => !hasCached('pc:maintenance:items'));
   const [filter, setFilter] = useState('all');
   const [showCreate, setShowCreate] = useState(false);
   const [saving, setSaving] = useState(false);
