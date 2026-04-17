@@ -64,7 +64,6 @@ export default function InvoicesPage() {
   const [pixCountdown, setPixCountdown] = useState<number | null>(null);
   const [showPaymentSuccessPulse, setShowPaymentSuccessPulse] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const handleFuelChargeClick = async (charge: Charge) => {
     if (charge.category !== 'FUEL' && charge.type !== 'FUEL') return;
@@ -84,13 +83,6 @@ export default function InvoicesPage() {
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-  }, []);
-
-  const stopRealtimeRefresh = useCallback(() => {
-    if (refreshRef.current) {
-      clearInterval(refreshRef.current);
-      refreshRef.current = null;
-    }
   }, []);
 
   const loadCharges = useCallback(async (showLoader = false) => {
@@ -177,30 +169,13 @@ export default function InvoicesPage() {
 
   useEffect(() => {
     if (!user) return;
+    // Snapshot-style: load once on mount. Subsequent refreshes happen only
+    // after explicit user actions (e.g., Pix payment confirmed below).
     loadCharges(true);
-
-    // Real-time refresh while user stays on invoices page
-    stopRealtimeRefresh();
-    refreshRef.current = setInterval(() => {
-      loadCharges(false);
-    }, 15000);
-
-    // Refresh as soon as user comes back to this tab/page
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') loadCharges(false);
-    };
-    const onFocus = () => loadCharges(false);
-
-    document.addEventListener('visibilitychange', onVisible);
-    window.addEventListener('focus', onFocus);
-
     return () => {
-      document.removeEventListener('visibilitychange', onVisible);
-      window.removeEventListener('focus', onFocus);
-      stopRealtimeRefresh();
       stopPolling();
     };
-  }, [user, loadCharges, stopRealtimeRefresh, stopPolling]);
+  }, [user, loadCharges, stopPolling]);
 
   useEffect(() => {
     if (!showPaymentSuccessPulse) return;
