@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../../database/prisma.service';
 import { CreateChecklistDto } from './dto/create-checklist.dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import * as PDFDocument from 'pdfkit';
 
 const PRE_LAUNCH_ITEMS = [
   'Âncora e cabo presentes',
@@ -453,6 +454,132 @@ export class OperationsService {
 
   async getMyUsages(userId: string) {
     return this.getUsages({ userId, status: undefined });
+  }
+
+  async generateUsagePdf(reservationId: string): Promise<Buffer> {
+    const reservation = await this.prisma.reservation.findUnique({
+      where: { id: reservationId },
+      include: {
+        boat: true,
+        user: { select: { id: true, name: true, email: true, phone: true } },
+        checklist: { include: { items: { orderBy: { order: 'asc' } }, operator: { select: { name: true } } } },
+        queue: true,
+      },
+    });
+    if (!reservation) throw new NotFoundException('Uso não encontrado');
+
+    const fuelLogs = await this.prisma.fuelLog.findMany({
+      where: { boatId: reservation.boatId, loggedAt: { gte: reservation.startDate, lte: reservation.endDate } },
+      include: { operator: { select: { name: true } } },
+      orderBy: { loggedAt: 'asc' },
+    });
+
+    const fmtDt = (d: Date | null) => d ? new Date(d).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—';
+    const fmtDate = (d: Date | null) => d ? new Date(d).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—';
+
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    const chunks: Buffer[] = [];
+    doc.on('data', (c: Buffer) => chunks.push(c));
+
+    // ─── Header ───
+    doc.fontSize(18).font('Helvetica-Bold').text('Marina Prize Club', { align: 'center' });
+    doc.fontSize(10).font('Helvetica').fillColor('#666').text('Relatório Completo de Uso', { align: 'center' });
+    doc.moveDown(1);
+    doc.fillColor('#000');
+
+    // ─── Embarcação ───
+    doc.fontSize(13).font('Helvetica-Bold').text('Embarcação');
+    doc.moveDown(0.3);
+    doc.fontSize(10).font('Helvetica');
+    doc.text(`Nome: ${reservation.boat.name}`);
+    doc.text(`Modelo: ${reservation.boat.model} • Ano: ${reservation.boat.year}`);
+    doc.text(`Registro: ${reservation.boat.registration}`);
+    doc.moveDown(0.8);
+
+    // ─── Cliente ───
+    doc.fontSize(13).font('Helvetica-Bold').text('Cliente');
+    doc.moveDown(0.3);
+    doc.fontSize(10).font('Helvetica');
+    doc.text(`Nome: ${reservation.user.name}`);
+    if (reservation.user.email) doc.text(`Email: ${reservation.user.email}`);
+    if (reservation.user.phone) doc.text(`Telefone: ${reservation.user.phone}`);
+    doc.moveDown(0.8);
+
+    // ─── Reserva ───
+    doc.fontSize(13).font('Helvetica-Bold').text('Dados da Reserva');
+    doc.moveDown(0.3);
+    doc.fontSize(10).font('Helvetica');
+    doc.text(`Status: ${reservation.status === 'COMPLETED' ? 'Concluído' : reservation.status === 'IN_USE' ? 'Em Uso' : reservation.status}`);
+    doc.text(`Saída: ${fmtDt(reservation.startDate)}`);
+    doc.text(`Retorno Previsto: ${fmtDt(reservation.endDate)}`);
+    if (reservation.notes) doc.text(`Observações: ${reservation.notes}`);
+    doc.moveDown(0.8);
+
+    // ─── Combustível ───
+    const totalFuel = fuelLogs.reduce((s, l) => s + l.liters, 0);
+    const totalCost = fuelLogs.reduce((s, l) => s + l.totalCost, 0);
+    doc.fontSize(13).font('Helvetica-Bold').text('Combustível');
+    doc.moveDown(0.3);
+    doc.fontSize(10).font('Helvetica');
+    if (fuelLogs.length > 0) {
+      doc.text(`Total: ${totalFuel.toFixed(1)}L • R$ ${totalCost.toFixed(2)}`);
+      fuelLogs.forEach((fl, i) => {
+        doc.text(`  ${i + 1}. ${fl.liters.toFixed(1)}L × R$ ${fl.pricePerLiter.toFixed(2)} = R$ ${fl.totalCost.toFixed(2)} (${fmtDt(fl.loggedAt)})${fl.operator?.name ? ' — ' + fl.operator.name : ''}`);
+      });
+    } else {
+      doc.text('Nenhum abastecimento registrado.');
+    }
+    doc.moveDown(0.8);
+
+    // ─── Checklist de Saída ───
+    const cl = reservation.checklist;
+    doc.fontSize(13).font('Helvetica-Bold').text('Checklist de Saída');
+    doc.moveDown(0.3);
+    doc.fontSize(10).font('Helvetica');
+    if (cl) {
+      doc.text(`Status: ${cl.status === 'APPROVED' ? 'Aprovado' : cl.status === 'REJECTED' ? 'Rejeitado' : 'Pendente'}`);
+      if (cl.operator?.name) doc.text(`Operador: ${cl.operator.name}`);
+      if (cl.completedAt) doc.text(`Concluído em: ${fmtDt(cl.completedAt)}`);
+      if (cl.lifeVestsLoaned) doc.text(`Coletes emprestados: ${cl.lifeVestsLoaned}`);
+      if (cl.notes) doc.text(`Notas: ${cl.notes}`);
+      if (cl.additionalObservations) doc.text(`Observações: ${cl.additionalObservations}`);
+      doc.moveDown(0.5);
+
+      if (cl.items?.length > 0) {
+        doc.font('Helvetica-Bold').text('Itens verificados:');
+        doc.font('Helvetica');
+        cl.items.forEach((item) => {
+          doc.text(`  ${item.checked ? '✓' : '✗'} ${item.label}${item.notes ? ' — ' + item.notes : ''}`);
+        });
+      }
+    } else {
+      doc.text('Nenhum checklist registrado.');
+    }
+    doc.moveDown(0.8);
+
+    // ─── Inspeção de Retorno ───
+    doc.fontSize(13).font('Helvetica-Bold').text('Inspeção de Retorno');
+    doc.moveDown(0.3);
+    doc.fontSize(10).font('Helvetica');
+    if (cl?.returnCompletedAt) {
+      doc.text(`Concluída em: ${fmtDt(cl.returnCompletedAt)}`);
+      if (cl.returnObservations) doc.text(`Observações: ${cl.returnObservations}`);
+      if (cl.returnSketchMarks) doc.text(`Marcas no casco: ${cl.returnSketchMarks}`);
+      if (cl.returnFuelPhotoUrl) doc.text(`Foto combustível retorno: ${cl.returnFuelPhotoUrl}`);
+      if (cl.returnDamageVideoUrl) doc.text(`Vídeo de avarias: ${cl.returnDamageVideoUrl}`);
+    } else {
+      doc.text('Inspeção de retorno não realizada.');
+    }
+
+    // Footer
+    doc.moveDown(2);
+    doc.fontSize(8).fillColor('#999').text(
+      `Gerado em ${fmtDate(new Date())} às ${new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`,
+      { align: 'center' },
+    );
+
+    doc.end();
+    return new Promise((resolve) => { doc.on('end', () => resolve(Buffer.concat(chunks))); });
   }
 
   // ─── Original methods (keep for backward compat) ──────────────────────────

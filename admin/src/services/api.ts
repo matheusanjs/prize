@@ -143,6 +143,7 @@ export const getChecklists = (params?: { boatId?: string; status?: string; date?
 export const createChecklist = (data: Record<string, unknown>) => api.post('/operations/checklists', data);
 export const deleteChecklist = (id: string) => api.delete(`/operations/checklists/${id}`);
 export const getUsages = (params?: { boatId?: string; userId?: string; status?: string; from?: string; to?: string }) => api.get('/operations/usages', { params });
+export const getUsagePdf = (id: string) => api.get(`/operations/usages/${id}/pdf`, { responseType: 'blob' });
 export const getTodayReservations = (date?: string) => api.get('/operations/pre-launch/today-reservations', { params: date ? { date } : undefined });
 export const startAdHocPreLaunch = (boatId: string, reservationId?: string) => api.post('/operations/pre-launch/start-adhoc', { boatId, reservationId });
 export const submitPreLaunch = (checklistId: string, data: Record<string, unknown>) => api.post(`/operations/pre-launch/${checklistId}/submit`, data);

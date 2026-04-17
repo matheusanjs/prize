@@ -1,5 +1,6 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, Res } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { Response } from 'express';
 import { OperationsService } from './operations.service';
 import { CreateChecklistDto } from './dto/create-checklist.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -138,6 +139,15 @@ export class OperationsController {
   @ApiOperation({ summary: 'Meus usos (cliente)' })
   getMyUsages(@CurrentUser('id') userId: string) {
     return this.operationsService.getMyUsages(userId);
+  }
+
+  @Get('usages/:id/pdf')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Gerar PDF completo de um uso' })
+  async getUsagePdf(@Param('id') id: string, @Res() res: Response) {
+    const buffer = await this.operationsService.generateUsagePdf(id);
+    res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename=uso-completo.pdf' });
+    res.send(buffer);
   }
 
   // ─── Queue ───────────────────────────────────────────────────────────────
