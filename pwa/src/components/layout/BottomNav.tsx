@@ -54,14 +54,13 @@ export function BottomNav() {
     <>
       {/* Top header — bg extends behind status bar via before pseudo-element */}
       <header
-        className="border-b border-[var(--border)] px-4 py-2.5 flex items-center justify-between"
+        className="header-safe-top border-b border-[var(--border)] px-4 py-2.5 flex items-center justify-between"
         style={{
           position: 'fixed',
           top: 0,
           left: 0,
           right: 0,
           zIndex: 9999,
-          paddingTop: 'calc(env(safe-area-inset-top, 0px) + 10px)',
           backgroundColor: 'var(--header-bg)',
         }}
       >
@@ -117,7 +116,7 @@ export function BottomNav() {
           </div>
         </nav>
         {/* Safe area fill below the menu */}
-        <div style={{ height: 'env(safe-area-inset-bottom, 0px)', backgroundColor: 'var(--nav-bg)' }} />
+        <div className="safe-area-bottom-fill" style={{ backgroundColor: 'var(--nav-bg)' }} />
       </div>
     </>
   );

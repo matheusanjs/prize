@@ -39,10 +39,8 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
         <div style={{ height: '100dvh', backgroundColor: 'var(--bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <BottomNav />
           <main
-            className="px-4 flex-1"
+            className="px-4 flex-1 main-safe-padding"
             style={{
-              paddingTop: 'calc(3.5rem + env(safe-area-inset-top, 0px) + 10px)',
-              paddingBottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))',
               overflowY: 'auto',
               WebkitOverflowScrolling: 'touch',
               overscrollBehavior: 'none',

@@ -109,3 +109,18 @@ input, select, textarea {
 .safe-area-bottom {
   padding-bottom: env(safe-area-inset-bottom);
 }
+
+.safe-area-bottom-fill {
+  height: env(safe-area-inset-bottom, 0px);
+}
+
+/* Header safe area padding */
+.header-safe-top {
+  padding-top: calc(env(safe-area-inset-top, 0px) + 10px);
+}
+
+/* Main content padding for fixed header/nav */
+.main-safe-padding {
+  padding-top: calc(3.5rem + env(safe-area-inset-top, 0px) + 10px);
+  padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+}
