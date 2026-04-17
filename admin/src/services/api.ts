@@ -247,4 +247,12 @@ export const triggerReservationConfirmations = () => api.post('/whatsapp/trigger
 export const triggerPaymentReminders = () => api.post('/whatsapp/trigger/payment-reminders');
 export const triggerOverdueAlerts = () => api.post('/whatsapp/trigger/overdue-alerts');
 
+// ─── Push Notifications (Admin) ─────────────────────────
+export const getPushStats = () => api.get('/admin/push/stats');
+export const getPushDevices = (page?: number) => api.get('/admin/push/devices', { params: { page } });
+export const getPushHistory = (page?: number, type?: string) => api.get('/admin/push/history', { params: { page, type } });
+export const getPushUsers = (search?: string) => api.get('/admin/push/users', { params: { search } });
+export const sendPushNotification = (data: { title: string; body: string; target: string; userIds?: string[]; type?: string; url?: string; imageUrl?: string }) => api.post('/admin/push/send', data);
+export const sendPushTest = (data: { userId: string; title?: string; body?: string }) => api.post('/admin/push/test', data);
+
 export default api;
