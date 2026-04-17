@@ -24,8 +24,48 @@ workflows:
         script: |
           cd pwa
           mkdir -p out
-          echo '<html><head><meta http-equiv="refresh" content="0;url=https://app.marinaprizeclub.com/login"></head></html>' > out/index.html
+          cat > out/index.html << 'FALLBACK'
+          <!DOCTYPE html>
+          <html>
+          <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+          <title>Prize Clube</title>
+          <style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0D1B2A;color:#fff;font-family:system-ui}
+          .box{text-align:center;padding:24px}
+          .spinner{width:40px;height:40px;border:4px solid rgba(255,255,255,.2);border-top:4px solid #007577;border-radius:50%;animation:s 1s linear infinite;margin:0 auto 16px}
+          @keyframes s{to{transform:rotate(360deg)}}</style>
+          </head>
+          <body>
+          <div class="box">
+            <div class="spinner"></div>
+            <p>Carregando Prize Clube...</p>
+            <p id="info" style="font-size:12px;opacity:.5;margin-top:20px"></p>
+          </div>
+          <script>
+          var el=document.getElementById('info');
+          setTimeout(function(){
+            el.textContent='Redirecionando...';
+            window.location.href='https://app.marinaprizeclub.com/login';
+          },2000);
+          setTimeout(function(){
+            el.textContent='Fallback: server.url may not be working. Tap to open.';
+            el.onclick=function(){window.location.href='https://app.marinaprizeclub.com/login'};
+            el.style.textDecoration='underline';
+            el.style.cursor='pointer';
+          },8000);
+          </script>
+          </body></html>
+          FALLBACK
           npx cap sync ios
+      - name: Debug — verify Capacitor config
+        script: |
+          echo "=== capacitor.config.json (native) ==="
+          cat pwa/ios/App/App/capacitor.config.json
+          echo ""
+          echo "=== Main.storyboard ==="
+          cat pwa/ios/App/App/Base.lproj/Main.storyboard
+          echo ""
+          echo "=== out/index.html ==="
+          cat pwa/out/index.html
       - name: Install CocoaPods
         script: |
           cd pwa/ios/App

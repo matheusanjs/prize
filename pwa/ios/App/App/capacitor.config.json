@@ -5,11 +5,11 @@
 	"server": {
 		"url": "https://app.marinaprizeclub.com",
 		"cleartext": false,
-		"androidScheme": "https"
+		"androidScheme": "https",
+		"allowNavigation": ["app.marinaprizeclub.com", "api.marinaprizeclub.com"]
 	},
 	"ios": {
 		"contentInset": "automatic",
-		"scheme": "Prize Clube",
 		"preferredContentMode": "mobile",
 		"backgroundColor": "#0D1B2A"
 	},
