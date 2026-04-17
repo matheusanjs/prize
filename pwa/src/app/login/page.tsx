@@ -30,7 +30,11 @@ export default function LoginPage() {
   return (
     <div
       style={{
-        height: '100dvh',
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
         background: 'linear-gradient(160deg, #0D1B2A 0%, #003C3D 50%, #0D1B2A 100%)',
         display: 'flex',
         flexDirection: 'column',
@@ -39,7 +43,6 @@ export default function LoginPage() {
         padding: '0 24px',
         paddingTop: 'env(safe-area-inset-top, 0px)',
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-        position: 'relative',
         overflow: 'hidden',
         boxSizing: 'border-box',
       }}
