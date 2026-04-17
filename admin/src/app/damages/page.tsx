@@ -126,8 +126,8 @@ export default function DamagesPage() {
           <p className="text-xs text-th-muted">Embarcações afetadas</p>
         </div>
         <div className="bg-th-card rounded-xl p-4 border border-th">
-          <p className="text-2xl font-bold text-amber-500">{entries.filter(e => e.returnDamageVideoUrl).length}</p>
-          <p className="text-xs text-th-muted">Com vídeo de avaria</p>
+          <p className="text-2xl font-bold text-amber-500">{entries.filter(e => e.returnDamageVideoUrl || e.videoUrl).length}</p>
+          <p className="text-xs text-th-muted">Com vídeo</p>
         </div>
       </div>
 
@@ -183,7 +183,7 @@ export default function DamagesPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      {entry.returnDamageVideoUrl ? (
+                      {(entry.returnDamageVideoUrl || entry.videoUrl) ? (
                         <Video className="w-4 h-4 text-amber-500 mx-auto" />
                       ) : (
                         <span className="text-th-muted text-xs">—</span>
@@ -211,7 +211,7 @@ export default function DamagesPage() {
 /* ── Detail Modal ─────────────────────────────────────────────────────────── */
 
 function DamageDetailModal({ entry, onClose }: { entry: DamageEntry; onClose: () => void }) {
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['hull', 'checklist']));
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['hull', 'checklist', 'videos']));
   const toggle = (s: string) => setExpandedSections(prev => { const n = new Set(prev); n.has(s) ? n.delete(s) : n.add(s); return n; });
 
   const fmtDateTime = (s?: string) => s ? new Date(s).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: BRT }) : '—';
@@ -316,15 +316,29 @@ function DamageDetailModal({ entry, onClose }: { entry: DamageEntry; onClose: ()
             )}
           </div>
 
-          {/* Damage Video */}
-          {entry.returnDamageVideoUrl && (
-            <div className="border border-amber-300 dark:border-amber-500/30 rounded-xl overflow-hidden">
-              <div className="px-4 py-3 bg-amber-50 dark:bg-amber-500/10">
-                <p className="text-sm font-semibold text-amber-700 dark:text-amber-400 flex items-center gap-2"><Video className="w-4 h-4" /> Vídeo da Avaria</p>
-              </div>
-              <div className="p-4">
-                <video src={entry.returnDamageVideoUrl} controls className="w-full max-h-64 rounded-xl bg-black" />
-              </div>
+          {/* Videos */}
+          {(entry.videoUrl || entry.returnDamageVideoUrl) && (
+            <div className="border border-th rounded-xl overflow-hidden">
+              <button onClick={() => toggle('videos')} className="flex items-center justify-between w-full px-4 py-3 bg-th-bg text-sm font-semibold text-th hover:bg-th-bg/80">
+                <span className="flex items-center gap-2"><Video className="w-4 h-4 text-amber-500" /> Vídeos</span>
+                <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.has('videos') ? 'rotate-180' : ''}`} />
+              </button>
+              {expandedSections.has('videos') && (
+                <div className="p-4 space-y-4">
+                  {entry.videoUrl && (
+                    <div>
+                      <p className="text-xs font-semibold text-th-muted mb-2">📋 Vídeo do Checklist (Saída)</p>
+                      <video src={entry.videoUrl} controls className="w-full max-h-64 rounded-xl bg-black" />
+                    </div>
+                  )}
+                  {entry.returnDamageVideoUrl && (
+                    <div>
+                      <p className="text-xs font-semibold text-red-500 mb-2">⚠️ Vídeo da Inspeção de Retorno</p>
+                      <video src={entry.returnDamageVideoUrl} controls className="w-full max-h-64 rounded-xl bg-black" />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
