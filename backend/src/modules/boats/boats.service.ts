@@ -1,8 +1,11 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateBoatDto } from './dto/create-boat.dto';
 import { UpdateBoatDto } from './dto/update-boat.dto';
 import { AiService } from '../ai/ai.service';
+import * as PDFDocument from 'pdfkit';
+import { readFileSync, existsSync } from 'fs';
+import { URL } from 'url';
 
 @Injectable()
 export class BoatsService {
@@ -105,6 +108,115 @@ export class BoatsService {
         shares: { where: { userId, isActive: true } },
       },
     });
+  }
+
+  // ================================================================
+  // DOCUMENTS & INSURANCE
+  // ================================================================
+
+  async updateDocumentUrl(id: string, url: string) {
+    await this.findById(id);
+    return this.prisma.boat.update({ where: { id }, data: { documentUrl: url } });
+  }
+
+  async updateInsuranceUrl(id: string, url: string) {
+    await this.findById(id);
+    return this.prisma.boat.update({ where: { id }, data: { insuranceUrl: url } });
+  }
+
+  async generatePdf(id: string, type: 'document' | 'insurance' | 'combined'): Promise<Buffer> {
+    const boat = await this.findById(id);
+
+    if (type === 'document' && !boat.documentUrl) throw new BadRequestException('Documento não encontrado');
+    if (type === 'insurance' && !boat.insuranceUrl) throw new BadRequestException('Seguro não encontrado');
+    if (type === 'combined' && !boat.documentUrl && !boat.insuranceUrl) throw new BadRequestException('Nenhum arquivo encontrado');
+
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    const chunks: Buffer[] = [];
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+
+    // Header
+    doc.fontSize(20).font('Helvetica-Bold').text('Marina Prize Club', { align: 'center' });
+    doc.moveDown(0.3);
+    doc.fontSize(10).font('Helvetica').fillColor('#666').text(
+      type === 'document' ? 'Documento da Embarcação' :
+      type === 'insurance' ? 'Seguro da Embarcação' :
+      'Documento e Seguro da Embarcação',
+      { align: 'center' },
+    );
+    doc.moveDown(1);
+    doc.fillColor('#000');
+
+    // Boat Info
+    doc.fontSize(14).font('Helvetica-Bold').text(boat.name);
+    doc.fontSize(10).font('Helvetica').text(`Modelo: ${boat.model} • Ano: ${boat.year}`);
+    doc.text(`Registro: ${boat.registration}`);
+    if (boat.locationBerth) doc.text(`Local: ${boat.locationBerth}`);
+    doc.moveDown(1);
+
+    // Line separator
+    doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke('#ccc');
+    doc.moveDown(1);
+
+    const embedFile = (url: string, label: string) => {
+      doc.fontSize(12).font('Helvetica-Bold').text(label);
+      doc.moveDown(0.5);
+
+      // Resolve local file path from URL
+      const filePath = this.resolveFilePath(url);
+      if (filePath && existsSync(filePath)) {
+        if (/\.(jpg|jpeg|png|gif|webp)$/i.test(filePath)) {
+          try {
+            const imgWidth = 495;
+            doc.image(filePath, { width: imgWidth });
+          } catch (e) {
+            doc.fontSize(10).font('Helvetica').text(`[Erro ao carregar imagem: ${url}]`);
+          }
+        } else {
+          doc.fontSize(10).font('Helvetica').text(`Arquivo: ${url}`);
+          doc.text('(Arquivo PDF anexado — visualize o original no sistema)');
+        }
+      } else {
+        doc.fontSize(10).font('Helvetica').text(`Arquivo: ${url}`);
+      }
+      doc.moveDown(1);
+    };
+
+    if (type === 'document' || type === 'combined') {
+      if (boat.documentUrl) embedFile(boat.documentUrl, '📄 Documento');
+    }
+    if (type === 'insurance' || type === 'combined') {
+      if (type === 'combined' && boat.documentUrl && boat.insuranceUrl) {
+        doc.addPage();
+      }
+      if (boat.insuranceUrl) embedFile(boat.insuranceUrl, '🛡️ Seguro');
+    }
+
+    // Footer
+    doc.moveDown(2);
+    doc.fontSize(8).fillColor('#999').text(
+      `Gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`,
+      { align: 'center' },
+    );
+
+    doc.end();
+
+    return new Promise((resolve) => {
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+    });
+  }
+
+  private resolveFilePath(url: string): string | null {
+    try {
+      const parsed = new URL(url);
+      const path = parsed.pathname;
+      if (path.startsWith('/uploads/')) {
+        return require('path').join(__dirname, '..', '..', '..', '..', path);
+      }
+      return null;
+    } catch {
+      return null;
+    }
   }
 
   // ================================================================

@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Ship, Search, Plus, Edit, Trash2, AlertTriangle, CheckCircle, Wrench, Anchor, X, Save, DollarSign, CheckSquare, User, Camera, Volume2, VolumeX } from 'lucide-react';
-import { getBoats, createBoat, updateBoat, deleteBoat } from '@/services/api';
+import { Ship, Search, Plus, Edit, Trash2, AlertTriangle, CheckCircle, Wrench, Anchor, X, Save, DollarSign, CheckSquare, User, Camera, Volume2, VolumeX, FileText, Shield, Download, Upload } from 'lucide-react';
+import { getBoats, createBoat, updateBoat, deleteBoat, uploadBoatDocument, uploadBoatInsurance, getBoatPdf } from '@/services/api';
 
 interface Boat {
   id: string;
@@ -20,6 +20,8 @@ interface Boat {
   imageUrl?: string;
   locationBerth?: string;
   hasSound?: boolean;
+  documentUrl?: string;
+  insuranceUrl?: string;
   status: string;
   nextMaintenance?: string;
   _count?: { shares?: number; reservations?: number };
@@ -53,6 +55,8 @@ export default function BoatsPage() {
   const [bulkFee, setBulkFee] = useState<number>(0);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [expandedBoat, setExpandedBoat] = useState<string | null>(null);
+  const [uploading, setUploading] = useState<string | null>(null);
 
   useEffect(() => { loadBoats(); }, []);
 
@@ -161,6 +165,37 @@ export default function BoatsPage() {
       alert(err?.response?.data?.message || 'Erro ao atualizar');
     } finally {
       setBulkSaving(false);
+    }
+  }
+
+  async function handleUpload(boatId: string, type: 'document' | 'insurance', file: File) {
+    setUploading(`${boatId}-${type}`);
+    try {
+      if (type === 'document') {
+        await uploadBoatDocument(boatId, file);
+      } else {
+        await uploadBoatInsurance(boatId, file);
+      }
+      loadBoats();
+    } catch (err: any) {
+      alert(err?.response?.data?.message || `Erro ao enviar ${type === 'document' ? 'documento' : 'seguro'}`);
+    } finally {
+      setUploading(null);
+    }
+  }
+
+  async function handleDownloadPdf(boatId: string, type: 'document' | 'insurance' | 'combined', boatName: string) {
+    try {
+      const res = await getBoatPdf(boatId, type);
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${boatName}-${type === 'combined' ? 'documento-seguro' : type === 'document' ? 'documento' : 'seguro'}.pdf`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Erro ao gerar PDF');
     }
   }
 
@@ -313,6 +348,9 @@ export default function BoatsPage() {
                       {sc.label}
                     </div>
                     <div className="flex items-center gap-1">
+                      <button onClick={() => setExpandedBoat(expandedBoat === boat.id ? null : boat.id)} className={`p-2 rounded-lg transition ${expandedBoat === boat.id ? 'bg-primary-500/15 text-primary-500' : 'hover:bg-primary-500/5 text-th-muted'}`} title="Documentos">
+                        <FileText size={16} />
+                      </button>
                       <button onClick={() => openEdit(boat)} className="p-2 hover:bg-primary-500/5 rounded-lg transition" title="Editar">
                         <Edit size={16} className="text-th-muted" />
                       </button>
@@ -322,6 +360,84 @@ export default function BoatsPage() {
                     </div>
                   </div>
                 </div>
+
+                {/* Expanded Document/Insurance Section */}
+                {expandedBoat === boat.id && (
+                  <div className="mt-4 pt-4 border-t border-th">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Document Upload */}
+                      <div className="bg-th-surface rounded-xl p-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <FileText size={18} className="text-blue-500" />
+                          <h4 className="font-semibold text-th text-sm">Documento</h4>
+                          {boat.documentUrl && <span className="ml-auto px-2 py-0.5 bg-green-500/15 text-green-600 dark:text-green-400 text-[10px] font-bold rounded-full">ENVIADO</span>}
+                        </div>
+                        {boat.documentUrl ? (
+                          <div className="space-y-2">
+                            <a href={boat.documentUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary-500 hover:underline truncate block">Ver arquivo original</a>
+                            <div className="flex gap-2">
+                              <label className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-th-card border border-th rounded-lg text-xs text-th-secondary cursor-pointer hover:bg-primary-500/10 transition">
+                                <Upload size={13} />
+                                {uploading === `${boat.id}-document` ? 'Enviando...' : 'Substituir'}
+                                <input type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(boat.id, 'document', f); e.target.value = ''; }} />
+                              </label>
+                              <button onClick={() => handleDownloadPdf(boat.id, 'document', boat.name)} className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-500 text-white rounded-lg text-xs font-medium hover:bg-blue-600 transition">
+                                <Download size={13} /> PDF
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-th rounded-lg p-4 cursor-pointer hover:border-primary-500/50 hover:bg-primary-500/5 transition">
+                            <Upload size={20} className="text-th-muted" />
+                            <span className="text-xs text-th-muted">{uploading === `${boat.id}-document` ? 'Enviando...' : 'Clique para enviar documento'}</span>
+                            <span className="text-[10px] text-th-muted">PDF ou imagem, até 10MB</span>
+                            <input type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(boat.id, 'document', f); e.target.value = ''; }} />
+                          </label>
+                        )}
+                      </div>
+
+                      {/* Insurance Upload */}
+                      <div className="bg-th-surface rounded-xl p-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Shield size={18} className="text-orange-500" />
+                          <h4 className="font-semibold text-th text-sm">Seguro</h4>
+                          {boat.insuranceUrl && <span className="ml-auto px-2 py-0.5 bg-green-500/15 text-green-600 dark:text-green-400 text-[10px] font-bold rounded-full">ENVIADO</span>}
+                        </div>
+                        {boat.insuranceUrl ? (
+                          <div className="space-y-2">
+                            <a href={boat.insuranceUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary-500 hover:underline truncate block">Ver arquivo original</a>
+                            <div className="flex gap-2">
+                              <label className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-th-card border border-th rounded-lg text-xs text-th-secondary cursor-pointer hover:bg-primary-500/10 transition">
+                                <Upload size={13} />
+                                {uploading === `${boat.id}-insurance` ? 'Enviando...' : 'Substituir'}
+                                <input type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(boat.id, 'insurance', f); e.target.value = ''; }} />
+                              </label>
+                              <button onClick={() => handleDownloadPdf(boat.id, 'insurance', boat.name)} className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 transition">
+                                <Download size={13} /> PDF
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-th rounded-lg p-4 cursor-pointer hover:border-primary-500/50 hover:bg-primary-500/5 transition">
+                            <Upload size={20} className="text-th-muted" />
+                            <span className="text-xs text-th-muted">{uploading === `${boat.id}-insurance` ? 'Enviando...' : 'Clique para enviar seguro'}</span>
+                            <span className="text-[10px] text-th-muted">PDF ou imagem, até 10MB</span>
+                            <input type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(boat.id, 'insurance', f); e.target.value = ''; }} />
+                          </label>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Combined PDF Button */}
+                    {boat.documentUrl && boat.insuranceUrl && (
+                      <div className="mt-3">
+                        <button onClick={() => handleDownloadPdf(boat.id, 'combined', boat.name)} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600 transition">
+                          <Download size={15} /> Gerar PDF Combinado (Documento + Seguro)
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}

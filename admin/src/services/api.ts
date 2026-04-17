@@ -86,6 +86,9 @@ export const getBoat = (id: string) => api.get(`/boats/${id}`);
 export const createBoat = (data: Record<string, unknown>) => api.post('/boats', data);
 export const updateBoat = (id: string, data: Record<string, unknown>) => api.patch(`/boats/${id}`, data);
 export const deleteBoat = (id: string) => api.delete(`/boats/${id}`);
+export const uploadBoatDocument = (id: string, file: File) => { const fd = new FormData(); fd.append('file', file); return api.post(`/boats/${id}/upload-document`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }); };
+export const uploadBoatInsurance = (id: string, file: File) => { const fd = new FormData(); fd.append('file', file); return api.post(`/boats/${id}/upload-insurance`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }); };
+export const getBoatPdf = (id: string, type: 'document' | 'insurance' | 'combined') => api.get(`/boats/${id}/pdf/${type}`, { responseType: 'blob' });
 
 // Shares
 export const getShares = (params?: { boatId?: string; userId?: string }) => api.get('/shares', { params });

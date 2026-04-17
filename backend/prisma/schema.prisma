@@ -105,6 +105,9 @@ model Boat {
   shareValue             Float              @default(0)
   marketplaceDescription String?            @map("marketplace_description")
   hasSound               Boolean            @default(false)
+  documentUrl            String?            @map("document_url")
+  insuranceUrl           String?            @map("insurance_url")
+  insuranceExpiry        DateTime?          @map("insurance_expiry")
   checklists             Checklist[]
   fuelLogs               FuelLog[]
   maintenances           Maintenance[]
