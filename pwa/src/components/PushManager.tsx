@@ -48,9 +48,13 @@ export function PushManager() {
         // Send subscription to backend
         const keys = subscription.toJSON().keys || {};
         await api.post('/notifications/push/subscribe', {
-          endpoint: subscription.endpoint,
-          p256dh: keys.p256dh,
-          auth: keys.auth,
+          subscription: {
+            endpoint: subscription.endpoint,
+            keys: {
+              p256dh: keys.p256dh,
+              auth: keys.auth,
+            },
+          },
         });
 
         subscribedRef.current = true;
