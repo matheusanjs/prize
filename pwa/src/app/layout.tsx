@@ -1,7 +1,15 @@
 import './globals.css';
 import type { Metadata, Viewport } from 'next';
+import { Inter } from 'next/font/google';
 import { LayoutShell } from '@/components/layout/LayoutShell';
 import { Toaster } from 'sonner';
+
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-inter',
+  preload: true,
+});
 
 export const metadata: Metadata = {
   title: 'Prize Clube',
@@ -38,12 +46,12 @@ const themeScript = `
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR" suppressHydrationWarning>
+    <html lang="pt-BR" suppressHydrationWarning className={inter.variable}>
       <head>
         <link rel="apple-touch-icon" href="/icon-192.png" />
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className="min-h-screen">
+      <body className="min-h-screen font-sans">
         <LayoutShell>{children}</LayoutShell>
         <Toaster
           position="top-center"

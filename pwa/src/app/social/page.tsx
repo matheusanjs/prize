@@ -263,7 +263,7 @@ function HeroCard({ trip }: { trip: Trip }) {
   const photo = trip.photos[0]?.url;
   return (
     <div className="relative rounded-[16px] overflow-hidden h-28 cursor-pointer active:scale-[0.97] transition-transform duration-200" style={{ boxShadow: '0 4px 20px rgba(0,0,0,0.35)' }}>
-      {photo && <img src={resolveMediaUrl(photo)} alt="" className="absolute inset-0 w-full h-full object-cover" />}
+      {photo && <img loading="lazy" decoding="async" src={resolveMediaUrl(photo)} alt="" className="absolute inset-0 w-full h-full object-cover" />}
       <div className="absolute inset-0" style={{ background: 'linear-gradient(90deg, rgba(10,37,64,0.92) 0%, rgba(10,37,64,0.5) 60%, transparent 100%)' }} />
 
       {trip.isOfficial && (
@@ -301,7 +301,7 @@ function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
     <div onClick={onClick} className="relative rounded-[16px] overflow-hidden cursor-pointer active:scale-[0.97] transition-all duration-200" style={{ boxShadow: '0 4px 24px rgba(0,0,0,0.25)' }}>
       <div className="relative h-28">
         {photo ? (
-          <img src={resolveMediaUrl(photo)} alt="" className="w-full h-full object-cover" />
+          <img loading="lazy" decoding="async" src={resolveMediaUrl(photo)} alt="" className="w-full h-full object-cover" />
         ) : (
           <div className="w-full h-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #0A2540, #1A3A5C)' }}>
             <Navigation size={40} className="text-white/10" />
@@ -406,7 +406,7 @@ function TripDetail({ trip, userId, onBack, onOpenChat, onRefresh }: {
           {trip.photos.length > 0 ? (
             <div className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide h-full">
               {trip.photos.map(p => (
-                <img key={p.id} src={resolveMediaUrl(p.url)} alt="" className="w-full h-full object-cover snap-start shrink-0" />
+                <img loading="lazy" decoding="async" key={p.id} src={resolveMediaUrl(p.url)} alt="" className="w-full h-full object-cover snap-start shrink-0" />
               ))}
             </div>
           ) : (
@@ -450,7 +450,7 @@ function TripDetail({ trip, userId, onBack, onOpenChat, onRefresh }: {
             <h1 className="text-2xl font-extrabold text-white leading-tight tracking-tight drop-shadow-lg">{trip.title}</h1>
             <div className="flex items-center gap-2 mt-2">
               {trip.creator.avatar ? (
-                <img src={resolveMediaUrl(trip.creator.avatar)} alt="" className="w-7 h-7 rounded-full object-cover ring-2 ring-white/20" />
+                <img loading="lazy" decoding="async" src={resolveMediaUrl(trip.creator.avatar)} alt="" className="w-7 h-7 rounded-full object-cover ring-2 ring-white/20" />
               ) : (
                 <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold ring-2 ring-white/20" style={{ background: 'linear-gradient(135deg, #00C2A8, #007577)', color: 'white' }}>
                   {trip.creator.name[0]}
@@ -521,7 +521,7 @@ function TripDetail({ trip, userId, onBack, onOpenChat, onRefresh }: {
                 <div className="flex -space-x-2.5">
                   {(showAllP ? trip.participants : trip.participants.slice(0, 8)).map(p => (
                     p.user.avatar ? (
-                      <img key={p.id} src={resolveMediaUrl(p.user.avatar)} alt={p.user.name} title={p.user.name} className="w-9 h-9 rounded-full object-cover ring-[2.5px] ring-[var(--bg)]" />
+                      <img loading="lazy" decoding="async" key={p.id} src={resolveMediaUrl(p.user.avatar)} alt={p.user.name} title={p.user.name} className="w-9 h-9 rounded-full object-cover ring-[2.5px] ring-[var(--bg)]" />
                     ) : (
                       <div key={p.id} title={p.user.name} className="w-9 h-9 rounded-full flex items-center justify-center text-[10px] font-bold ring-[2.5px] ring-[var(--bg)]" style={{ background: 'linear-gradient(135deg, #00C2A8, #007577)', color: 'white' }}>
                         {p.user.name[0]}
@@ -679,7 +679,7 @@ function CreateTrip({ onBack, onCreated }: { onBack: () => void; onCreated: () =
             <div className="flex gap-2.5 overflow-x-auto pb-2">
               {photos.map((p, i) => (
                 <div key={i} className="relative min-w-[88px] h-20 rounded-2xl overflow-hidden shrink-0" style={{ boxShadow: '0 2px 12px rgba(0,0,0,0.15)' }}>
-                  <img src={p} alt="" className="w-full h-full object-cover" />
+                  <img loading="lazy" decoding="async" src={p} alt="" className="w-full h-full object-cover" />
                   <button onClick={() => removePhoto(i)} className="absolute top-1.5 right-1.5 bg-black/60 rounded-full p-0.5 backdrop-blur-sm"><X size={12} className="text-white" /></button>
                 </div>
               ))}
@@ -847,7 +847,7 @@ function MessageBubble({ msg, isOwn }: { msg: ChatMessage; isOwn: boolean }) {
     <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'} gap-2`}>
       {!isOwn && (
         msg.user.avatar ? (
-          <img src={resolveMediaUrl(msg.user.avatar)} alt="" className="w-7 h-7 rounded-full object-cover shrink-0 mt-1" />
+          <img loading="lazy" decoding="async" src={resolveMediaUrl(msg.user.avatar)} alt="" className="w-7 h-7 rounded-full object-cover shrink-0 mt-1" />
         ) : (
           <div className="w-7 h-7 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 mt-1" style={{ background: 'linear-gradient(135deg, #00C2A8, #007577)', color: 'white' }}>
             {msg.user.name[0]}
@@ -858,7 +858,7 @@ function MessageBubble({ msg, isOwn }: { msg: ChatMessage; isOwn: boolean }) {
         style={{ background: isOwn ? 'linear-gradient(135deg, #00C2A8, #007577)' : 'var(--card)', border: isOwn ? 'none' : '1px solid var(--border)', boxShadow: isOwn ? '0 2px 8px rgba(0,194,168,0.2)' : 'none' }}>
         {!isOwn && <p className="text-[10px] font-semibold mb-0.5 opacity-60">{msg.user.name}</p>}
         {msg.type === 'IMAGE' && msg.mediaUrl && (
-          <img src={resolveMediaUrl(msg.mediaUrl)} alt="" className="rounded-xl max-w-full max-h-48 object-cover mb-1" />
+          <img loading="lazy" decoding="async" src={resolveMediaUrl(msg.mediaUrl)} alt="" className="rounded-xl max-w-full max-h-48 object-cover mb-1" />
         )}
         {msg.type === 'AUDIO' && msg.mediaUrl && (
           <audio controls src={resolveMediaUrl(msg.mediaUrl)} className="max-w-[200px]" />

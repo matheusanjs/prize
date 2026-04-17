@@ -188,7 +188,7 @@ function LogDetailSheet({ log, onClose }: { log: FuelLog; onClose: () => void })
         </div>
         <div className="p-5 space-y-4 pb-10">
           {log.imageUrl ? (
-            <img src={log.imageUrl} alt="Foto" className="w-full rounded-2xl object-contain max-h-72 bg-[var(--subtle)] border border-[var(--border)]" />
+            <img loading="lazy" decoding="async" src={log.imageUrl} alt="Foto" className="w-full rounded-2xl object-contain max-h-72 bg-[var(--subtle)] border border-[var(--border)]" />
           ) : (
             <div className="flex items-center justify-center h-24 bg-[var(--subtle)] rounded-2xl border border-dashed border-[var(--border)]">
               <p className="text-[var(--text-muted)] text-sm">Sem foto registrada</p>
@@ -467,18 +467,18 @@ function NewFuelingModal({ currentPrice, onClose, onSuccess }: {
                     <div className="relative rounded-2xl overflow-hidden border border-[var(--border)] bg-[var(--subtle)]">
                       {isCropping ? (
                         <ReactCrop crop={crop} onChange={c => setCrop(c)} className="max-h-72">
-                          <img ref={imgRef} src={imagePreview} alt="Painel" className="w-full max-h-72 object-contain block" />
+                          <img loading="lazy" decoding="async" ref={imgRef} src={imagePreview} alt="Painel" className="w-full max-h-72 object-contain block" />
                         </ReactCrop>
                       ) : croppedPreview ? (
                         <div className="relative">
-                          <img src={croppedPreview} alt="Recortado" className="w-full max-h-72 object-contain" />
+                          <img loading="lazy" decoding="async" src={croppedPreview} alt="Recortado" className="w-full max-h-72 object-contain" />
                           <div className="absolute top-2 left-2 bg-emerald-500/90 text-white text-xs px-2 py-1 rounded-lg flex items-center gap-1.5">
                             <CheckCircle2 className="w-3 h-3" />Medidor recortado
                           </div>
-                          <img ref={imgRef} src={imagePreview} alt="" className="hidden" />
+                          <img loading="lazy" decoding="async" ref={imgRef} src={imagePreview} alt="" className="hidden" />
                         </div>
                       ) : (
-                        <img ref={imgRef} src={imagePreview} alt="Painel" className="w-full max-h-72 object-contain" />
+                        <img loading="lazy" decoding="async" ref={imgRef} src={imagePreview} alt="Painel" className="w-full max-h-72 object-contain" />
                       )}
                       <button onClick={() => { setImagePreview(null); setImageBase64(''); setCrop(undefined); setCroppedPreview(null); setIsCropping(false); }}
                         className="absolute top-2 right-2 bg-black/60 text-white rounded-full p-1.5"><X className="w-3.5 h-3.5" /></button>
@@ -565,7 +565,7 @@ function NewFuelingModal({ currentPrice, onClose, onSuccess }: {
                           {returnInspection.returnFuelPhotoUrl ? 'Foto do tanque — Inspeção de Retorno' : 'Foto do tanque — Checklist de Saída'}
                         </span>
                       </div>
-                      <img src={returnInspection.returnFuelPhotoUrl || returnInspection.fuelPhotoUrl} alt="Tanque" className="w-full max-h-48 object-contain rounded-lg" />
+                      <img loading="lazy" decoding="async" src={returnInspection.returnFuelPhotoUrl || returnInspection.fuelPhotoUrl} alt="Tanque" className="w-full max-h-48 object-contain rounded-lg" />
                       {returnInspection.cotistaName && (
                         <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">Cotista: {returnInspection.cotistaName}</p>
                       )}
@@ -612,7 +612,7 @@ function NewFuelingModal({ currentPrice, onClose, onSuccess }: {
                       <p className="text-sm text-[var(--text-secondary)] mb-2 font-medium">Foto (opcional)</p>
                       {imagePreview ? (
                         <div className="relative rounded-xl overflow-hidden border border-[var(--border)]">
-                          <img src={imagePreview} alt="Foto" className="w-full h-36 object-cover" />
+                          <img loading="lazy" decoding="async" src={imagePreview} alt="Foto" className="w-full h-36 object-cover" />
                           <button onClick={() => { setImagePreview(null); setImageBase64(''); }}
                             className="absolute top-2 right-2 bg-black/60 text-white rounded-full p-1.5"><X className="w-3.5 h-3.5" /></button>
                         </div>

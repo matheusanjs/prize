@@ -51,7 +51,7 @@ export default function SharePage() {
     <div className="min-h-screen bg-gradient-to-b from-blue-950 via-blue-900 to-black text-white">
       {/* Hero */}
       <div className="relative h-[50vh] overflow-hidden">
-        {photo && <img src={resolveMediaUrl(photo)} alt="" className="absolute inset-0 w-full h-full object-cover" />}
+        {photo && <img loading="lazy" decoding="async" src={resolveMediaUrl(photo)} alt="" className="absolute inset-0 w-full h-full object-cover" />}
         <div className="absolute inset-0 bg-gradient-to-t from-blue-950 via-blue-950/40 to-transparent" />
 
         {trip.isOfficial && (
@@ -71,7 +71,7 @@ export default function SharePage() {
             <h1 className="text-3xl font-extrabold leading-tight">{trip.title}</h1>
             <div className="flex items-center gap-2 mt-2">
               {trip.creator?.avatar ? (
-                <img src={resolveMediaUrl(trip.creator.avatar)} alt="" className="w-6 h-6 rounded-full object-cover" />
+                <img loading="lazy" decoding="async" src={resolveMediaUrl(trip.creator.avatar)} alt="" className="w-6 h-6 rounded-full object-cover" />
               ) : (
                 <div className="w-6 h-6 rounded-full bg-blue-400/20 flex items-center justify-center text-xs font-bold text-blue-300">
                   {trip.creator?.name?.[0]}
@@ -123,7 +123,7 @@ export default function SharePage() {
         {trip.photos?.length > 1 && (
           <div className="grid grid-cols-2 gap-2">
             {trip.photos.slice(1, 5).map((p: any) => (
-              <img key={p.id} src={resolveMediaUrl(p.url)} alt="" className="w-full h-32 object-cover rounded-xl" />
+              <img loading="lazy" decoding="async" key={p.id} src={resolveMediaUrl(p.url)} alt="" className="w-full h-32 object-cover rounded-xl" />
             ))}
           </div>
         )}

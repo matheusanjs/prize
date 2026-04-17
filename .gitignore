@@ -28,3 +28,7 @@ pnpm-debug.log*
 backend/uploads/
 tmp/
 temp/backend/whatsapp-auth/
+
+# WhatsApp session credentials (NEVER commit)
+backend/whatsapp-auth/
+backend/whatsapp-auth-backup-*/

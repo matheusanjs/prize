@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { BullModule } from '@nestjs/bullmq';
@@ -7,8 +7,7 @@ import { ServeStaticModule } from '@nestjs/serve-static';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { join } from 'path';
 import { DatabaseModule } from './database/database.module';
-import { AuthModule } from './modules/auth/auth.module';
-import { UsersModule } from './modules/users/users.module';
+import { AuthModule } from './modules/auth/auth.module';import { UsersModule } from './modules/users/users.module';
 import { BoatsModule } from './modules/boats/boats.module';
 import { SharesModule } from './modules/shares/shares.module';
 import { ReservationsModule } from './modules/reservations/reservations.module';
@@ -28,7 +27,9 @@ import { WaiterPanelModule } from './modules/waiter-panel/waiter-panel.module';
 import { WeatherModule } from './modules/weather/weather.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
+import { HealthModule } from './modules/health/health.module';
 import { SocialModule } from './modules/social/social.module';
+import { AuditLogInterceptor } from './interceptors/audit-log.interceptor';
 
 @Module({
   imports: [
@@ -74,9 +75,11 @@ import { SocialModule } from './modules/social/social.module';
     PaymentsModule,
     WhatsAppModule,
     SocialModule,
+    HealthModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
   ],
 })
 export class AppModule {}

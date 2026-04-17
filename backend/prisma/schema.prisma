@@ -1021,3 +1021,21 @@ model TripLike {
   @@index([tripId])
   @@map("trip_likes")
 }
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  method      String
+  route       String
+  statusCode  Int
+  durationMs  Int
+  ip          String?
+  userAgent   String?
+  error       String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([route, createdAt])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

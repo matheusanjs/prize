@@ -643,7 +643,7 @@ function CLDetailSheet({ cl: initialCL, onClose }: { cl: ChecklistEntry; onClose
       {zoomImg && (
         <div className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-4" onClick={() => setZoomImg(null)}>
           <button onClick={() => setZoomImg(null)} className="absolute top-4 right-4 text-white/70 hover:text-white z-10"><X className="w-7 h-7" /></button>
-          <img src={resolveMediaUrl(zoomImg)} alt="Zoom" className="max-w-full max-h-full object-contain rounded-xl" onClick={e => e.stopPropagation()} />
+          <img loading="lazy" decoding="async" src={resolveMediaUrl(zoomImg)} alt="Zoom" className="max-w-full max-h-full object-contain rounded-xl" onClick={e => e.stopPropagation()} />
         </div>
       )}
       <div className="bg-[var(--card)] rounded-t-3xl w-full max-h-[85vh] overflow-y-auto">
@@ -702,10 +702,10 @@ function CLDetailSheet({ cl: initialCL, onClose }: { cl: ChecklistEntry; onClose
                   {openSection === 'd-fuel' && (
                     <div className="grid grid-cols-2 gap-px bg-[var(--border)]">
                       <div className="bg-[var(--card)] p-2">
-                        {cl.fuelPhotoUrl ? <img src={resolveMediaUrl(cl.fuelPhotoUrl)} alt="Saída" className="w-full rounded-lg object-contain max-h-36 cursor-pointer active:scale-95 transition-transform" onClick={() => setZoomImg(cl.fuelPhotoUrl!)} /> : <p className="text-xs text-[var(--text-muted)] text-center py-6">—</p>}
+                        {cl.fuelPhotoUrl ? <img loading="lazy" decoding="async" src={resolveMediaUrl(cl.fuelPhotoUrl)} alt="Saída" className="w-full rounded-lg object-contain max-h-36 cursor-pointer active:scale-95 transition-transform" onClick={() => setZoomImg(cl.fuelPhotoUrl!)} /> : <p className="text-xs text-[var(--text-muted)] text-center py-6">—</p>}
                       </div>
                       <div className="bg-[var(--card)] p-2">
-                        {cl.returnFuelPhotoUrl ? <img src={resolveMediaUrl(cl.returnFuelPhotoUrl)} alt="Retorno" className="w-full rounded-lg object-contain max-h-36 cursor-pointer active:scale-95 transition-transform" onClick={() => setZoomImg(cl.returnFuelPhotoUrl!)} /> : <p className="text-xs text-[var(--text-muted)] text-center py-6">—</p>}
+                        {cl.returnFuelPhotoUrl ? <img loading="lazy" decoding="async" src={resolveMediaUrl(cl.returnFuelPhotoUrl)} alt="Retorno" className="w-full rounded-lg object-contain max-h-36 cursor-pointer active:scale-95 transition-transform" onClick={() => setZoomImg(cl.returnFuelPhotoUrl!)} /> : <p className="text-xs text-[var(--text-muted)] text-center py-6">—</p>}
                       </div>
                     </div>
                   )}
@@ -759,7 +759,7 @@ function CLDetailSheet({ cl: initialCL, onClose }: { cl: ChecklistEntry; onClose
                   </button>
                   {openSection === 'd-sketch' && (
                     <div className="p-3 pt-0 bg-[var(--card)]">
-                      {cl.hullSketchMarks ? <JetSki3DMarkViewer marksJson={cl.hullSketchMarks} height={220} /> : cl.hullSketchUrl ? <img src={resolveMediaUrl(cl.hullSketchUrl)} alt="Croqui" className="w-full" /> : null}
+                      {cl.hullSketchMarks ? <JetSki3DMarkViewer marksJson={cl.hullSketchMarks} height={220} /> : cl.hullSketchUrl ? <img loading="lazy" decoding="async" src={resolveMediaUrl(cl.hullSketchUrl)} alt="Croqui" className="w-full" /> : null}
                     </div>
                   )}
                 </div>
@@ -771,7 +771,7 @@ function CLDetailSheet({ cl: initialCL, onClose }: { cl: ChecklistEntry; onClose
                     <ChevronRight className={`w-4 h-4 text-[var(--text-muted)] transition-transform ${openSection === 'd-fuel' ? 'rotate-90' : ''}`} />
                   </button>
                   {openSection === 'd-fuel' && <div className="p-3 pt-0 bg-[var(--card)]">
-                    {cl.fuelPhotoUrl ? <img src={resolveMediaUrl(cl.fuelPhotoUrl)} alt="Tanque" className="w-full object-contain max-h-48 rounded-xl cursor-pointer active:scale-95 transition-transform" onClick={() => setZoomImg(cl.fuelPhotoUrl!)} />
+                    {cl.fuelPhotoUrl ? <img loading="lazy" decoding="async" src={resolveMediaUrl(cl.fuelPhotoUrl)} alt="Tanque" className="w-full object-contain max-h-48 rounded-xl cursor-pointer active:scale-95 transition-transform" onClick={() => setZoomImg(cl.fuelPhotoUrl!)} />
                       : mediaLoading ? <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-[var(--text-muted)]" /></div>
                       : <p className="text-xs text-[var(--text-muted)] text-center py-4">Carregando...</p>}
                   </div>}
@@ -1188,7 +1188,7 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
               ) : (
                 <div className="space-y-3">
                   <div className="rounded-xl overflow-hidden border border-[var(--border)]">
-                    <img src={URL.createObjectURL(fuelPhotoFile)} alt="Tanque" className="w-full object-contain max-h-48" />
+                    <img loading="lazy" decoding="async" src={URL.createObjectURL(fuelPhotoFile)} alt="Tanque" className="w-full object-contain max-h-48" />
                   </div>
                   <div className="bg-[var(--subtle)] border border-[var(--border)] rounded-xl p-3 flex items-center gap-3">
                     <span className="text-xl">⛽</span>
@@ -1313,7 +1313,7 @@ function ChecklistComparisonView({ selected, onBack }: { selected: ClientCheckli
       {zoomImg && (
         <div className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-4" onClick={() => setZoomImg(null)}>
           <button onClick={() => setZoomImg(null)} className="absolute top-4 right-4 text-white/70 hover:text-white z-10"><X className="w-7 h-7" /></button>
-          <img src={resolveMediaUrl(zoomImg)} alt="Zoom" className="max-w-full max-h-full object-contain rounded-xl" onClick={e => e.stopPropagation()} />
+          <img loading="lazy" decoding="async" src={resolveMediaUrl(zoomImg)} alt="Zoom" className="max-w-full max-h-full object-contain rounded-xl" onClick={e => e.stopPropagation()} />
         </div>
       )}
 
@@ -1414,12 +1414,12 @@ function ChecklistComparisonView({ selected, onBack }: { selected: ClientCheckli
                   <div className="grid grid-cols-2 gap-px bg-[var(--border)]">
                     <div className="bg-[var(--card)] p-2">
                       {selected.fuelPhotoUrl
-                        ? <img src={resolveMediaUrl(selected.fuelPhotoUrl)} alt="Tanque saída" className="w-full rounded-xl object-contain max-h-40 cursor-pointer active:scale-95 transition-transform" onClick={() => setZoomImg(selected.fuelPhotoUrl!)} />
+                        ? <img loading="lazy" decoding="async" src={resolveMediaUrl(selected.fuelPhotoUrl)} alt="Tanque saída" className="w-full rounded-xl object-contain max-h-40 cursor-pointer active:scale-95 transition-transform" onClick={() => setZoomImg(selected.fuelPhotoUrl!)} />
                         : <p className="text-xs text-[var(--text-muted)] text-center py-8">Sem foto</p>}
                     </div>
                     <div className="bg-[var(--card)] p-2">
                       {selected.returnFuelPhotoUrl
-                        ? <img src={resolveMediaUrl(selected.returnFuelPhotoUrl)} alt="Tanque retorno" className="w-full rounded-xl object-contain max-h-40 cursor-pointer active:scale-95 transition-transform" onClick={() => setZoomImg(selected.returnFuelPhotoUrl!)} />
+                        ? <img loading="lazy" decoding="async" src={resolveMediaUrl(selected.returnFuelPhotoUrl)} alt="Tanque retorno" className="w-full rounded-xl object-contain max-h-40 cursor-pointer active:scale-95 transition-transform" onClick={() => setZoomImg(selected.returnFuelPhotoUrl!)} />
                         : <p className="text-xs text-[var(--text-muted)] text-center py-8">Sem foto</p>}
                     </div>
                   </div>
@@ -1486,7 +1486,7 @@ function ChecklistComparisonView({ selected, onBack }: { selected: ClientCheckli
                   <div className="p-3 pt-0">
                     {selected.hullSketchMarks
                       ? <JetSki3DMarkViewer marksJson={selected.hullSketchMarks} height={260} />
-                      : <img src={resolveMediaUrl(selected.hullSketchUrl)} alt="Croqui" className="w-full object-contain max-h-60 rounded-xl cursor-pointer active:scale-95 transition-transform" onClick={() => setZoomImg(selected.hullSketchUrl!)} />}
+                      : <img loading="lazy" decoding="async" src={resolveMediaUrl(selected.hullSketchUrl)} alt="Croqui" className="w-full object-contain max-h-60 rounded-xl cursor-pointer active:scale-95 transition-transform" onClick={() => setZoomImg(selected.hullSketchUrl!)} />}
                   </div>
                 )}
               </div>
@@ -1499,7 +1499,7 @@ function ChecklistComparisonView({ selected, onBack }: { selected: ClientCheckli
                 </button>
                 {openSection === 'fuel' && (
                   <div className="p-3 pt-0">
-                    <img src={resolveMediaUrl(selected.fuelPhotoUrl)} alt="Tanque" className="w-full object-contain max-h-60 rounded-xl cursor-pointer active:scale-95 transition-transform" onClick={() => setZoomImg(selected.fuelPhotoUrl!)} />
+                    <img loading="lazy" decoding="async" src={resolveMediaUrl(selected.fuelPhotoUrl)} alt="Tanque" className="w-full object-contain max-h-60 rounded-xl cursor-pointer active:scale-95 transition-transform" onClick={() => setZoomImg(selected.fuelPhotoUrl!)} />
                   </div>
                 )}
               </div>
@@ -1698,7 +1698,7 @@ function ReturnInspectionModal({ item, onClose, onConfirm }: {
               <div className="border-2 border-dashed border-[var(--border)] rounded-xl p-4">
                 <input type="file" accept="image/*" capture="environment" onChange={handleFuelPhoto}
                   className="block w-full text-sm text-[var(--text-muted)] file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-blue-500 file:text-white file:font-medium file:cursor-pointer" />
-                {fuelPreview && <img src={fuelPreview} alt="Tanque" className="mt-3 w-full max-h-48 object-contain rounded-xl" />}
+                {fuelPreview && <img loading="lazy" decoding="async" src={fuelPreview} alt="Tanque" className="mt-3 w-full max-h-48 object-contain rounded-xl" />}
               </div>
               <div className="flex gap-2 pt-2">
                 <button onClick={() => setStep('sketch')} className="flex items-center gap-2 px-4 py-2.5 border border-[var(--border)] text-[var(--text-muted)] rounded-xl text-sm hover:bg-[var(--bg)]"><ChevronLeft className="w-4 h-4" />Voltar</button>
@@ -1719,7 +1719,7 @@ function ReturnInspectionModal({ item, onClose, onConfirm }: {
                 {lifeVests > 0 && <div className="flex justify-between text-amber-600 font-bold"><span>🦺 Coletes emprestados</span><span>{lifeVests}</span></div>}
                 {observations && <div><span className="text-[var(--text-muted)]">Observações:</span><p className="text-[var(--text)] mt-1">{observations}</p></div>}
               </div>
-              {fuelPreview && <img src={fuelPreview} alt="Tanque" className="w-full max-h-32 object-contain rounded-xl border border-[var(--border)]" />}
+              {fuelPreview && <img loading="lazy" decoding="async" src={fuelPreview} alt="Tanque" className="w-full max-h-32 object-contain rounded-xl border border-[var(--border)]" />}
               <div className="flex gap-2 pt-2">
                 <button onClick={() => setStep('fuel')} className="flex items-center gap-2 px-4 py-2.5 border border-[var(--border)] text-[var(--text-muted)] rounded-xl text-sm hover:bg-[var(--bg)]"><ChevronLeft className="w-4 h-4" />Voltar</button>
                 <button onClick={handleSubmit} disabled={submitting}

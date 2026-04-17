@@ -851,7 +851,7 @@ export default function ReservationsPage() {
                           isMine ? 'bg-gradient-to-br from-primary-500/15 to-primary-400/5' : 'bg-[var(--subtle)]'
                         }`}>
                           {r.user?.avatar ? (
-                            <img src={resolveMediaUrl(r.user.avatar)} alt={r.user.name || ''} className="w-full h-full object-cover" />
+                            <img loading="lazy" decoding="async" src={resolveMediaUrl(r.user.avatar)} alt={r.user.name || ''} className="w-full h-full object-cover" />
                           ) : (
                             <User size={16} className={isMine ? 'text-primary-500' : 'text-[var(--text-muted)]'} />
                           )}
