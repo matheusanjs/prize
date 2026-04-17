@@ -48,16 +48,81 @@ export class PushService implements OnModuleInit {
     return this.prisma.pushSubscription.deleteMany({ where: { userId } });
   }
 
-  async registerDeviceToken(userId: string, token: string, platform = 'ios') {
+  async registerDeviceToken(
+    userId: string,
+    token: string,
+    platform: string = 'ios',
+    meta: {
+      deviceName?: string;
+      osVersion?: string;
+      appVersion?: string;
+      locale?: string;
+      timezone?: string;
+      bundleId?: string;
+      enabled?: boolean;
+    } = {},
+  ) {
     return this.prisma.deviceToken.upsert({
       where: { token },
-      update: { userId, platform },
-      create: { userId, token, platform },
+      update: {
+        userId,
+        platform,
+        deviceName: meta.deviceName,
+        osVersion: meta.osVersion,
+        appVersion: meta.appVersion,
+        locale: meta.locale,
+        timezone: meta.timezone,
+        bundleId: meta.bundleId,
+        enabled: meta.enabled ?? true,
+        lastSeenAt: new Date(),
+      },
+      create: {
+        userId,
+        token,
+        platform,
+        deviceName: meta.deviceName,
+        osVersion: meta.osVersion,
+        appVersion: meta.appVersion,
+        locale: meta.locale,
+        timezone: meta.timezone,
+        bundleId: meta.bundleId,
+        enabled: meta.enabled ?? true,
+      },
     });
   }
 
   async removeDeviceToken(token: string) {
     return this.prisma.deviceToken.deleteMany({ where: { token } });
+  }
+
+  /** Record a client-side notification event (delivered/opened/dismissed/action). */
+  async recordEvent(
+    userId: string,
+    input: {
+      kind: 'DELIVERED' | 'OPENED' | 'DISMISSED' | 'ACTION';
+      token?: string;
+      notificationId?: string;
+      messageId?: string;
+      data?: Record<string, any>;
+    },
+  ) {
+    let deviceTokenId: string | undefined;
+    if (input.token) {
+      const dt = await this.prisma.deviceToken
+        .findUnique({ where: { token: input.token } })
+        .catch(() => null);
+      deviceTokenId = dt?.id;
+    }
+    return this.prisma.notificationEvent.create({
+      data: {
+        userId,
+        kind: input.kind,
+        deviceTokenId,
+        notificationId: input.notificationId,
+        messageId: input.messageId,
+        data: input.data ?? undefined,
+      },
+    });
   }
 
   async sendToUser(userId: string, payload: PushPayload): Promise<{ queued: true }> {

@@ -55,15 +55,77 @@ export class NotificationsController {
   @ApiOperation({ summary: 'Registrar device token (iOS/Android nativo)' })
   registerDeviceToken(
     @CurrentUser('id') userId: string,
-    @Body() body: { token: string; platform?: string },
+    @Body() body: {
+      token: string;
+      platform?: string;
+      deviceName?: string;
+      osVersion?: string;
+      appVersion?: string;
+      locale?: string;
+      timezone?: string;
+      bundleId?: string;
+      enabled?: boolean;
+    },
   ) {
-    return this.pushService.registerDeviceToken(userId, body.token, body.platform || 'ios');
+    return this.pushService.registerDeviceToken(userId, body.token, body.platform || 'ios', {
+      deviceName: body.deviceName,
+      osVersion: body.osVersion,
+      appVersion: body.appVersion,
+      locale: body.locale,
+      timezone: body.timezone,
+      bundleId: body.bundleId,
+      enabled: body.enabled,
+    });
   }
 
   @Delete('push/device-token')
   @ApiOperation({ summary: 'Remover device token' })
   removeDeviceToken(@Body() body: { token: string }) {
     return this.pushService.removeDeviceToken(body.token);
+  }
+
+  /* ─── Analytics ─── */
+
+  @Post('push/events/delivered')
+  @ApiOperation({ summary: 'Push recebido pelo dispositivo' })
+  eventDelivered(
+    @CurrentUser('id') userId: string,
+    @Body() body: { token?: string; notificationId?: string; messageId?: string; data?: Record<string, any> },
+  ) {
+    return this.pushService.recordEvent(userId, { kind: 'DELIVERED', ...body });
+  }
+
+  @Post('push/events/opened')
+  @ApiOperation({ summary: 'Usuário abriu notificação' })
+  eventOpened(
+    @CurrentUser('id') userId: string,
+    @Body() body: { token?: string; notificationId?: string; messageId?: string; data?: Record<string, any> },
+  ) {
+    return this.pushService.recordEvent(userId, { kind: 'OPENED', ...body });
+  }
+
+  @Post('push/events/dismissed')
+  @ApiOperation({ summary: 'Usuário dispensou notificação' })
+  eventDismissed(
+    @CurrentUser('id') userId: string,
+    @Body() body: { token?: string; notificationId?: string; messageId?: string; data?: Record<string, any> },
+  ) {
+    return this.pushService.recordEvent(userId, { kind: 'DISMISSED', ...body });
+  }
+
+  @Post('push/events/action')
+  @ApiOperation({ summary: 'Usuário usou ação interativa na notificação' })
+  eventAction(
+    @CurrentUser('id') userId: string,
+    @Body() body: { token?: string; notificationId?: string; messageId?: string; actionId?: string; data?: Record<string, any> },
+  ) {
+    return this.pushService.recordEvent(userId, {
+      kind: 'ACTION',
+      token: body.token,
+      notificationId: body.notificationId,
+      messageId: body.messageId,
+      data: { ...(body.data || {}), actionId: body.actionId },
+    });
   }
 
   @Delete('push/unsubscribe')

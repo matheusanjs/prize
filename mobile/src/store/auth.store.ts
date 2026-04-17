@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import api, { authApi } from '../services/api';
+import { unregisterFromPush } from '../services/push';
 
 interface User {
   id: string;
@@ -40,6 +41,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: async () => {
+    // Best-effort: remove this device from the user's push audience BEFORE
+    // we drop the access token (API needs the Bearer header to authorize).
+    try { await unregisterFromPush(); } catch { /* ignore */ }
     try { await authApi.logout(); } catch {}
     await SecureStore.deleteItemAsync('accessToken');
     await SecureStore.deleteItemAsync('refreshToken');

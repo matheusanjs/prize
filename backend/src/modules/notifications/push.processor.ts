@@ -51,8 +51,10 @@ export class PushProcessor extends WorkerHost {
     let sent = 0;
     let failed = 0;
 
-    // 1. Web Push in parallel (with timeout)
-    const subs = await this.prisma.pushSubscription.findMany({ where: { userId } });
+    // 1. Web Push in parallel (with timeout). Skip for silent iOS-only pushes.
+    const subs = payload.silent
+      ? []
+      : await this.prisma.pushSubscription.findMany({ where: { userId } });
     if (subs.length > 0) {
       const webResults = await Promise.allSettled(
         subs.map((sub) =>
@@ -101,16 +103,36 @@ export class PushProcessor extends WorkerHost {
         const apnResults = await Promise.allSettled(
           tokens.map((dt) => {
             const notification = new apn.Notification();
-            notification.alert = { title: payload.title, body: payload.body };
-            notification.badge = unread;
-            notification.sound = 'default';
+            const isSilent = !!payload.silent || (!payload.title && !payload.body);
+
+            // Deep-link URL: travel under data.url so clients can route on tap
+            const dataPayload: Record<string, any> = { ...(payload.data || {}) };
+            if (payload.url) dataPayload.url = payload.url;
+            if (payload.category) dataPayload.category = payload.category;
+
+            if (isSilent) {
+              // Silent / background push: no alert, content-available=1, priority 5
+              notification.pushType = 'background';
+              notification.priority = 5;
+              notification.contentAvailable = true;
+              notification.payload = dataPayload;
+            } else {
+              notification.pushType = 'alert';
+              notification.alert = { title: payload.title || '', body: payload.body || '' };
+              // node-apn's typings don't allow undefined here, use empty string to suppress.
+              notification.sound = payload.sound === null ? '' : (payload.sound || 'default');
+              notification.priority = payload.urgency === 'high' ? 10 : 5;
+              notification.payload = dataPayload;
+              notification.badge = typeof payload.badgeCount === 'number' ? payload.badgeCount : unread;
+              if (payload.category) (notification as any).category = payload.category;
+              if (payload.mutableContent) notification.mutableContent = true;
+            }
+
             notification.topic = apnTopic;
-            notification.payload = payload.data || {};
             notification.expiry = Math.floor(Date.now() / 1000) + 3600; // 1h TTL
-            notification.priority = payload.urgency === 'high' ? 10 : 5;
-            notification.pushType = 'alert';
             notification.threadId = payload.threadId || 'prize-general';
             if (payload.tag) notification.collapseId = payload.tag;
+
             return this.apnProvider!.send(notification, dt.token).then((res) => ({
               dt,
               res,

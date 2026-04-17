@@ -10,19 +10,53 @@
     "splash": {
       "image": "./src/assets/images/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#FF6B00"
+      "backgroundColor": "#0D1B2A"
+    },
+    "notification": {
+      "icon": "./src/assets/images/notification-icon.png",
+      "color": "#0D1B2A",
+      "iosDisplayInForeground": true
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.prizeclube.app"
+      "bundleIdentifier": "com.marinaprizeclub.app",
+      "buildNumber": "1",
+      "usesAppleSignIn": false,
+      "entitlements": {
+        "aps-environment": "production"
+      },
+      "infoPlist": {
+        "UIBackgroundModes": ["remote-notification", "fetch"],
+        "NSUserNotificationsUsageDescription": "Usamos notificações para avisar sobre reservas, trocas e faturas."
+      },
+      "associatedDomains": ["applinks:app.marinaprizeclub.com"]
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./src/assets/images/adaptive-icon.png",
-        "backgroundColor": "#FF6B00"
+        "backgroundColor": "#0D1B2A"
       },
-      "package": "com.prizeclube.app"
+      "package": "com.marinaprizeclub.app",
+      "googleServicesFile": "./google-services.json",
+      "useNextNotificationsApi": true
     },
-    "plugins": ["expo-router", "expo-secure-store"]
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./src/assets/images/notification-icon.png",
+          "color": "#0D1B2A",
+          "sounds": ["./src/assets/sounds/notification.wav"],
+          "mode": "production"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "prize-clube"
+      }
+    }
   }
 }

@@ -440,15 +440,48 @@ model PushSubscription {
 }
 
 model DeviceToken {
-  id        String   @id @default(cuid())
-  userId    String
-  token     String   @unique
-  platform  String   @default("ios") // ios | android
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String   @id @default(cuid())
+  userId       String
+  token        String   @unique
+  platform     String   @default("ios") // ios | android
+  // Metadata captured at registration for analytics / support / invalidation
+  deviceName   String?
+  osVersion    String?
+  appVersion   String?
+  locale       String?
+  timezone     String?
+  bundleId     String?
+  // true if push permission was granted; false => we keep the row to track opt-out
+  enabled      Boolean  @default(true)
+  lastSeenAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events       NotificationEvent[]
 
   @@index([userId])
+  @@index([platform])
   @@map("device_tokens")
+}
+
+model NotificationEvent {
+  id             String       @id @default(cuid())
+  userId         String
+  deviceTokenId  String?
+  // Kind of event: SENT | DELIVERED | OPENED | DISMISSED | ACTION
+  kind           String
+  // Optional correlation to a persisted Notification row
+  notificationId String?
+  // Optional APNs/collapse-id or client-generated messageId
+  messageId      String?
+  // Free-form metadata (action id, deep link, dwell time, etc.)
+  data           Json?
+  createdAt      DateTime     @default(now())
+  deviceToken    DeviceToken? @relation(fields: [deviceTokenId], references: [id], onDelete: SetNull)
+
+  @@index([userId, kind, createdAt])
+  @@index([notificationId])
+  @@map("notification_events")
 }
 
 model AiLog {

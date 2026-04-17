@@ -4,6 +4,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { theme } from '../src/theme';
 import { useAuthStore } from '../src/store/auth.store';
+import { usePushNotifications } from '../src/hooks/usePushNotifications';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30000 } },
@@ -13,6 +14,11 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuthStore();
   const segments = useSegments();
   const router = useRouter();
+
+  // Native iOS/Android push notifications — registers the APNs token,
+  // listens for foreground/background/terminated deliveries, handles
+  // deep-link routing and badge sync.
+  usePushNotifications(isAuthenticated);
 
   useEffect(() => {
     if (isLoading) return;
