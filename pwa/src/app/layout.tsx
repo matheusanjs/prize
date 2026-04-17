@@ -51,7 +51,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="apple-touch-icon" href="/icon-192.png" />
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className="min-h-screen font-sans">
+      <body className="font-sans" style={{ minHeight: '100dvh' }}>
         <LayoutShell>{children}</LayoutShell>
         <Toaster
           position="top-center"

@@ -16,7 +16,7 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
       {isPublicPage ? (
         <>{children}</>
       ) : (
-        <div className="min-h-screen">
+        <div style={{ minHeight: '100dvh' }}>
           <BottomNav />
           <main className="pb-20 px-4" style={{ paddingTop: 'calc(3.5rem + env(safe-area-inset-top, 0px))', paddingBottom: 'calc(5rem + env(safe-area-inset-bottom, 0px))' }}>{children}</main>
         </div>
