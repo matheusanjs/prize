@@ -181,7 +181,7 @@ export default function ProfilePage() {
   const avatarSrc = avatar || (user.avatar && user.avatar !== '' ? user.avatar : null);
 
   return (
-    <div className="py-4 pb-24 space-y-4">
+    <div className="py-4 pb-4 space-y-4">
       {/* Photo */}
       <div className="bg-[var(--card)] rounded-3xl border border-[var(--border)] p-5 flex flex-col items-center shadow-[0_2px_20px_var(--calendar-shadow)]">
         <div className="relative">

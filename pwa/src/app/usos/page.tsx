@@ -50,7 +50,7 @@ export default function UsosPage() {
   const past = usages.filter((u) => u.status !== 'IN_USE');
 
   return (
-    <div className="p-4 pb-28 space-y-4">
+    <div className="p-4 pb-4 space-y-4">
       <div className="flex items-center gap-3 pt-2">
         <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center">
           <Activity className="w-5 h-5 text-purple-500" />

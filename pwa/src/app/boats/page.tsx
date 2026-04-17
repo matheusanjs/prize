@@ -202,7 +202,7 @@ export default function BoatsPage() {
 
   if (loading) {
     return (
-      <div className="py-4 space-y-6 pb-28">
+      <div className="py-4 space-y-6 pb-4">
         {/* Shimmer loading */}
         <style dangerouslySetInnerHTML={{ __html: `
           @keyframes lxShimmer { 0% { background-position: -400px 0 } 100% { background-position: 400px 0 } }
@@ -242,7 +242,7 @@ export default function BoatsPage() {
         .lx-float { animation: lxFloat 4s ease-in-out infinite; }
       `}} />
 
-      <div className="-mx-4 -mt-2 pb-32">
+      <div className="-mx-4 -mt-2 pb-4">
 
         {/* ── HERO TRIPS CAROUSEL ── */}
         {highlightedTrips.length > 0 && (

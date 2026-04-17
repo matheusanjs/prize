@@ -181,7 +181,7 @@ export default function ComprasPage() {
   }, []);
 
   return (
-    <div className="min-h-screen pt-4 pb-20 bg-[var(--bg)]">
+    <div className="min-h-screen pt-4 pb-4 bg-[var(--bg)]">
       <div className="px-4 space-y-4">
         {loading ? (
           <div className="flex items-center justify-center py-20">

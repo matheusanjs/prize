@@ -226,7 +226,7 @@ function OperatorView() {
   ];
 
   return (
-    <div className="p-4 pb-28 space-y-4">
+    <div className="p-4 pb-4 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between pt-2">
         <div className="flex items-center gap-3">
@@ -1332,7 +1332,7 @@ function ChecklistComparisonView({ selected, onBack }: { selected: ClientCheckli
         </span>
       </div>
 
-      <div className="p-4 pb-28 space-y-3">
+      <div className="p-4 pb-4 space-y-3">
         {/* Status summary — redesigned */}
         <div className={`rounded-2xl overflow-hidden border ${hasReturn ? 'border-blue-200 dark:border-blue-500/30' : 'border-emerald-200 dark:border-emerald-500/30'}`}>
           <div className={`px-4 py-3 flex items-center gap-3 ${hasReturn ? 'bg-gradient-to-r from-blue-500/10 to-blue-500/5' : 'bg-gradient-to-r from-emerald-500/10 to-emerald-500/5'}`}>
@@ -1815,7 +1815,7 @@ function ClientView() {
   const items = tab === 'active' ? active : history;
 
   return (
-    <div className="p-4 pb-24 space-y-4">
+    <div className="p-4 pb-4 space-y-4">
       {/* Tabs */}
       <div className="flex gap-2 bg-[var(--subtle)] rounded-xl p-1">
         <button

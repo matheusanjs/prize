@@ -80,7 +80,7 @@ export default function FuelPage() {
   const totalCost   = logs.reduce((s, l) => s + (l.totalCost || l.liters * l.pricePerLiter || 0), 0);
 
   return (
-    <div className="p-4 pb-28 space-y-4">
+    <div className="p-4 pb-4 space-y-4">
       <WeatherWidget variant="operator" />
       <div className="flex items-center justify-between pt-2">
         <div className="flex items-center gap-3">

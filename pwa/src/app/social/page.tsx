@@ -401,7 +401,7 @@ function TripDetail({ trip, userId, onBack, onOpenChat, onRefresh }: {
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: gStyles }} />
-      <div className="-mx-4 -mt-2 pb-28 aFadeUp">
+      <div className="-mx-4 -mt-2 pb-4 aFadeUp">
         {/* ── HERO ── */}
         <div className="relative h-[56vh] min-h-[340px] max-h-[440px] overflow-hidden">
           {trip.photos.length > 0 ? (
@@ -633,7 +633,7 @@ function CreateTrip({ onBack, onCreated }: { onBack: () => void; onCreated: () =
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: gStyles }} />
-      <div className="-mx-4 -mt-2 pb-24 aFadeUp">
+      <div className="-mx-4 -mt-2 pb-4 aFadeUp">
         <div className="sticky top-0 z-50 px-4 py-3 flex items-center gap-3 safe-area-top" style={{ background: 'var(--header-bg)', backdropFilter: 'blur(12px)', borderBottom: '1px solid var(--border)' }}>
           <button onClick={onBack} className="p-1"><ChevronLeft size={22} className="text-[var(--text)]" /></button>
           <div>
