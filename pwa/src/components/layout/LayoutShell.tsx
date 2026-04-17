@@ -74,10 +74,10 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
           <BottomNav />
           <main
             ref={mainRef}
-            className="flex-1 no-bounce"
+            className="flex-1 no-bounce main-safe-bottom"
             style={{ overflowY: 'auto', backgroundColor: 'var(--nav-bg)' }}
           >
-            <div className="px-4 main-safe-top main-safe-bottom" style={{ backgroundColor: 'var(--bg)' }}>
+            <div className="px-4 main-safe-top" style={{ backgroundColor: 'var(--bg)' }}>
               {children}
             </div>
           </main>
