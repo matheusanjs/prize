@@ -3,13 +3,11 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { Plus, X, ChevronLeft, ChevronRight, Clock, Ship, User, AlertCircle, Calendar, ArrowLeftRight, CheckCircle2, ChevronDown, ChevronUp, Sun, Wind } from 'lucide-react';
 import { useAuth } from '@/contexts/auth';
-import { getMyReservations, createReservation, cancelReservation, getShares, getBoatReservations, getBoatCalendar, getWeatherForecast, getWeatherHistory, createSwapRequest, confirmArrival, invalidateCache } from '@/services/api';
+import { getMyReservations, createReservation, cancelReservation, getShares, getAllBoatReservations, getWeatherForecast, getWeatherHistory, createSwapRequest, confirmArrival, invalidateCache } from '@/services/api';
 import { format, startOfMonth, endOfMonth, addMonths, subMonths, eachDayOfInterval, isSameDay, isToday, parseISO, isBefore, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import WeatherTimeline, { buildTimelineFromHistory, buildTimelineFromForecast } from '@/components/WeatherTimeline';
-import { useReservationPolling } from '@/hooks/useReservationPolling';
 import { useReservationsRealtime } from '@/hooks/useReservationsRealtime';
-import { saveCalendarCache, loadCalendarCache } from '@/utils/calendarCache';
 import { handleApiError, toastSuccess } from '@/lib/errors';
 
 interface ForecastDay {
@@ -96,9 +94,8 @@ export default function ReservationsPage() {
   const [confirmSaving, setConfirmSaving] = useState(false);
   const [confirmError, setConfirmError] = useState('');
 
-  // Track the latest in-flight request key — ignore stale responses
-  const dayResRequestRef = useRef<string | null>(null);
-  const calendarRequestRef = useRef<string | null>(null);
+  // Track the latest in-flight snapshot request — ignore stale responses
+  const snapshotRequestRef = useRef<string | null>(null);
 
   // ─── Load boats + weather + limit (parallel) ────────────────────────
   const [shareCache, setShareCache] = useState<any[]>([]);
@@ -183,69 +180,30 @@ export default function ReservationsPage() {
     })();
   }, [selectedBoatId, shareCache]);
 
-  // ─── Calendar: instant clear on boat/month change, then fetch ────────────
+  // ─── Snapshot: load ALL reservations for the boat ONCE per boat change ─
+  // After this, month navigation + day selection are instant (derived from state).
+  // Refetch happens only on user actions (create/cancel/swap) or realtime events.
+  const loadSnapshot = useCallback(async () => {
+    if (!selectedBoatId) return;
+    const reqKey = `snap-${selectedBoatId}-${Date.now()}`;
+    snapshotRequestRef.current = reqKey;
+    try {
+      const { data } = await getAllBoatReservations(selectedBoatId, { pastDays: 60, futureMonths: 12 });
+      if (snapshotRequestRef.current !== reqKey) return;
+      const list: Reservation[] = Array.isArray(data) ? data : data.data || [];
+      setCalendarReservations(list);
+    } catch {
+      // Keep previous data on error
+    }
+  }, [selectedBoatId]);
+
   useEffect(() => {
     if (!selectedBoatId) return;
-    // Immediately clear stale data so old boat's reservations don't linger
+    // Reset stale data from previous boat immediately so UI doesn't flash old info
     setCalendarReservations([]);
-    setSelectedDayReservations([]);
     setIsRefreshing(true);
-
-    const month = currentMonth.getMonth() + 1;
-    const year = currentMonth.getFullYear();
-    const reqKey = `cal-${selectedBoatId}-${year}-${month}`;
-    calendarRequestRef.current = reqKey;
-
-    // Try cache first for instant display
-    const cached = loadCalendarCache(selectedBoatId);
-    if (cached && Array.isArray(cached)) {
-      setCalendarReservations(cached as Reservation[]);
-    }
-
-    // Fetch fresh data
-    getBoatCalendar(selectedBoatId, month, year)
-      .then(({ data }) => {
-        if (calendarRequestRef.current !== reqKey) return;
-        const list = Array.isArray(data) ? data : data.data || [];
-        setCalendarReservations(list);
-        saveCalendarCache(list, selectedBoatId);
-      })
-      .catch(() => {
-        // If fetch failed and we have no cache, keep the empty state
-      })
-      .finally(() => {
-        if (calendarRequestRef.current === reqKey) setIsRefreshing(false);
-      });
-  }, [selectedBoatId, currentMonth]);
-
-  // ─── Poll every 10 seconds for near-real-time sync ─────────────────
-  useReservationPolling({
-    enabled: !!selectedBoatId,
-    intervalMs: 10_000,
-    onPoll: useCallback(async () => {
-      if (!selectedBoatId) return;
-      const month = currentMonth.getMonth() + 1;
-      const year = currentMonth.getFullYear();
-      const reqKey = `cal-${selectedBoatId}-${year}-${month}`;
-      calendarRequestRef.current = reqKey;
-      try {
-        const { data } = await getBoatCalendar(selectedBoatId, month, year);
-        if (calendarRequestRef.current !== reqKey) return;
-        const list = Array.isArray(data) ? data : data.data || [];
-        setCalendarReservations(list);
-        saveCalendarCache(list, selectedBoatId);
-      } catch { /* keep cached data on error */ }
-      // Also refresh selected day details if a date is selected
-      if (selectedDate && selectedBoatId) {
-        const dateStr = format(selectedDate, 'yyyy-MM-dd');
-        try {
-          const { data: dayData } = await getBoatReservations(selectedBoatId, dateStr);
-          const dayList = Array.isArray(dayData) ? dayData : dayData.data || [];
-          setSelectedDayReservations(dayList.filter((r: Reservation) => r.status !== 'CANCELLED'));
-        } catch { /* keep existing */ }
-      }
-    }, [selectedBoatId, currentMonth, selectedDate]),
-  });
+    loadSnapshot().finally(() => setIsRefreshing(false));
+  }, [selectedBoatId, loadSnapshot]);
 
   // ─── Realtime WebSocket sync — instant peer updates (<100ms) ───────
   const authToken = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
@@ -288,65 +246,52 @@ export default function ReservationsPage() {
       setSelectedDayReservations(prev => prev.map(x => x.id === r.id ? { ...x, ...r } : x));
     }, []),
     onSwapAccepted: useCallback(() => {
-      // Swap changes two rows — safer to reload
-      loadCalendar();
-      if (selectedDate && selectedBoatId) loadSelectedDayReservations(selectedBoatId, selectedDate);
-    }, [selectedDate, selectedBoatId]),
+      // Swap changes two rows — safest path: reload snapshot
+      loadSnapshot();
+    }, [loadSnapshot]),
   });
 
-  // Shared reload helper for mutations
-  const loadCalendar = useCallback(async () => {
-    if (!selectedBoatId) return;
-    const month = currentMonth.getMonth() + 1;
-    const year = currentMonth.getFullYear();
-    const reqKey = `cal-${selectedBoatId}-${year}-${month}`;
-    calendarRequestRef.current = reqKey;
-    try {
-      const { data } = await getBoatCalendar(selectedBoatId, month, year);
-      if (calendarRequestRef.current !== reqKey) return;
-      const list = Array.isArray(data) ? data : data.data || [];
-      setCalendarReservations(list);
-      saveCalendarCache(list, selectedBoatId);
-    } catch { /* empty */ }
-  }, [selectedBoatId, currentMonth]);
-
-  // ─── Selected day reservations (NO debounce — fetch immediately) ────
-  const loadSelectedDayReservations = useCallback(async (boatId: string, date: Date) => {
-    const dateStr = format(date, 'yyyy-MM-dd');
-    const key = `day-${boatId}-${dateStr}`;
-    dayResRequestRef.current = key;
-    try {
-      const { data } = await getBoatReservations(boatId, dateStr);
-      if (dayResRequestRef.current !== key) return;
-      const list = Array.isArray(data) ? data : data.data || [];
-      setSelectedDayReservations(list.filter((r: Reservation) => r.status !== 'CANCELLED'));
-    } catch { setSelectedDayReservations([]); }
-  }, []);
-
+  // ─── Derive selected day reservations from the snapshot (zero-latency) ───
+  // When the user taps a date, we just filter the already-loaded data.
   useEffect(() => {
     if (!selectedBoatId || !selectedDate) {
       setSelectedDayReservations([]);
       return;
     }
     setShowWeatherChart(false);
-    loadSelectedDayReservations(selectedBoatId, selectedDate);
-  }, [selectedBoatId, selectedDate, loadSelectedDayReservations]);
+    const key = format(selectedDate, 'yyyy-MM-dd');
+    const dayList = calendarReservations.filter((r) => {
+      if (r.status === 'CANCELLED') return false;
+      const s = parseISO(r.startDate);
+      const e = parseISO(r.endDate);
+      let curY = s.getFullYear(), curM = s.getMonth(), curD = s.getDate();
+      const eY = e.getFullYear(), eM = e.getMonth(), eD = e.getDate();
+      while (curY < eY || (curY === eY && curM < eM) || (curY === eY && curM === eM && curD <= eD)) {
+        const k = `${curY}-${String(curM + 1).padStart(2, '0')}-${String(curD).padStart(2, '0')}`;
+        if (k === key) return true;
+        curD++; if (curD > new Date(curY, curM + 1, 0).getDate()) { curD = 1; curM++; }
+        if (curM > 11) { curM = 0; curY++; }
+      }
+      return false;
+    });
+    setSelectedDayReservations(dayList);
+  }, [selectedBoatId, selectedDate, calendarReservations]);
 
-  // ─── Create modal boat-day reservations ─────────────────────────────
-  const loadBoatDayReservations = useCallback(async (boatId: string, date: Date) => {
-    try {
-      const dateStr = format(date, 'yyyy-MM-dd');
-      const { data } = await getBoatReservations(boatId, dateStr);
-      const list = Array.isArray(data) ? data : data.data || [];
-      setBoatDayReservations(list);
-    } catch { setBoatDayReservations([]); }
-  }, []);
-
+  // ─── Create modal: boat-day reservations are also derived from snapshot ───
   useEffect(() => {
     if (showCreate && form.boatId && selectedDate) {
-      loadBoatDayReservations(form.boatId, selectedDate);
-    } else { setBoatDayReservations([]); }
-  }, [showCreate, form.boatId, selectedDate, loadBoatDayReservations]);
+      const key = format(selectedDate, 'yyyy-MM-dd');
+      const list = calendarReservations.filter((r) => {
+        if (r.status === 'CANCELLED') return false;
+        const s = parseISO(r.startDate);
+        const sKey = format(s, 'yyyy-MM-dd');
+        return sKey === key;
+      });
+      setBoatDayReservations(list);
+    } else {
+      setBoatDayReservations([]);
+    }
+  }, [showCreate, form.boatId, selectedDate, calendarReservations]);
 
   const days = eachDayOfInterval({ start: startOfMonth(currentMonth), end: endOfMonth(currentMonth) });
   const startDay = startOfMonth(currentMonth).getDay();
@@ -477,8 +422,7 @@ export default function ReservationsPage() {
       invalidateCache('boat/');
       toastSuccess('Reserva criada!');
       // Background refresh (non-blocking) to reconcile with server truth
-      loadCalendar();
-      loadSelectedDayReservations(form.boatId, selectedDate);
+      loadSnapshot();
     } catch (err: any) {
       // ROLLBACK on failure
       setCalendarReservations(prevCalendar);
@@ -510,8 +454,7 @@ export default function ReservationsPage() {
       invalidateCache('calendar');
       invalidateCache('boat/');
       // Background refresh to reconcile
-      loadCalendar();
-      if (selectedBoatId && selectedDate) loadSelectedDayReservations(selectedBoatId, selectedDate);
+      loadSnapshot();
     } catch {
       // ROLLBACK on failure
       setCalendarReservations(prevCalendar);
@@ -535,7 +478,7 @@ export default function ReservationsPage() {
     try {
       await confirmArrival(confirmReservation.id, arrivalTime);
       setShowConfirmArrival(false);
-      await loadCalendar();
+      await loadSnapshot();
     } catch (err: any) {
       setConfirmError(err?.response?.data?.message || 'Erro ao confirmar presença');
     }

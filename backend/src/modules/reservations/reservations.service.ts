@@ -332,6 +332,37 @@ export class ReservationsService {
     });
   }
 
+  /**
+   * Returns all reservations for a boat in a wide window (default:
+   * last 30 days → next 12 months). Intended for the PWA snapshot model
+   * where the client loads once and derives per-day/per-month views in memory.
+   */
+  async getAllByBoat(boatId: string, opts?: { pastDays?: number; futureMonths?: number }) {
+    const pastDays = opts?.pastDays ?? 30;
+    const futureMonths = opts?.futureMonths ?? 12;
+
+    const now = new Date();
+    const from = new Date(now);
+    from.setDate(from.getDate() - pastDays);
+    from.setHours(0, 0, 0, 0);
+
+    const to = new Date(now);
+    to.setMonth(to.getMonth() + futureMonths);
+    to.setHours(23, 59, 59, 999);
+
+    return this.prisma.reservation.findMany({
+      where: {
+        boatId,
+        deletedAt: null,
+        status: { in: ['CONFIRMED', 'PENDING', 'IN_USE', 'COMPLETED'] },
+        startDate: { lte: to },
+        endDate: { gte: from },
+      },
+      include: { user: { select: { id: true, name: true, avatar: true } } },
+      orderBy: { startDate: 'asc' },
+    });
+  }
+
   // ─── Swap Requests ────────────────────────────────────────────────────
 
   async createSwapRequest(requesterId: string, dto: { targetReservationId: string; offeredReservationId: string; message?: string }) {

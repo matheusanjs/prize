@@ -130,6 +130,8 @@ export const getReservations = (params?: Record<string, unknown>) => api.get('/r
 export const getMyReservations = () => api.get('/reservations/my-reservations');
 export const getBoatReservations = (boatId: string, date?: string) => api.get(`/reservations/boat/${boatId}`, { params: date ? { date } : undefined });
 export const getBoatCalendar = (boatId: string, month: number, year: number) => api.get(`/reservations/calendar/${boatId}`, { params: { month, year } });
+export const getAllBoatReservations = (boatId: string, opts?: { pastDays?: number; futureMonths?: number }) =>
+  api.get(`/reservations/boat/${boatId}/all`, { params: opts });
 export const createReservation = (data: Record<string, unknown>) => api.post('/reservations', data);
 export const cancelReservation = (id: string, reason?: string) => api.patch(`/reservations/${id}/cancel`, { reason });
 export const confirmArrival = (id: string, expectedArrivalTime: string) => api.patch(`/reservations/${id}/confirm-arrival`, { expectedArrivalTime });

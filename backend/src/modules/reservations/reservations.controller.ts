@@ -57,6 +57,21 @@ export class ReservationsController {
     return this.reservationsService.getCalendar(boatId, month, year);
   }
 
+  @Get('boat/:boatId/all')
+  @ApiOperation({ summary: 'Todas as reservas futuras + 30d passado (snapshot completo)' })
+  @ApiQuery({ name: 'pastDays', required: false })
+  @ApiQuery({ name: 'futureMonths', required: false })
+  getAllByBoat(
+    @Param('boatId') boatId: string,
+    @Query('pastDays') pastDays?: string,
+    @Query('futureMonths') futureMonths?: string,
+  ) {
+    return this.reservationsService.getAllByBoat(boatId, {
+      pastDays: pastDays ? Number(pastDays) : undefined,
+      futureMonths: futureMonths ? Number(futureMonths) : undefined,
+    });
+  }
+
   @Patch(':id/cancel')
   @ApiOperation({ summary: 'Cancelar reserva' })
   cancel(
