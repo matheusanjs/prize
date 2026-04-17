@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth';
 import api from '@/services/api';
 
@@ -19,9 +20,38 @@ function isCapacitorNative(): boolean {
   return typeof window !== 'undefined' && !!(window as any).Capacitor?.isNativePlatform?.();
 }
 
+async function collectDeviceMeta() {
+  const meta: Record<string, any> = {
+    locale: typeof navigator !== 'undefined' ? navigator.language : undefined,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    appVersion: process.env.NEXT_PUBLIC_APP_VERSION || '1.0.0',
+  };
+  // Capacitor exposes device info on window.Capacitor.Plugins.Device when the
+  // plugin is installed natively. We read it defensively so the web build keeps
+  // working without the plugin.
+  try {
+    const Device = (window as any).Capacitor?.Plugins?.Device;
+    if (Device?.getInfo) {
+      const info = await Device.getInfo();
+      meta.deviceName = info?.name || `${info?.manufacturer || ''} ${info?.model || ''}`.trim() || undefined;
+      meta.osVersion = info?.osVersion;
+    }
+    const platform = (window as any).Capacitor?.getPlatform?.();
+    if (platform) meta.bundleId = platform;
+  } catch { /* plugin not available */ }
+  // Fall back to UA-derived iOS version when the plugin isn't there.
+  if (!meta.osVersion && typeof navigator !== 'undefined') {
+    const m = navigator.userAgent.match(/OS (\d+)[_\.](\d+)(?:[_\.](\d+))?/);
+    if (m) meta.osVersion = `${m[1]}.${m[2]}${m[3] ? '.' + m[3] : ''}`;
+  }
+  return meta;
+}
+
 export function PushManager() {
   const { user } = useAuth();
+  const router = useRouter();
   const subscribedRef = useRef(false);
+  const tokenRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!user || subscribedRef.current) return;
@@ -42,9 +72,10 @@ export function PushManager() {
     try {
       const { PushNotifications } = await import('@capacitor/push-notifications');
 
-      // Request permission
+      // Request permission (provisional allowed too — iOS will deliver silently to
+      // the Notification Center until the user approves).
       const permResult = await PushNotifications.requestPermissions();
-      if (permResult.receive !== 'granted') {
+      if (permResult.receive !== 'granted' && permResult.receive !== 'prompt') {
         console.warn('Push notification permission denied');
         return;
       }
@@ -52,13 +83,15 @@ export function PushManager() {
       // Register for push
       await PushNotifications.register();
 
-      // Listen for token
+      // Listen for token — called every launch; upsert on the backend is idempotent.
       PushNotifications.addListener('registration', async (token) => {
-        console.log('APNs device token:', token.value);
+        tokenRef.current = token.value;
         try {
+          const meta = await collectDeviceMeta();
           await api.post('/notifications/push/device-token', {
             token: token.value,
             platform: 'ios',
+            ...meta,
           });
           subscribedRef.current = true;
         } catch (err) {
@@ -70,16 +103,34 @@ export function PushManager() {
         console.error('Push registration error:', error);
       });
 
-      // Handle received notifications (foreground)
+      // Foreground delivery → post DELIVERED for analytics.
       PushNotifications.addListener('pushNotificationReceived', (notification) => {
-        console.log('Push received in foreground:', notification);
+        const data = notification.data || {};
+        api.post('/notifications/push/events/delivered', {
+          token: tokenRef.current || undefined,
+          notificationId: data.notificationId,
+          messageId: (notification as any).id,
+          data: { foreground: true, type: data.type },
+        }).catch(() => { /* analytics best-effort */ });
       });
 
-      // Handle notification tap
+      // Tap / action → post OPENED and route in-app (no full reload).
       PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
-        const data = action.notification.data;
+        const data = action.notification.data || {};
+        api.post('/notifications/push/events/opened', {
+          token: tokenRef.current || undefined,
+          notificationId: data.notificationId,
+          messageId: (action.notification as any).id,
+          data: { actionId: action.actionId, type: data.type },
+        }).catch(() => {});
+
         if (data?.url) {
-          window.location.href = data.url;
+          // Keep the PWA in its single JS context; router preserves cache.
+          if (typeof data.url === 'string' && data.url.startsWith('/')) {
+            router.push(data.url);
+          } else {
+            window.location.href = data.url;
+          }
         }
       });
     } catch (err) {

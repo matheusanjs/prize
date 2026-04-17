@@ -1,5 +1,5 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
+import { Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Job } from 'bullmq';
 import * as webpush from 'web-push';
@@ -13,7 +13,7 @@ export interface PushJobData {
 }
 
 @Processor('push', { concurrency: 10 })
-export class PushProcessor extends WorkerHost {
+export class PushProcessor extends WorkerHost implements OnModuleDestroy {
   private readonly logger = new Logger(PushProcessor.name);
   private apnProvider: apn.Provider | null = null;
 
@@ -23,6 +23,13 @@ export class PushProcessor extends WorkerHost {
   ) {
     super();
     this.initApn();
+  }
+
+  async onModuleDestroy() {
+    if (this.apnProvider) {
+      try { this.apnProvider.shutdown(); } catch { /* ignore */ }
+      this.apnProvider = null;
+    }
   }
 
   private initApn() {
@@ -111,26 +118,36 @@ export class PushProcessor extends WorkerHost {
             if (payload.category) dataPayload.category = payload.category;
 
             if (isSilent) {
-              // Silent / background push: no alert, content-available=1, priority 5
+              // Silent / background push: no alert, content-available=1, priority 5.
+              // iOS throttles these aggressively — only used for background sync.
               notification.pushType = 'background';
               notification.priority = 5;
               notification.contentAvailable = true;
               notification.payload = dataPayload;
+              // Long TTL so iOS can deliver it when the device wakes up.
+              notification.expiry = Math.floor(Date.now() / 1000) + 24 * 3600;
             } else {
               notification.pushType = 'alert';
               notification.alert = { title: payload.title || '', body: payload.body || '' };
               // node-apn's typings don't allow undefined here, use empty string to suppress.
               notification.sound = payload.sound === null ? '' : (payload.sound || 'default');
-              notification.priority = payload.urgency === 'high' ? 10 : 5;
+              // Apple recommends priority 10 for user-visible alerts so they are delivered
+              // immediately. Priority 5 is only for background / low-priority pushes.
+              // Respect explicit low urgency (battery-friendly) but default to 10.
+              notification.priority = payload.urgency === 'very-low' || payload.urgency === 'low' ? 5 : 10;
               notification.payload = dataPayload;
               notification.badge = typeof payload.badgeCount === 'number' ? payload.badgeCount : unread;
               if (payload.category) (notification as any).category = payload.category;
-              if (payload.mutableContent) notification.mutableContent = true;
+              // Enable NSE (rich notifications / images) whenever the payload carries
+              // an imageUrl or explicitly requests it.
+              if (payload.mutableContent || dataPayload.imageUrl) notification.mutableContent = true;
+              // 24h TTL for alerts so they are still delivered if the phone is offline.
+              notification.expiry = Math.floor(Date.now() / 1000) + 24 * 3600;
             }
 
             notification.topic = apnTopic;
-            notification.expiry = Math.floor(Date.now() / 1000) + 3600; // 1h TTL
-            notification.threadId = payload.threadId || 'prize-general';
+            // Group notifications in the tray by category/type when no explicit threadId given.
+            notification.threadId = payload.threadId || payload.category || dataPayload.type || 'prize-general';
             if (payload.tag) notification.collapseId = payload.tag;
 
             return this.apnProvider!.send(notification, dt.token).then((res) => ({
@@ -146,11 +163,26 @@ export class PushProcessor extends WorkerHost {
           if (res.failed.length > 0) {
             failed++;
             const reason = res.failed[0]?.response?.reason;
-            if (reason === 'BadDeviceToken' || reason === 'Unregistered' || reason === 'ExpiredProviderToken') {
+            this.logger.warn(
+              `APNs failed for user ${userId} token=${dt.token.slice(0, 8)}… reason=${reason || 'unknown'}`,
+            );
+            if (reason === 'BadDeviceToken' || reason === 'Unregistered' || reason === 'ExpiredProviderToken' || reason === 'DeviceTokenNotForTopic') {
               await this.prisma.deviceToken.delete({ where: { id: dt.id } }).catch(() => {});
             }
           } else {
             sent++;
+            // Track SENT event (server-side) for analytics. apns-id comes back in res.sent[0].
+            const apnsId = (res.sent?.[0] as any)?.apnsId || undefined;
+            this.prisma.notificationEvent.create({
+              data: {
+                userId,
+                deviceTokenId: dt.id,
+                kind: 'SENT',
+                notificationId: (payload.data as any)?.notificationId || undefined,
+                messageId: apnsId,
+                data: { tag: payload.tag, threadId: payload.threadId, category: payload.category },
+              },
+            }).catch(() => { /* analytics are best-effort */ });
           }
         }
       }

@@ -19,6 +19,14 @@ interface SendOpts {
   pushTag?: string;
   pushActions?: { action: string; title: string }[];
   pushUrgency?: 'very-low' | 'low' | 'normal' | 'high';
+  /** Deep link opened on tap (also stored in data.url). */
+  url?: string;
+  /** APNs category identifier (pairs with UNNotificationCategory on device). */
+  category?: string;
+  /** Rich-notification image URL (enables mutable-content=1 so NSE can attach it). */
+  imageUrl?: string;
+  /** Group key for the notification tray. Defaults to the notification type. */
+  threadId?: string;
 }
 
 @Injectable()
@@ -32,7 +40,7 @@ export class NotificationsService {
 
   /** Create in-app notification + send push to all user devices */
   async send(opts: SendOpts) {
-    const { userId, type, title, body, data, pushTag, pushActions, pushUrgency } = opts;
+    const { userId, type, title, body, data, pushTag, pushActions, pushUrgency, url, category, imageUrl, threadId } = opts;
 
     // 1. Save in-app notification
     const notification = await this.prisma.notification.create({
@@ -40,15 +48,28 @@ export class NotificationsService {
     });
 
     // 2. Push notification
+    const mergedData: Record<string, any> = {
+      ...data,
+      notificationId: notification.id,
+      type,
+      url: url || data?.url,
+    };
+    if (imageUrl) mergedData.imageUrl = imageUrl;
+
     const payload: PushPayload = {
       title,
       body,
       icon: '/icon-192.png',
       badge: '/icon-badge.png',
       tag: pushTag || `${type}-${notification.id}`,
-      data: { ...data, notificationId: notification.id, type, url: data?.url },
+      data: mergedData,
       actions: pushActions,
       urgency: pushUrgency || 'normal',
+      url: url || data?.url,
+      // Group by type in the iOS tray (e.g. all CHARGE_OVERDUE stacked together).
+      threadId: threadId || type,
+      category: category || (pushActions && pushActions.length > 0 ? type : undefined),
+      mutableContent: !!imageUrl,
     };
 
     this.pushService.sendToUser(userId, payload).catch((err) => {
