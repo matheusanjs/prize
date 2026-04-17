@@ -750,8 +750,8 @@ export default function ReservationsPage() {
                     )}
                     {!isMine && r.status === 'CONFIRMED' && !isBefore(parseISO(r.startDate), new Date()) && (
                       <div className="mt-3">
-                        <p className="text-[11px] text-[var(--text-muted)] mb-2 leading-relaxed">
-                          Solicite uma troca de data com o cotista — ao aceitar, vocês trocam as reservas entre si.
+                        <p className="text-[11px] text-[var(--text-muted)] mb-2 text-center">
+                          Solicite uma troca de data com o cotista
                         </p>
                         <button
                           onClick={() => openSwap(r)}
