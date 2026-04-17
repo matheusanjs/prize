@@ -258,4 +258,14 @@ export const sendPushTest = (data: { userId: string; title?: string; body?: stri
 // Dashboard
 export const getDashboardStats = () => api.get('/dashboard/stats');
 
+// Reports
+export const getReportFinance = (from?: string, to?: string) => api.get('/reports/finance', { params: { from, to } });
+export const getReportReservations = (from?: string, to?: string) => api.get('/reports/reservations', { params: { from, to } });
+export const getReportFuel = (from?: string, to?: string) => api.get('/reports/fuel', { params: { from, to } });
+export const getReportBoats = (from?: string, to?: string) => api.get('/reports/boats', { params: { from, to } });
+export const getReportMaintenance = (from?: string, to?: string) => api.get('/reports/maintenance', { params: { from, to } });
+export const getReportOperations = (from?: string, to?: string) => api.get('/reports/operations', { params: { from, to } });
+export const getReportRestaurant = (from?: string, to?: string) => api.get('/reports/restaurant', { params: { from, to } });
+export const getReportClients = (from?: string, to?: string) => api.get('/reports/clients', { params: { from, to } });
+
 export default api;
