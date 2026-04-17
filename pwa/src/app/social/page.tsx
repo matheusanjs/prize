@@ -738,7 +738,7 @@ function TripChat({ trip, userId, onBack }: { trip: Trip; userId: string; onBack
     });
 
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-    const socket = io(`${WS_URL}/social`, { auth: { token }, transports: ['websocket'] });
+    const socket = io(`${WS_URL}/social`, { auth: { token }, transports: ['websocket', 'polling'], reconnectionAttempts: 10, reconnectionDelay: 1000 });
     socketRef.current = socket;
 
     socket.on('connect', () => { socket.emit('joinTrip', { tripId: trip.id }); });

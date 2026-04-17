@@ -12,8 +12,10 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  // Accessibility: do NOT lock zoom — WCAG 2.5.5 requires user-scalable
+  // Only disable on explicit native Capacitor shell via meta tag
+  maximumScale: 5,
+  userScalable: true,
   viewportFit: 'cover',
   themeColor: [
     { media: '(prefers-color-scheme: dark)', color: '#0D1B2A' },

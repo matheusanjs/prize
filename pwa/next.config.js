@@ -7,8 +7,10 @@ const nextConfig = {
       { protocol: 'https', hostname: '*.amazonaws.com' },
       { protocol: 'https', hostname: '*.cloudfront.net' },
     ],
+    formats: ['image/avif', 'image/webp'],
     deviceSizes: [640, 750, 828, 1080],
     imageSizes: [128, 256, 384],
+    minimumCacheTTL: 60 * 60 * 24 * 7, // 7 days
   },
   webpack: (config, { isServer }) => {
     if (!isServer) {

@@ -1,10 +1,11 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Logger, Inject, Optional } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Logger, Inject, Optional, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { Cron } from '@nestjs/schedule';
 import { ReservationValidationService } from './reservation-validation.service';
 import { WhatsAppAutomationService } from '../whatsapp/whatsapp-automation.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ReservationsGateway } from './reservations.gateway';
 
 const DOUBLE_BOOKING_MSG = 'Horario indisponivel. Esta embarcacao ja esta reservada no periodo solicitado.';
 
@@ -27,6 +28,7 @@ export class ReservationsService {
     private prisma: PrismaService,
     private validationService: ReservationValidationService,
     private notificationsService: NotificationsService,
+    @Optional() @Inject(forwardRef(() => ReservationsGateway)) private gateway?: ReservationsGateway,
     @Optional() @Inject(WhatsAppAutomationService) private whatsapp?: WhatsAppAutomationService,
   ) {}
 
@@ -201,6 +203,13 @@ export class ReservationsService {
         }).catch((err) => this.logger.error(`Push reservation notification failed: ${err.message}`));
       }
 
+      // Emit realtime event to all subscribers of this boat (for instant calendar updates)
+      try {
+        this.gateway?.emitCreated(reservation.boatId, reservation);
+      } catch (e) {
+        this.logger.warn(`Gateway emit failed: ${(e as Error).message}`);
+      }
+
       return reservation;
     } catch (error) {
       if (isDbOverlapError(error)) {
@@ -296,6 +305,13 @@ export class ReservationsService {
       data: { reservationId: id, url: '/boats' },
       pushTag: `res-cancelled-${id}`,
     }).catch((err) => this.logger.error(`Push cancel notification failed: ${err.message}`));
+
+    // Emit realtime event
+    try {
+      this.gateway?.emitCancelled(reservation.boatId, result);
+    } catch (e) {
+      this.logger.warn(`Gateway emit failed: ${(e as Error).message}`);
+    }
 
     return result;
   }

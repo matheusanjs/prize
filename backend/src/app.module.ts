@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { BullModule } from '@nestjs/bullmq';
 import { ServeStaticModule } from '@nestjs/serve-static';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { join } from 'path';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -32,6 +34,12 @@ import { SocialModule } from './modules/social/social.module';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
+    ThrottlerModule.forRoot([
+      { name: 'default', ttl: 60_000, limit: 300 },   // 300 req/min per IP globally
+      { name: 'auth',    ttl: 60_000, limit: 10 },    // 10 attempts/min (login/register)
+      { name: 'webhook', ttl: 60_000, limit: 120 },   // 120/min for webhooks
+      { name: 'upload',  ttl: 60_000, limit: 30 },    // 30 uploads/min
+    ]),
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', '..', 'uploads'),
       serveRoot: '/uploads',
@@ -66,6 +74,9 @@ import { SocialModule } from './modules/social/social.module';
     PaymentsModule,
     WhatsAppModule,
     SocialModule,
+  ],
+  providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
 export class AppModule {}

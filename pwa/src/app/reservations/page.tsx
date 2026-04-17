@@ -8,6 +8,7 @@ import { format, startOfMonth, endOfMonth, addMonths, subMonths, eachDayOfInterv
 import { ptBR } from 'date-fns/locale';
 import WeatherTimeline, { buildTimelineFromHistory, buildTimelineFromForecast } from '@/components/WeatherTimeline';
 import { useReservationPolling } from '@/hooks/useReservationPolling';
+import { useReservationsRealtime } from '@/hooks/useReservationsRealtime';
 import { saveCalendarCache, loadCalendarCache } from '@/utils/calendarCache';
 
 interface ForecastDay {
@@ -245,6 +246,53 @@ export default function ReservationsPage() {
     }, [selectedBoatId, currentMonth, selectedDate]),
   });
 
+  // ─── Realtime WebSocket sync — instant peer updates (<100ms) ───────
+  const authToken = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  useReservationsRealtime({
+    boatId: selectedBoatId || null,
+    token: authToken,
+    onCreated: useCallback((e: any) => {
+      const r: Reservation | undefined = e.reservation;
+      if (!r) return;
+      setCalendarReservations(prev => {
+        // Dedup: skip if already present (e.g. the creator's own optimistic update)
+        if (prev.some(x => x.id === r.id)) return prev;
+        // Replace any optimistic placeholder matching same time window + user
+        const cleaned = prev.filter(x => !(x.id.startsWith('optimistic-') && x.startDate === r.startDate && x.endDate === r.endDate));
+        return [...cleaned, r];
+      });
+      // If the event falls on the selected day, update day list too
+      if (selectedDate) {
+        const key = format(selectedDate, 'yyyy-MM-dd');
+        const sKey = format(parseISO(r.startDate), 'yyyy-MM-dd');
+        if (sKey === key) {
+          setSelectedDayReservations(prev => {
+            if (prev.some(x => x.id === r.id)) return prev;
+            const cleaned = prev.filter(x => !(x.id.startsWith('optimistic-') && x.startDate === r.startDate && x.endDate === r.endDate));
+            return [...cleaned, r];
+          });
+        }
+      }
+    }, [selectedDate]),
+    onCancelled: useCallback((e: any) => {
+      const r: Reservation | undefined = e.reservation;
+      if (!r) return;
+      setCalendarReservations(prev => prev.filter(x => x.id !== r.id));
+      setSelectedDayReservations(prev => prev.filter(x => x.id !== r.id));
+    }, []),
+    onUpdated: useCallback((e: any) => {
+      const r: Reservation | undefined = e.reservation;
+      if (!r) return;
+      setCalendarReservations(prev => prev.map(x => x.id === r.id ? { ...x, ...r } : x));
+      setSelectedDayReservations(prev => prev.map(x => x.id === r.id ? { ...x, ...r } : x));
+    }, []),
+    onSwapAccepted: useCallback(() => {
+      // Swap changes two rows — safer to reload
+      loadCalendar();
+      if (selectedDate && selectedBoatId) loadSelectedDayReservations(selectedBoatId, selectedDate);
+    }, [selectedDate, selectedBoatId]),
+  });
+
   // Shared reload helper for mutations
   const loadCalendar = useCallback(async () => {
     if (!selectedBoatId) return;
@@ -390,39 +438,85 @@ export default function ReservationsPage() {
     const endH = parseInt(form.endTime);
     if (endH <= startH) { setError('O horário de fim deve ser posterior ao início.'); return; }
     if (startH < 10 || endH > 17) { setError('Horário deve ser entre 10:00 e 17:00.'); return; }
+
+    const dateStr = format(selectedDate, 'yyyy-MM-dd');
+    const startIso = new Date(`${dateStr}T${form.startTime}:00-03:00`).toISOString();
+    const endIso = new Date(`${dateStr}T${form.endTime}:00-03:00`).toISOString();
+
+    // OPTIMISTIC UPDATE — show the reservation immediately (<16ms)
+    const tempId = `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const boatName = boats.find(b => b.id === form.boatId)?.name;
+    const optimistic: Reservation = {
+      id: tempId,
+      startDate: startIso,
+      endDate: endIso,
+      status: 'CONFIRMED',
+      boat: { id: form.boatId, name: boatName || '' },
+      user: user ? { id: user.id, name: user.name || 'Você', avatar: (user as any).avatar } : undefined,
+    };
+    const prevCalendar = calendarReservations;
+    const prevDay = selectedDayReservations;
+    const prevLimit = reservationLimit;
+    setCalendarReservations([...calendarReservations, optimistic]);
+    setSelectedDayReservations([...selectedDayReservations, optimistic]);
+    if (reservationLimit) setReservationLimit({ ...reservationLimit, active: reservationLimit.active + 1 });
+    setShowCreate(false);
     setSaving(true);
+
     try {
-      const dateStr = format(selectedDate, 'yyyy-MM-dd');
-      await createReservation({
-        boatId: form.boatId,
-        startDate: new Date(`${dateStr}T${form.startTime}:00-03:00`).toISOString(),
-        endDate: new Date(`${dateStr}T${form.endTime}:00-03:00`).toISOString(),
-      });
+      const { data } = await createReservation({ boatId: form.boatId, startDate: startIso, endDate: endIso });
+      const created: Reservation | undefined = data?.data || data;
+      if (created?.id) {
+        // Replace optimistic entry with the real one
+        setCalendarReservations(prev => prev.map(r => r.id === tempId ? created : r));
+        setSelectedDayReservations(prev => prev.map(r => r.id === tempId ? created : r));
+      }
       invalidateCache('/reservations');
       invalidateCache('calendar');
       invalidateCache('boat/');
-      setShowCreate(false);
-      await Promise.all([loadCalendar(), loadSelectedDayReservations(form.boatId, selectedDate)]);
-      if (reservationLimit) setReservationLimit({ ...reservationLimit, active: reservationLimit.active + 1 });
+      // Background refresh (non-blocking) to reconcile with server truth
+      loadCalendar();
+      loadSelectedDayReservations(form.boatId, selectedDate);
     } catch (err: any) {
+      // ROLLBACK on failure
+      setCalendarReservations(prevCalendar);
+      setSelectedDayReservations(prevDay);
+      setReservationLimit(prevLimit);
       const msg = err?.response?.data?.message || 'Erro ao criar reserva';
       setError(Array.isArray(msg) ? msg.join(', ') : msg);
+      setShowCreate(true); // reopen modal so user sees error
     }
     setSaving(false);
   };
 
   const handleCancel = async (id: string) => {
     if (!confirm('Cancelar esta reserva?')) return;
+
+    // OPTIMISTIC UPDATE — remove immediately
+    const prevCalendar = calendarReservations;
+    const prevDay = selectedDayReservations;
+    const prevLimit = reservationLimit;
+    setCalendarReservations(prev => prev.filter(r => r.id !== id));
+    setSelectedDayReservations(prev => prev.filter(r => r.id !== id));
+    if (reservationLimit && reservationLimit.active > 0) {
+      setReservationLimit({ ...reservationLimit, active: reservationLimit.active - 1 });
+    }
+
     try {
+      await cancelReservation(id);
       invalidateCache('/reservations');
       invalidateCache('calendar');
       invalidateCache('boat/');
-      await cancelReservation(id);
-      await Promise.all([loadCalendar(), loadSelectedDayReservations(selectedBoatId!, selectedDate!)]);
-      if (reservationLimit && reservationLimit.active > 0) {
-        setReservationLimit({ ...reservationLimit, active: reservationLimit.active - 1 });
-      }
-    } catch { /* empty */ }
+      // Background refresh to reconcile
+      loadCalendar();
+      if (selectedBoatId && selectedDate) loadSelectedDayReservations(selectedBoatId, selectedDate);
+    } catch {
+      // ROLLBACK on failure
+      setCalendarReservations(prevCalendar);
+      setSelectedDayReservations(prevDay);
+      setReservationLimit(prevLimit);
+      alert('Não foi possível cancelar a reserva. Tente novamente.');
+    }
   };
 
   const openConfirmArrival = (r: Reservation) => {

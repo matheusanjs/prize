@@ -1,5 +1,6 @@
 import { Controller, Post, Body, UseGuards, Req, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -13,12 +14,14 @@ export class AuthController {
   constructor(private authService: AuthService) {}
 
   @Post('register')
+  @Throttle({ auth: { limit: 5, ttl: 60_000 } })
   @ApiOperation({ summary: 'Registrar novo usuário' })
   async register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
 
   @Post('login')
+  @Throttle({ auth: { limit: 10, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login' })
   async login(@Body() dto: LoginDto) {
@@ -26,6 +29,7 @@ export class AuthController {
   }
 
   @Post('refresh')
+  @Throttle({ auth: { limit: 30, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Renovar tokens' })
   async refreshTokens(@Body() dto: RefreshTokenDto) {
@@ -42,6 +46,7 @@ export class AuthController {
   }
 
   @Post('change-password')
+  @Throttle({ auth: { limit: 5, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

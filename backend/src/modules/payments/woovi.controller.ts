@@ -1,5 +1,6 @@
 import { Controller, Post, Get, Body, Param, Req, UseGuards, HttpCode, ValidationPipe, UsePipes, RawBodyRequest, Headers } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { WooviService } from './woovi.service';
 import { PrismaService } from '../../database/prisma.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -25,6 +26,7 @@ export class WooviController {
 
   @Post('webhook')
   @HttpCode(200)
+  @Throttle({ webhook: { limit: 120, ttl: 60_000 } })
   @UsePipes(new ValidationPipe({ whitelist: false, transform: false }))
   @ApiOperation({ summary: 'Receber webhook da Woovi' })
   async handleWebhook(

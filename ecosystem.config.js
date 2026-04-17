@@ -1,3 +1,79 @@
+// PM2 ecosystem — hardened for production
+const common = {
+  autorestart: true,
+  watch: false,
+  restart_delay: 5000,
+  kill_timeout: 10000,
+  exp_backoff_restart_delay: 100,
+  max_restarts: 10,
+  min_uptime: '30s',
+  merge_logs: true,
+  time: true,
+};
+
+module.exports = {
+  apps: [
+    {
+      ...common,
+      name: 'backend',
+      cwd: '/root/prize-clube/backend',
+      script: 'dist/src/main.js',
+      env: { NODE_ENV: 'production', PORT: 3000, TZ: 'America/Sao_Paulo' },
+      node_args: '-r dotenv/config',
+      max_memory_restart: '900M',
+      error_file: '/root/.pm2/logs/backend-error.log',
+      out_file: '/root/.pm2/logs/backend-out.log',
+    },
+    {
+      ...common,
+      name: 'admin',
+      cwd: '/root/prize-clube/admin',
+      script: 'node_modules/.bin/next',
+      args: 'start -p 3001 -H 0.0.0.0',
+      env: { NODE_ENV: 'production', PORT: 3001, TZ: 'America/Sao_Paulo' },
+      node_args: '--max-old-space-size=2048',
+      max_memory_restart: '1300M',
+      error_file: '/root/.pm2/logs/admin-error.log',
+      out_file: '/root/.pm2/logs/admin-out.log',
+    },
+    {
+      ...common,
+      name: 'pwa',
+      cwd: '/root/prize-clube/pwa',
+      script: 'node_modules/.bin/next',
+      args: 'start -p 3002 -H 0.0.0.0',
+      env: { NODE_ENV: 'production', PORT: 3002, TZ: 'America/Sao_Paulo' },
+      node_args: '--max-old-space-size=2048',
+      max_memory_restart: '1300M',
+      error_file: '/root/.pm2/logs/pwa-error.log',
+      out_file: '/root/.pm2/logs/pwa-out.log',
+    },
+    {
+      ...common,
+      name: 'site',
+      cwd: '/root/prize-clube/site',
+      script: 'node_modules/.bin/next',
+      args: 'start -p 3003 -H 0.0.0.0',
+      env: { NODE_ENV: 'production', PORT: 3003, TZ: 'America/Sao_Paulo' },
+      node_args: '--max-old-space-size=1024',
+      max_memory_restart: '800M',
+      error_file: '/root/.pm2/logs/site-error.log',
+      out_file: '/root/.pm2/logs/site-out.log',
+    },
+    {
+      ...common,
+      name: 'garcom',
+      cwd: '/root/prize-clube/garcom',
+      script: 'node_modules/.bin/next',
+      args: 'start -p 3004 -H 0.0.0.0',
+      env: { NODE_ENV: 'production', PORT: 3004, TZ: 'America/Sao_Paulo' },
+      node_args: '--max-old-space-size=1024',
+      max_memory_restart: '800M',
+      error_file: '/root/.pm2/logs/garcom-error.log',
+      out_file: '/root/.pm2/logs/garcom-out.log',
+    },
+  ],
+};
 module.exports = {
   apps: [
     {

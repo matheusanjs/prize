@@ -21,12 +21,60 @@ export class SocialService {
   private async saveBase64File(base64: string, folder: string): Promise<string> {
     const match = base64.match(/^data:([\w\/+.-]+);base64,(.+)$/);
     if (!match) throw new BadRequestException('Formato base64 inválido');
-    const mimeType = match[1];
+    const declaredMime = match[1].toLowerCase();
     const buffer = Buffer.from(match[2], 'base64');
-    const ext = mimeType.includes('png') ? 'png'
-      : mimeType.includes('webp') ? 'webp'
-      : mimeType.includes('audio') ? 'webm'
-      : mimeType.includes('mp4') ? 'mp4'
+
+    // Size limits (prevents disk DoS)
+    const MAX_IMAGE = 8 * 1024 * 1024;   // 8MB
+    const MAX_AUDIO = 12 * 1024 * 1024;  // 12MB
+    const MAX_VIDEO = 40 * 1024 * 1024;  // 40MB
+    const isAudio = declaredMime.startsWith('audio/');
+    const isVideo = declaredMime.startsWith('video/');
+    const limit = isVideo ? MAX_VIDEO : isAudio ? MAX_AUDIO : MAX_IMAGE;
+    if (buffer.length > limit) {
+      throw new BadRequestException(`Arquivo muito grande (${Math.round(buffer.length / 1024 / 1024)}MB). Limite: ${Math.round(limit / 1024 / 1024)}MB.`);
+    }
+
+    // MIME whitelist
+    const ALLOWED = new Set([
+      'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif',
+      'audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/aac',
+      'video/mp4', 'video/webm', 'video/quicktime',
+    ]);
+    if (!ALLOWED.has(declaredMime)) {
+      throw new BadRequestException(`Tipo de arquivo não permitido: ${declaredMime}`);
+    }
+
+    // Magic bytes validation — prevents content-type spoofing
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { fileTypeFromBuffer } = await import('file-type');
+      const detected = await fileTypeFromBuffer(buffer);
+      if (detected && !ALLOWED.has(detected.mime)) {
+        throw new BadRequestException(`Conteúdo do arquivo inválido (${detected.mime}).`);
+      }
+      // If detected mime conflicts with declared, prefer detected
+      if (detected && detected.mime !== declaredMime && !detected.mime.startsWith(declaredMime.split('/')[0] + '/')) {
+        throw new BadRequestException('Tipo de arquivo não corresponde ao conteúdo.');
+      }
+    } catch (err: any) {
+      if (err instanceof BadRequestException) throw err;
+      // file-type import failure is non-fatal — continue with declared mime
+    }
+
+    const ext = declaredMime.includes('png') ? 'png'
+      : declaredMime.includes('webp') ? 'webp'
+      : declaredMime.includes('gif') ? 'gif'
+      : declaredMime.includes('heic') ? 'heic'
+      : declaredMime.includes('heif') ? 'heif'
+      : declaredMime.includes('audio/webm') ? 'webm'
+      : declaredMime.includes('audio/ogg') ? 'ogg'
+      : declaredMime.includes('audio/mpeg') ? 'mp3'
+      : declaredMime.includes('audio/mp4') ? 'm4a'
+      : declaredMime.includes('audio/aac') ? 'aac'
+      : declaredMime.includes('video/mp4') ? 'mp4'
+      : declaredMime.includes('video/webm') ? 'webm'
+      : declaredMime.includes('video/quicktime') ? 'mov'
       : 'jpg';
     const filename = `${randomUUID()}.${ext}`;
     const dir = path.join(process.cwd(), 'uploads', folder);

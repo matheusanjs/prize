@@ -28,14 +28,27 @@ async function bootstrap() {
     crossOriginOpenerPolicy: false,
   }));
   app.use(compression());
+
+  // CORS — restrict HTTP origins in production
+  const isProd = process.env.NODE_ENV === 'production';
+  const prodOrigins = [
+    'https://marinaprizeclub.com',
+    'https://www.marinaprizeclub.com',
+    'https://app.marinaprizeclub.com',
+    'https://admin.marinaprizeclub.com',
+    'https://garcom.marinaprizeclub.com',
+    'https://api.marinaprizeclub.com',
+    // Native mobile wrappers (Capacitor / Ionic)
+    'capacitor://localhost',
+    'ionic://localhost',
+    'http://localhost',
+  ];
+  const devOrigins = [
+    'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003', 'http://localhost:3004',
+    'http://173.212.227.106', 'http://173.212.227.106:3001', 'http://173.212.227.106:3002', 'http://173.212.227.106:3003', 'http://173.212.227.106:3004',
+  ];
   app.enableCors({
-    origin: [
-      'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003', 'http://localhost:3004',
-      'http://173.212.227.106', 'http://173.212.227.106:3001', 'http://173.212.227.106:3002', 'http://173.212.227.106:3003', 'http://173.212.227.106:3004',
-      'https://marinaprizeclub.com.br', 'https://admin.prizeclube.com.br',
-      'https://marinaprizeclub.com', 'https://www.marinaprizeclub.com',
-      'https://app.marinaprizeclub.com', 'https://admin.marinaprizeclub.com', 'https://garcom.marinaprizeclub.com',
-    ],
+    origin: isProd ? prodOrigins : [...prodOrigins, ...devOrigins],
     credentials: true,
   });
 
