@@ -627,7 +627,7 @@ export default function ReservationsPage() {
                   onClick={() => setSelectedDate(day)}
                   className={`relative aspect-square flex flex-col items-center justify-center rounded-xl text-[13px] font-semibold transition-all duration-150 border-[1.5px] ${
                     isSelected
-                      ? 'bg-gradient-to-br from-primary-500 to-primary-600 text-white shadow-[0_6px_16px_rgba(0,117,119,0.35)] scale-[1.08] border-primary-400/40 z-10'
+                      ? `${cellBg} ${cellBorder} ${hasMine ? 'text-[#F98307] font-bold' : isPast ? 'text-[var(--text-muted)]/50 opacity-60' : 'text-[var(--text)]'} scale-[1.08] ring-2 ring-primary-500 ring-offset-2 ring-offset-[var(--card)] z-10 shadow-[0_4px_12px_rgba(0,117,119,0.2)]`
                       : today
                         ? `${cellBg} ${cellBorder} ${hasMine ? 'text-[#F98307]' : 'text-primary-500'} font-extrabold ring-[1.5px] ring-primary-500/40 ring-offset-1 ring-offset-[var(--card)]`
                         : isPast
@@ -636,7 +636,7 @@ export default function ReservationsPage() {
                   }`}
                 >
                   <span>{day.getDate()}</span>
-                  {!isPast && !isSelected && (
+                  {!isPast && (
                     <div className={`absolute bottom-[3px] left-1/2 -translate-x-1/2 w-[7px] h-[7px] rounded-full ${
                       hasMine ? 'bg-[#F98307] shadow-[0_0_3px_rgba(249,131,7,0.5)]'
                       : availability === 'free' ? 'bg-emerald-500 shadow-[0_0_3px_rgba(16,185,129,0.5)]' : availability === 'partial' ? 'bg-amber-500 shadow-[0_0_3px_rgba(245,158,11,0.5)]' : 'bg-red-500 shadow-[0_0_3px_rgba(239,68,68,0.5)]'
