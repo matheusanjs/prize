@@ -77,12 +77,14 @@ export function BottomNav() {
         </div>
       </header>
 
-      {/* Bottom navigation — flex item at end via order */}
+      {/* Bottom navigation — fixed at screen bottom */}
       <nav
         className="border-t border-[var(--nav-border)] nav-fixed-bottom"
         style={{
-          order: 1,
-          flexShrink: 0,
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
           zIndex: 9999,
           backgroundColor: 'var(--nav-bg)',
         }}

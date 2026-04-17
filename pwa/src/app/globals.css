@@ -125,9 +125,14 @@ input, select, textarea {
   padding-top: calc(env(safe-area-inset-top, 0px) + 10px);
 }
 
-/* Main content padding for fixed header (nav is now in flex flow, no bottom padding needed) */
+/* Main content padding for fixed header */
 .main-safe-top {
   padding-top: calc(3.5rem + env(safe-area-inset-top, 0px) + 10px);
+}
+
+/* Main content padding for fixed bottom nav */
+.main-safe-bottom {
+  padding-bottom: calc(4rem + env(safe-area-inset-bottom, 34px));
 }
 
 /* Bottom nav: extend padding into safe area so bg covers home indicator */
