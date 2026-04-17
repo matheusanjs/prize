@@ -15,58 +15,111 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return outputArray;
 }
 
+function isCapacitorNative(): boolean {
+  return typeof window !== 'undefined' && !!(window as any).Capacitor?.isNativePlatform?.();
+}
+
 export function PushManager() {
   const { user } = useAuth();
   const subscribedRef = useRef(false);
 
   useEffect(() => {
     if (!user || subscribedRef.current) return;
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-    if (!VAPID_PUBLIC_KEY) return;
 
-    const setup = async () => {
-      try {
-        // Register service worker
-        const registration = await navigator.serviceWorker.register('/sw.js');
-        await navigator.serviceWorker.ready;
-
-        // Check existing subscription
-        let subscription = await registration.pushManager.getSubscription();
-
-        if (!subscription) {
-          // Request permission
-          const permission = await Notification.requestPermission();
-          if (permission !== 'granted') return;
-
-          // Subscribe
-          subscription = await registration.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY).buffer as ArrayBuffer,
-          });
-        }
-
-        // Send subscription to backend
-        const keys = subscription.toJSON().keys || {};
-        await api.post('/notifications/push/subscribe', {
-          subscription: {
-            endpoint: subscription.endpoint,
-            keys: {
-              p256dh: keys.p256dh,
-              auth: keys.auth,
-            },
-          },
-        });
-
-        subscribedRef.current = true;
-      } catch (err) {
-        console.error('Push subscription failed:', err);
-      }
-    };
-
-    // Delay slightly to not block initial render
-    const timer = setTimeout(setup, 2000);
-    return () => clearTimeout(timer);
+    if (isCapacitorNative()) {
+      // ─── Native iOS/Android push via Capacitor ───
+      setupNativePush();
+    } else {
+      // ─── Web Push via Service Worker + VAPID ───
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+      if (!VAPID_PUBLIC_KEY) return;
+      const timer = setTimeout(setupWebPush, 2000);
+      return () => clearTimeout(timer);
+    }
   }, [user]);
+
+  async function setupNativePush() {
+    try {
+      const { PushNotifications } = await import('@capacitor/push-notifications');
+
+      // Request permission
+      const permResult = await PushNotifications.requestPermissions();
+      if (permResult.receive !== 'granted') {
+        console.warn('Push notification permission denied');
+        return;
+      }
+
+      // Register for push
+      await PushNotifications.register();
+
+      // Listen for token
+      PushNotifications.addListener('registration', async (token) => {
+        console.log('APNs device token:', token.value);
+        try {
+          await api.post('/notifications/push/device-token', {
+            token: token.value,
+            platform: 'ios',
+          });
+          subscribedRef.current = true;
+        } catch (err) {
+          console.error('Failed to register device token:', err);
+        }
+      });
+
+      PushNotifications.addListener('registrationError', (error) => {
+        console.error('Push registration error:', error);
+      });
+
+      // Handle received notifications (foreground)
+      PushNotifications.addListener('pushNotificationReceived', (notification) => {
+        console.log('Push received in foreground:', notification);
+      });
+
+      // Handle notification tap
+      PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
+        const data = action.notification.data;
+        if (data?.url) {
+          window.location.href = data.url;
+        }
+      });
+    } catch (err) {
+      console.error('Native push setup failed:', err);
+    }
+  }
+
+  async function setupWebPush() {
+    try {
+      const registration = await navigator.serviceWorker.register('/sw.js');
+      await navigator.serviceWorker.ready;
+
+      let subscription = await registration.pushManager.getSubscription();
+
+      if (!subscription) {
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') return;
+
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY).buffer as ArrayBuffer,
+        });
+      }
+
+      const keys = subscription.toJSON().keys || {};
+      await api.post('/notifications/push/subscribe', {
+        subscription: {
+          endpoint: subscription.endpoint,
+          keys: {
+            p256dh: keys.p256dh,
+            auth: keys.auth,
+          },
+        },
+      });
+
+      subscribedRef.current = true;
+    } catch (err) {
+      console.error('Push subscription failed:', err);
+    }
+  }
 
   return null;
 }

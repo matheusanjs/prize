@@ -51,6 +51,21 @@ export class NotificationsController {
     return this.pushService.subscribe(userId, body.subscription, userAgent);
   }
 
+  @Post('push/device-token')
+  @ApiOperation({ summary: 'Registrar device token (iOS/Android nativo)' })
+  registerDeviceToken(
+    @CurrentUser('id') userId: string,
+    @Body() body: { token: string; platform?: string },
+  ) {
+    return this.pushService.registerDeviceToken(userId, body.token, body.platform || 'ios');
+  }
+
+  @Delete('push/device-token')
+  @ApiOperation({ summary: 'Remover device token' })
+  removeDeviceToken(@Body() body: { token: string }) {
+    return this.pushService.removeDeviceToken(body.token);
+  }
+
   @Delete('push/unsubscribe')
   @ApiOperation({ summary: 'Remover subscrição push' })
   unsubscribe(@Body() body: { endpoint: string }) {

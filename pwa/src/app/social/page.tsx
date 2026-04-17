@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/auth';
 import api from '@/services/api';
 import {
@@ -65,6 +66,14 @@ const gStyles = `
 // ═══════════════════════════════════════════════════════════════
 
 export default function SocialPage() {
+  return (
+    <Suspense>
+      <SocialPageInner />
+    </Suspense>
+  );
+}
+
+function SocialPageInner() {
   const { user } = useAuth();
   const [trips, setTrips] = useState<Trip[]>([]);
   const [hasShare, setHasShare] = useState(true);
@@ -82,15 +91,23 @@ export default function SocialPage() {
     setLoading(false);
   }, []);
 
+  const searchParams = useSearchParams();
+
   useEffect(() => { loadTrips(); }, [loadTrips]);
 
-  const openTrip = async (tripId: string) => {
+  const openTrip = useCallback(async (tripId: string) => {
     try {
       const { data } = await api.get(`/social/trips/${tripId}`);
       setSelectedTrip(data);
       setView('detail');
     } catch { }
-  };
+  }, []);
+
+  // Auto-open trip from query param (e.g. /social?tripId=xxx)
+  useEffect(() => {
+    const tripId = searchParams.get('tripId');
+    if (tripId) openTrip(tripId);
+  }, [searchParams, openTrip]);
 
   if (loading) return <SkeletonFeed />;
   if (!hasShare) return <LockedView />;

@@ -40,11 +40,20 @@ workflows:
             --certificate-key=@env:CM_CERTIFICATE_PRIVATE_KEY
           keychain add-certificates
           xcode-project use-profiles
+      - name: Enable Push Notification capability
+        script: |
+          cd pwa/ios/App
+          # Ensure the provisioning profile includes push notifications
+          # The entitlements file (App/App.entitlements) with aps-environment=production
+          # is already referenced in the Xcode project build settings
       - name: Increment build number
         script: |
           cd pwa/ios/App
-          LATEST_BUILD=$(app-store-connect get-latest-testflight-build-number "$BUNDLE_ID" 2>/dev/null || echo 0)
-          agvtool new-version -all $((LATEST_BUILD + 1))
+          LATEST_BUILD=$(app-store-connect get-latest-testflight-build-number "$BUNDLE_ID" || echo 0)
+          echo "Latest TestFlight build number: $LATEST_BUILD"
+          NEW_BUILD=$((LATEST_BUILD + 1))
+          echo "Setting new build number: $NEW_BUILD"
+          agvtool new-version -all "$NEW_BUILD"
       - name: Build IPA
         script: |
           xcode-project build-ipa \

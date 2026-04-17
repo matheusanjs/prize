@@ -14,7 +14,11 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: '#0D1B2A',
+  viewportFit: 'cover',
+  themeColor: [
+    { media: '(prefers-color-scheme: dark)', color: '#0D1B2A' },
+    { media: '(prefers-color-scheme: light)', color: '#F4F9F9' },
+  ],
 };
 
 const themeScript = `
@@ -22,6 +26,9 @@ const themeScript = `
   try {
     var t = localStorage.getItem('pwa_theme');
     if (t === 'light') document.documentElement.classList.add('light');
+    var c = t === 'light' ? '#F4F9F9' : '#0D1B2A';
+    var m = document.querySelector('meta[name="theme-color"]');
+    if (m) m.setAttribute('content', c);
   } catch(e){}
 })();
 `;

@@ -73,6 +73,10 @@
 
 * { -webkit-tap-highlight-color: transparent; }
 
+html {
+  background-color: var(--bg);
+}
+
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -83,4 +87,13 @@ body {
 
 input, select, textarea {
   font-size: 16px !important; /* prevent iOS zoom */
+}
+
+/* ── iOS Safe Area ── */
+.safe-area-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
 }

@@ -256,7 +256,7 @@ export default function BoatsPage() {
                 return (
                   <div
                     key={trip.id}
-                    onClick={() => router.push('/social')}
+                    onClick={() => router.push(`/social?tripId=${trip.id}`)}
                     className="relative w-full h-[300px] overflow-hidden cursor-pointer active:scale-[0.985] transition-transform duration-300 snap-center flex-shrink-0"
                     style={{ minWidth: '100%' }}
                   >

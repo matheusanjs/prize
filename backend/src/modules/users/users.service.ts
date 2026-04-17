@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 
@@ -54,11 +54,20 @@ export class UsersService {
 
   async update(id: string, dto: UpdateUserDto) {
     await this.findById(id);
-    return this.prisma.user.update({
-      where: { id },
-      data: dto as any,
-      select: { id: true, name: true, email: true, phone: true, role: true, isActive: true },
-    });
+    try {
+      return await this.prisma.user.update({
+        where: { id },
+        data: dto as any,
+        select: { id: true, name: true, email: true, phone: true, role: true, isActive: true },
+      });
+    } catch (error: any) {
+      if (error.code === 'P2002') {
+        const field = error.meta?.target?.[0] || 'campo';
+        const labels: Record<string, string> = { phone: 'telefone', email: 'e-mail' };
+        throw new ConflictException(`Já existe um usuário com este ${labels[field] || field}`);
+      }
+      throw error;
+    }
   }
 
   async softDelete(id: string) {
@@ -85,10 +94,19 @@ export class UsersService {
   }
 
   async updateProfile(id: string, dto: { name?: string; phone?: string; avatar?: string }) {
-    return this.prisma.user.update({
-      where: { id },
-      data: dto,
-      select: { id: true, name: true, email: true, phone: true, role: true, avatar: true },
-    });
+    try {
+      return await this.prisma.user.update({
+        where: { id },
+        data: dto,
+        select: { id: true, name: true, email: true, phone: true, role: true, avatar: true },
+      });
+    } catch (error: any) {
+      if (error.code === 'P2002') {
+        const field = error.meta?.target?.[0] || 'campo';
+        const labels: Record<string, string> = { phone: 'telefone', email: 'e-mail' };
+        throw new ConflictException(`Já existe um usuário com este ${labels[field] || field}`);
+      }
+      throw error;
+    }
   }
 }

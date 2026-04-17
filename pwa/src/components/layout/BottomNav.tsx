@@ -42,6 +42,8 @@ export function BottomNav() {
       document.documentElement.classList.add('light');
       localStorage.setItem('pwa_theme', 'light');
     }
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', next ? '#0D1B2A' : '#F4F9F9');
   };
 
   if (!user) return null;

@@ -710,14 +710,25 @@ export default function ReservationsPage() {
               </div>
             </div>
             {!isBefore(selectedDate, startOfDay(new Date())) && (
-              boats.find(b => b.id === selectedBoatId)?.status === 'AVAILABLE' ? (
-                <button
-                  onClick={() => openCreate(selectedDate)}
-                  className="text-[13px] text-white font-semibold flex items-center gap-1.5 bg-gradient-to-r from-primary-500 to-primary-400 px-4 py-2 rounded-xl shadow-[0_4px_12px_rgba(0,117,119,0.25)] active:scale-[0.97] transition-all"
-                >
-                  <Plus size={15} strokeWidth={2.5} /> Reservar
-                </button>
-              ) : (
+              boats.find(b => b.id === selectedBoatId)?.status === 'AVAILABLE' ? (() => {
+                const hasOtherOnly = selectedDayRes.length > 0 && selectedDayRes.every(r => r.user?.id !== user?.id && r.status === 'CONFIRMED');
+                const otherRes = hasOtherOnly ? selectedDayRes.find(r => r.user?.id !== user?.id && r.status === 'CONFIRMED' && !isBefore(parseISO(r.startDate), new Date())) : null;
+                return hasOtherOnly && otherRes ? (
+                  <button
+                    onClick={() => openSwap(otherRes)}
+                    className="text-[13px] text-white font-semibold flex items-center gap-1.5 bg-gradient-to-r from-primary-500 to-primary-400 px-4 py-2 rounded-xl shadow-[0_4px_12px_rgba(0,117,119,0.25)] active:scale-[0.97] transition-all"
+                  >
+                    <ArrowLeftRight size={15} strokeWidth={2.5} /> Trocar Data
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => openCreate(selectedDate)}
+                    className="text-[13px] text-white font-semibold flex items-center gap-1.5 bg-gradient-to-r from-primary-500 to-primary-400 px-4 py-2 rounded-xl shadow-[0_4px_12px_rgba(0,117,119,0.25)] active:scale-[0.97] transition-all"
+                  >
+                    <Plus size={15} strokeWidth={2.5} /> Reservar
+                  </button>
+                );
+              })() : (
                 <span className="text-xs text-amber-500/70 font-medium">Embarcação indisponível</span>
               )
             )}

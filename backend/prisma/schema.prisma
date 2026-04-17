@@ -45,6 +45,7 @@ model User {
   tripParticipations   TripParticipant[]
   tripMessages         TripMessage[]
   tripLikes            TripLike[]
+  deviceTokens         DeviceToken[]
 
   @@index([email])
   @@index([role])
@@ -430,6 +431,18 @@ model PushSubscription {
 
   @@index([userId])
   @@map("push_subscriptions")
+}
+
+model DeviceToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  platform  String   @default("ios") // ios | android
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("device_tokens")
 }
 
 model AiLog {

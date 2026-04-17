@@ -18,7 +18,7 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
       ) : (
         <div className="min-h-screen">
           <BottomNav />
-          <main className="pt-14 pb-20 px-4">{children}</main>
+          <main className="pb-20 px-4" style={{ paddingTop: 'calc(3.5rem + env(safe-area-inset-top, 0px))', paddingBottom: 'calc(5rem + env(safe-area-inset-bottom, 0px))' }}>{children}</main>
         </div>
       )}
     </AuthProvider>
