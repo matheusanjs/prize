@@ -74,16 +74,17 @@
 * { -webkit-tap-highlight-color: transparent; }
 
 /* ── iOS: kill rubber-band empty space ────────────────────────────
-   On overscroll, iOS reveals the area OUTSIDE the body. To keep that
-   area the same color as the app and disable the bounce gap, we set
-   the bg on html and disable overscroll chaining on both elements.
-   We also use 100dvh so that when Safari's URL bar hides/shows, the
-   body matches the visible viewport exactly (no hidden gap). */
+   WKWebView reveals the native background (white) on overscroll.
+   CSS overscroll-behavior doesn't work in WKWebView. The fix is:
+   1. Lock html+body to exactly the viewport (no document scroll)
+   2. Let the main content area handle its own overflow
+   This way, the WKWebView scrollView has no content to bounce. */
 html {
   background-color: var(--bg);
   overscroll-behavior: none;
   -webkit-overflow-scrolling: auto;
-  min-height: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 
 body {
@@ -92,8 +93,8 @@ body {
   overscroll-behavior: none;
   background-color: var(--bg);
   color: var(--text);
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100%;
+  overflow: hidden;
 }
 
 input, select, textarea {
