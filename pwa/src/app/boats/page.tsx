@@ -276,11 +276,7 @@ export default function BoatsPage() {
                     )}
                     <div className="absolute inset-0" style={{ background: 'linear-gradient(0deg, rgba(10,20,35,0.95) 0%, rgba(10,20,35,0.5) 35%, rgba(0,0,0,0.15) 60%, rgba(0,0,0,0.25) 100%)' }} />
 
-                    <div className="absolute top-4 left-5 flex items-center gap-2">
-                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold text-white/80" style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(16px)' }}>
-                        <Sparkles size={10} className="text-[#FFC857]" /> Experiência selecionada para você
-                      </div>
-                    </div>
+
 
                     <div className="absolute top-4 right-5">
                       <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold text-white" style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(16px)' }}>
@@ -442,12 +438,11 @@ export default function BoatsPage() {
                             <span className={`text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-full ${
                               isOwn ? 'bg-blue-500/90 text-white shadow-lg shadow-blue-500/25' : 'bg-black/40 backdrop-blur-md text-white'
                             }`}>
-                              {isOwn ? '✦ Própria' : `Cota #${share.shareNumber}`}
+                              {isOwn ? '✦ Própria' : `Cota#${boat.name}`}
                             </span>
                           </div>
                           <div className="absolute bottom-0 left-0 right-0 p-5">
-                            <h3 className="text-[22px] font-black text-white leading-tight tracking-tight" style={{ textShadow: '0 2px 12px rgba(0,0,0,0.4)' }}>{boat.name}</h3>
-                            <p className="text-[12px] text-white/50 font-medium mt-0.5">{boat.model} · {boat.year} · {boat.length}ft</p>
+                            <p className="text-[12px] text-white/50 font-medium">{boat.model} · {boat.year} · {boat.length}ft</p>
                           </div>
                         </div>
                       ) : (
@@ -457,12 +452,11 @@ export default function BoatsPage() {
                             <span className={`text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-full ${
                               isOwn ? 'bg-blue-500/90 text-white' : 'lx-gold-bg lx-gold'
                             }`}>
-                              {isOwn ? '✦ Própria' : `Cota #${share.shareNumber}`}
+                              {isOwn ? '✦ Própria' : `Cota#${boat.name}`}
                             </span>
                           </div>
                           <div className="absolute bottom-0 left-0 right-0 p-5">
-                            <h3 className="text-[22px] font-black text-[var(--text)] leading-tight">{boat.name}</h3>
-                            <p className="text-[12px] text-[var(--text-muted)] font-medium mt-0.5">{boat.model} · {boat.year}</p>
+                            <p className="text-[12px] text-[var(--text-muted)] font-medium">{boat.model} · {boat.year}</p>
                           </div>
                         </div>
                       )}
