@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
 import Image from 'next/image';
 import { useAuth } from '@/contexts/auth';
@@ -12,6 +12,24 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Kill ALL scroll/bounce on iOS WKWebView for this page
+  useEffect(() => {
+    const prevent = (e: TouchEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      // Allow touch on inputs so keyboard still works
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      e.preventDefault();
+    };
+    document.addEventListener('touchmove', prevent, { passive: false });
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('touchmove', prevent);
+      document.body.style.overflow = '';
+      document.documentElement.style.overflow = '';
+    };
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
