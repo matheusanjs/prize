@@ -676,44 +676,9 @@ export default function ReservationsPage() {
                 </p>
               </div>
             </div>
-            {!isBefore(selectedDate, startOfDay(new Date())) && (
-              boats.find(b => b.id === selectedBoatId)?.status === 'AVAILABLE' ? (() => {
-                const myActiveRes = selectedDayRes.find(r => r.user?.id === user?.id && (r.status === 'CONFIRMED' || r.status === 'PENDING'));
-                const hasOtherOnly = !myActiveRes && selectedDayRes.length > 0 && selectedDayRes.every(r => r.user?.id !== user?.id && r.status === 'CONFIRMED');
-                const otherRes = hasOtherOnly ? selectedDayRes.find(r => r.user?.id !== user?.id && r.status === 'CONFIRMED' && !isBefore(parseISO(r.startDate), new Date())) : null;
-                if (myActiveRes) return (
-                  <button
-                    onClick={() => handleCancel(myActiveRes.id)}
-                    className="text-[13px] text-red-500 font-semibold flex items-center gap-1.5 bg-red-500/10 px-4 py-2 rounded-xl border border-red-500/20 active:scale-[0.97] transition-all"
-                  >
-                    <X size={15} strokeWidth={2.5} /> Cancelar
-                  </button>
-                );
-                return hasOtherOnly && otherRes ? (
-                  <button
-                    onClick={() => openSwap(otherRes)}
-                    className="text-[13px] text-white font-semibold flex items-center gap-1.5 bg-gradient-to-r from-primary-500 to-primary-400 px-4 py-2 rounded-xl shadow-[0_4px_12px_rgba(0,117,119,0.25)] active:scale-[0.97] transition-all"
-                  >
-                    <ArrowLeftRight size={15} strokeWidth={2.5} /> Trocar Data
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => openCreate(selectedDate)}
-                    className="text-[13px] text-white font-semibold flex items-center gap-1.5 bg-gradient-to-r from-primary-500 to-primary-400 px-4 py-2 rounded-xl shadow-[0_4px_12px_rgba(0,117,119,0.25)] active:scale-[0.97] transition-all"
-                  >
-                    <Plus size={15} strokeWidth={2.5} /> Reservar
-                  </button>
-                );
-              })() : (
-                <span className="text-xs text-amber-500/70 font-medium">Embarcação indisponível</span>
-              )
-            )}
           </div>
           {selectedDayRes.length === 0 ? (
             <div className="bg-[var(--card)] rounded-2xl p-8 border border-[var(--border)] text-center">
-              <div className="w-14 h-14 bg-emerald-500/10 rounded-2xl flex items-center justify-center mx-auto mb-3">
-                <Ship size={26} className="text-emerald-400" />
-              </div>
               <p className="text-sm font-medium text-[var(--text-secondary)]">Nenhuma reserva neste dia</p>
               <p className="text-[11px] text-[var(--text-muted)] mt-1">Todos os horários disponíveis</p>
               {!isBefore(selectedDate, startOfDay(new Date())) && boats.find(b => b.id === selectedBoatId)?.status === 'AVAILABLE' && (
