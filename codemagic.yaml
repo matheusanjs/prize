@@ -56,6 +56,34 @@ workflows:
           </body></html>
           FALLBACK
           npx cap sync ios
+      - name: Add CustomViewController to Xcode project
+        script: |
+          cd pwa/ios/App
+          gem install xcodeproj
+          ruby <<'RUBY'
+          require 'xcodeproj'
+          project = Xcodeproj::Project.open('App.xcodeproj')
+          target = project.targets.first
+
+          # Check if already added
+          already = target.source_build_phase.files.any? { |f| f.display_name == 'CustomViewController.swift' }
+          if already
+            puts "CustomViewController.swift already in build phase — skipping"
+          else
+            # Find or create the App group
+            app_group = project.main_group.children.find { |g| g.display_name == 'App' }
+            if app_group.nil?
+              puts "ERROR: Could not find App group"
+              exit 1
+            end
+
+            # Add file reference
+            file_ref = app_group.new_file('CustomViewController.swift')
+            target.source_build_phase.add_file_reference(file_ref)
+            project.save
+            puts "Added CustomViewController.swift to Xcode project build phase"
+          end
+          RUBY
       - name: Debug — verify Capacitor config
         script: |
           echo "=== capacitor.config.json (native) ==="
@@ -66,6 +94,9 @@ workflows:
           echo ""
           echo "=== out/index.html ==="
           cat pwa/out/index.html
+          echo ""
+          echo "=== pbxproj CustomViewController references ==="
+          grep -c "CustomViewController" App.xcodeproj/project.pbxproj || echo "NOT FOUND in pbxproj"
       - name: Install CocoaPods
         script: |
           cd pwa/ios/App
