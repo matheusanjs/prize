@@ -5,6 +5,11 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { MailService } from './mail.service';
 import { ConfigService } from '@nestjs/config';
+import * as dns from 'dns';
+import { promisify } from 'util';
+
+const resolveMx = promisify(dns.resolveMx);
+const resolveTxt = promisify(dns.resolveTxt);
 
 @ApiTags('mail')
 @Controller('mail')
@@ -29,10 +34,10 @@ export class MailController {
     return {
       host,
       port,
-      user: user ? user.substring(0, 3) + '***' : '',
+      user: user ? user.substring(0, 3) + '***' : '(local)',
       from,
       secure: secure === 'true',
-      configured: !!host && !!user,
+      configured: !!host || host === '127.0.0.1',
     };
   }
 
@@ -51,5 +56,45 @@ export class MailController {
     } catch (error) {
       return { success: false, message: `Falha ao enviar: ${error}` };
     }
+  }
+
+  @Get('dns')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Check DNS email records' })
+  async checkDns() {
+    const domain = 'marinaprizeclub.com';
+    const results: { name: string; status: 'ok' | 'warning' | 'error'; value: string; detail: string }[] = [];
+
+    // MX
+    try {
+      const mx = await resolveMx(domain);
+      const sorted = mx.sort((a, b) => a.priority - b.priority);
+      results.push({ name: 'MX', status: 'ok', value: sorted.map(r => `${r.priority} ${r.exchange}`).join(', '), detail: 'Registro MX encontrado' });
+    } catch { results.push({ name: 'MX', status: 'error', value: '', detail: 'Nenhum registro MX encontrado' }); }
+
+    // SPF
+    try {
+      const txt = await resolveTxt(domain);
+      const spf = txt.flat().find(r => r.startsWith('v=spf1'));
+      if (spf) results.push({ name: 'SPF', status: 'ok', value: spf, detail: 'SPF configurado' });
+      else results.push({ name: 'SPF', status: 'warning', value: '', detail: 'Nenhum registro SPF encontrado' });
+    } catch { results.push({ name: 'SPF', status: 'warning', value: '', detail: 'Erro ao consultar SPF' }); }
+
+    // DKIM
+    try {
+      const txt = await resolveTxt(`default._domainkey.${domain}`);
+      const dkim = txt.flat().find(r => r.includes('DKIM'));
+      results.push({ name: 'DKIM', status: dkim ? 'ok' : 'warning', value: dkim ? 'Configurado' : '', detail: dkim ? 'DKIM ativo' : 'Registro DKIM não encontrado no DNS (pode estar configurado localmente)' });
+    } catch { results.push({ name: 'DKIM', status: 'warning', value: '', detail: 'DKIM não publicado no DNS' }); }
+
+    // DMARC
+    try {
+      const txt = await resolveTxt(`_dmarc.${domain}`);
+      const dmarc = txt.flat().find(r => r.startsWith('v=DMARC1'));
+      if (dmarc) results.push({ name: 'DMARC', status: 'ok', value: dmarc, detail: 'DMARC configurado' });
+      else results.push({ name: 'DMARC', status: 'warning', value: '', detail: 'Nenhum DMARC encontrado' });
+    } catch { results.push({ name: 'DMARC', status: 'warning', value: '', detail: 'Erro ao consultar DMARC' }); }
+
+    return results;
   }
 }
