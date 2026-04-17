@@ -1293,16 +1293,21 @@ interface ClientChecklist {
   returnFuelPhotoUrl?: string; returnSketchMarks?: string; returnObservations?: string; returnCompletedAt?: string;
   items?: { id: string; label: string; checked: boolean; notes?: string }[];
   operator?: { id: string; name: string };
+  totalFuel?: number;
+  fuelCost?: number;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    CHECKLIST COMPARISON VIEW — Before vs After (Saída vs Retorno)
 ═══════════════════════════════════════════════════════════════════════════ */
 function ChecklistComparisonView({ selected, onBack }: { selected: ClientChecklist; onBack: () => void }) {
-  const [openSection, setOpenSection] = useState<string | null>(null);
+  const hasReturn = !!selected.returnCompletedAt;
+  const hasFuelPhotos = !!(selected.fuelPhotoUrl || selected.returnFuelPhotoUrl);
+  const hasDamages = !!(selected.hullSketchMarks || selected.returnSketchMarks);
+  const defaultSection = hasFuelPhotos ? (hasReturn ? 'fuel-cmp' : 'fuel') : hasDamages ? (hasReturn ? 'sketch-cmp' : 'sketch') : null;
+  const [openSection, setOpenSection] = useState<string | null>(defaultSection);
   const [zoomImg, setZoomImg] = useState<string | null>(null);
   const toggle = (key: string) => setOpenSection(prev => prev === key ? null : key);
-  const hasReturn = !!selected.returnCompletedAt;
   const uncheckedItems = selected.items?.filter(i => !i.checked) || [];
   const checkedCount = selected.items?.filter(i => i.checked).length || 0;
   const totalCount = selected.items?.length || 0;
@@ -1389,6 +1394,25 @@ function ChecklistComparisonView({ selected, onBack }: { selected: ClientCheckli
                 <p className="text-xs text-red-600">{item.label}{item.notes ? ` — ${item.notes}` : ''}</p>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Fuel cost summary */}
+        {(selected.totalFuel || 0) > 0 && (
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                <span className="text-lg">⛽</span>
+              </div>
+              <div className="flex-1">
+                <p className="text-xs font-bold text-amber-600 dark:text-amber-400">Consumo de Combustível</p>
+                <p className="text-lg font-black text-amber-600 dark:text-amber-300">{(selected.totalFuel || 0).toFixed(1)} litros</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-semibold text-amber-500 uppercase">Fatura</p>
+                <p className="text-lg font-black text-amber-600 dark:text-amber-300">R$ {(selected.fuelCost || 0).toFixed(2)}</p>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1948,7 +1972,7 @@ function ClientView() {
                           </div>
                           {hasChecklist && (
                             <button
-                              onClick={(e) => { e.stopPropagation(); setSelected(r.checklist!); }}
+                              onClick={(e) => { e.stopPropagation(); setSelected({ ...r.checklist!, totalFuel: totalFuel || 0, fuelCost: fuelCost || 0 }); }}
                               className="text-[11px] bg-primary-500/10 text-primary-500 px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1"
                             >
                               <Eye className="w-3.5 h-3.5" /> Detalhes

@@ -30,6 +30,7 @@ import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
 import { HealthModule } from './modules/health/health.module';
 import { SocialModule } from './modules/social/social.module';
 import { MailModule } from './modules/mail/mail.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { AuditLogInterceptor } from './interceptors/audit-log.interceptor';
 
 @Module({
@@ -78,6 +79,7 @@ import { AuditLogInterceptor } from './interceptors/audit-log.interceptor';
     SocialModule,
     MailModule,
     HealthModule,
+    DashboardModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

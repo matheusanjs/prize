@@ -255,4 +255,7 @@ export const getPushUsers = (search?: string) => api.get('/admin/push/users', { 
 export const sendPushNotification = (data: { title: string; body: string; target: string; userIds?: string[]; type?: string; url?: string; imageUrl?: string }) => api.post('/admin/push/send', data);
 export const sendPushTest = (data: { userId: string; title?: string; body?: string }) => api.post('/admin/push/test', data);
 
+// Dashboard
+export const getDashboardStats = () => api.get('/dashboard/stats');
+
 export default api;

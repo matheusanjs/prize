@@ -176,7 +176,7 @@ export class AdminPushController {
       else if (target === 'operators') where.role = 'OPERATOR';
 
       const users = await this.prisma.user.findMany({
-        where: { ...where, active: true },
+        where: { ...where, isActive: true },
         select: { id: true },
       });
       targetUserIds = users.map((u) => u.id);
@@ -242,7 +242,7 @@ export class AdminPushController {
   @Get('users')
   @ApiOperation({ summary: 'List users available for targeting' })
   async getUsers(@Query('search') search?: string) {
-    const where: any = { active: true };
+    const where: any = { isActive: true };
     if (search) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
