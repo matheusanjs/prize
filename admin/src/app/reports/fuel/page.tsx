@@ -62,8 +62,8 @@ export default function FuelReportPage() {
             <Section title="Histórico de Preços">
               <DataTable columns={[
                 { key: 'fuelType', label: 'Tipo' },
-                { key: 'pricePerLiter', label: 'Preço/L', align: 'right', fmt: (v: number) => `R$ ${fmt(v)}` },
-                { key: 'effectiveFrom', label: 'Vigência', fmt: (v: string) => new Date(v).toLocaleDateString('pt-BR') },
+                { key: 'price', label: 'Preço/L', align: 'right', fmt: (v: number) => `R$ ${fmt(v)}` },
+                { key: 'createdAt', label: 'Data', fmt: (v: string) => v ? new Date(v).toLocaleDateString('pt-BR') : '—' },
               ]} rows={data.priceHistory} />
             </Section>
           )}

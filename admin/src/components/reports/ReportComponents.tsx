@@ -6,9 +6,11 @@ import { Calendar, Download, Loader2 } from 'lucide-react';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 export function fmt(v: number) {
+  if (v == null || isNaN(v)) return '0,00';
   return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 export function fmtInt(v: number) {
+  if (v == null || isNaN(v)) return '0';
   return v.toLocaleString('pt-BR');
 }
 
