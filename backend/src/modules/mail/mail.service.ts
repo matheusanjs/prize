@@ -8,14 +8,14 @@ export class MailService {
   private transporter: nodemailer.Transporter;
 
   constructor(private config: ConfigService) {
+    const user = this.config.get('SMTP_USER', '');
+    const pass = this.config.get('SMTP_PASS', '');
     this.transporter = nodemailer.createTransport({
-      host: this.config.get('SMTP_HOST', 'localhost'),
-      port: parseInt(this.config.get('SMTP_PORT', '587')),
+      host: this.config.get('SMTP_HOST', '127.0.0.1'),
+      port: parseInt(this.config.get('SMTP_PORT', '25')),
       secure: this.config.get('SMTP_SECURE', 'false') === 'true',
-      auth: {
-        user: this.config.get('SMTP_USER', ''),
-        pass: this.config.get('SMTP_PASS', ''),
-      },
+      ...(user ? { auth: { user, pass } } : {}),
+      tls: { rejectUnauthorized: false },
     });
   }
 
