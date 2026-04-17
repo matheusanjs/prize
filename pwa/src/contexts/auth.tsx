@@ -104,7 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Redirect to login only when auth has settled and user is null
   useEffect(() => {
     if (!isLoading && !user && pathname !== '/login' && !pathname.startsWith('/social/share/')) {
-      window.location.href = 'https://marinaprizeclub.com/login';
+      window.location.href = '/login';
     }
   }, [isLoading, user, pathname]);
 
@@ -134,7 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch { /* ignore */ }
     setUser(null);
-    window.location.href = 'https://marinaprizeclub.com/login';
+    window.location.href = '/login';
   };
 
   const refreshUser = async () => {

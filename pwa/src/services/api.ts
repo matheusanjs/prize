@@ -100,13 +100,13 @@ api.interceptors.response.use(
           localStorage.removeItem('refreshToken');
           localStorage.removeItem('cachedUser');
           if (window.location.pathname !== '/login') {
-            window.location.href = 'https://marinaprizeclub.com/login';
+            window.location.href = '/login';
           }
         }
       } else if (window.location.pathname !== '/login') {
         localStorage.removeItem('token');
         localStorage.removeItem('cachedUser');
-        window.location.href = 'https://marinaprizeclub.com/login';
+        window.location.href = '/login';
       }
     }
     return Promise.reject(error);
