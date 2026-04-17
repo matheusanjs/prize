@@ -49,13 +49,11 @@ workflows:
       - name: Increment build number
         script: |
           cd pwa/ios/App
-          # BASE_OFFSET must always be higher than the last known App Store build (currently 31).
-          # Each Codemagic run has a unique CM_BUILD_NUMBER (1, 2, 3...) so BASE_OFFSET + CM_BUILD_NUMBER
-          # is always unique and strictly increasing — no API delay issues.
-          BASE_OFFSET=50
-          CM_NUM="${CM_BUILD_NUMBER:-1}"
-          NEW_BUILD=$((BASE_OFFSET + CM_NUM))
-          echo "CM_BUILD_NUMBER=$CM_NUM  BASE_OFFSET=$BASE_OFFSET  →  CFBundleVersion=$NEW_BUILD"
+          # Use minutes since 2026-01-01 as build number — always increasing, never duplicates.
+          EPOCH_2026=$(date -d '2026-01-01T00:00:00Z' +%s 2>/dev/null || date -j -f '%Y-%m-%dT%H:%M:%SZ' '2026-01-01T00:00:00Z' +%s)
+          NOW=$(date +%s)
+          NEW_BUILD=$(( (NOW - EPOCH_2026) / 60 ))
+          echo "Timestamp-based CFBundleVersion=$NEW_BUILD"
           agvtool new-version -all "$NEW_BUILD"
       - name: Build IPA
         script: |
