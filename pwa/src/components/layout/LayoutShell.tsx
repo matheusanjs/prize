@@ -74,8 +74,8 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
           <BottomNav />
           <main
             ref={mainRef}
-            className="px-4 flex-1 main-safe-padding no-bounce"
-            style={{ overflowY: 'auto' }}
+            className="px-4 flex-1 main-safe-top no-bounce"
+            style={{ overflowY: 'auto', order: 0 }}
           >{children}</main>
         </div>
       )}

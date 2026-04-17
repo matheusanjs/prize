@@ -77,14 +77,12 @@ export function BottomNav() {
         </div>
       </header>
 
-      {/* Bottom navigation — single fixed bar covering safe area */}
+      {/* Bottom navigation — flex item at end via order */}
       <nav
         className="border-t border-[var(--nav-border)] nav-fixed-bottom"
         style={{
-          position: 'fixed',
-          bottom: 0,
-          left: 0,
-          right: 0,
+          order: 1,
+          flexShrink: 0,
           zIndex: 9999,
           backgroundColor: 'var(--nav-bg)',
         }}
