@@ -731,6 +731,26 @@ function TripChat({ trip, userId, onBack }: { trip: Trip; userId: string; onBack
   const socketRef = useRef<Socket | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
+
+  // Handle iOS keyboard pushing content up
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const onResize = () => {
+      const offset = window.innerHeight - vv.height;
+      setKeyboardOffset(offset > 50 ? offset : 0);
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+    };
+    vv.addEventListener('resize', onResize);
+    vv.addEventListener('scroll', onResize);
+    return () => {
+      vv.removeEventListener('resize', onResize);
+      vv.removeEventListener('scroll', onResize);
+    };
+  }, []);
 
   useEffect(() => {
     api.get(`/social/trips/${trip.id}/messages`).then(({ data }) => {
@@ -761,6 +781,8 @@ function TripChat({ trip, userId, onBack }: { trip: Trip; userId: string; onBack
     setText('');
     try { socketRef.current?.emit('sendMessage', { tripId: trip.id, content, type: 'TEXT' }); } catch { }
     setSending(false);
+    // Keep keyboard open after sending
+    setTimeout(() => inputRef.current?.focus(), 10);
   };
 
   const sendImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -777,12 +799,17 @@ function TripChat({ trip, userId, onBack }: { trip: Trip; userId: string; onBack
     if (recording) { mediaRecorderRef.current?.stop(); setRecording(false); return; }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      // Use mp4/aac for iOS compatibility, fallback to webm
+      const mimeType = MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4'
+        : MediaRecorder.isTypeSupported('audio/aac') ? 'audio/aac'
+        : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
+        : '';
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
       const chunks: Blob[] = [];
       recorder.ondataavailable = e => chunks.push(e.data);
       recorder.onstop = () => {
         stream.getTracks().forEach(t => t.stop());
-        const blob = new Blob(chunks, { type: 'audio/webm' });
+        const blob = new Blob(chunks, { type: recorder.mimeType });
         const reader = new FileReader();
         reader.onload = () => { socketRef.current?.emit('sendMessage', { tripId: trip.id, mediaBase64: reader.result as string, type: 'AUDIO' }); };
         reader.readAsDataURL(blob);
@@ -794,8 +821,8 @@ function TripChat({ trip, userId, onBack }: { trip: Trip; userId: string; onBack
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col bg-[var(--bg)]">
-      <div className="px-4 py-3 flex items-center gap-3 safe-area-top shrink-0" style={{ background: 'var(--header-bg)', backdropFilter: 'blur(12px)', borderBottom: '1px solid var(--border)' }}>
+    <div className="fixed inset-0 z-[60] flex flex-col bg-[var(--bg)]" style={{ height: keyboardOffset > 0 ? `calc(100% - ${keyboardOffset}px)` : '100%' }}>
+      <div className="px-4 py-3 flex items-center gap-3 header-safe-top shrink-0" style={{ background: 'var(--header-bg)', borderBottom: '1px solid var(--border)' }}>
         <button onClick={onBack} className="p-1"><ChevronLeft size={22} className="text-[var(--text)]" /></button>
         <div className="flex-1 min-w-0">
           <h2 className="text-sm font-bold text-[var(--text)] truncate">{trip.title}</h2>
@@ -803,7 +830,7 @@ function TripChat({ trip, userId, onBack }: { trip: Trip; userId: string; onBack
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+      <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <MessageCircle size={32} className="text-[var(--text-muted)] opacity-30 mb-2" />
@@ -817,14 +844,14 @@ function TripChat({ trip, userId, onBack }: { trip: Trip; userId: string; onBack
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="border-t px-3 py-2 safe-area-bottom shrink-0" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
+      <div className="border-t px-3 py-2 shrink-0" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
         <div className="flex items-center gap-2 max-w-lg mx-auto">
           <input ref={fileInputRef} type="file" accept="image/*" onChange={sendImage} className="hidden" />
           <button onClick={() => fileInputRef.current?.click()} className="p-2 text-[var(--text-muted)] active:scale-90 transition"><ImageIcon size={20} /></button>
           <button onClick={toggleRecording} className={`p-2 active:scale-90 transition ${recording ? 'text-red-500 animate-pulse' : 'text-[var(--text-muted)]'}`}>
             {recording ? <MicOff size={20} /> : <Mic size={20} />}
           </button>
-          <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} placeholder="Mensagem..."
+          <input ref={inputRef} value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} placeholder="Mensagem..."
             className="flex-1 bg-[var(--subtle)] border border-[var(--border)] rounded-full px-4 py-2.5 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:border-[#00C2A8] transition" />
           <button onClick={send} disabled={!text.trim() || sending} className="p-2 disabled:opacity-30 active:scale-90 transition" style={{ color: '#00C2A8' }}><Send size={20} /></button>
         </div>
