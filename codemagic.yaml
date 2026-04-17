@@ -49,10 +49,10 @@ workflows:
       - name: Increment build number
         script: |
           cd pwa/ios/App
-          # BASE_OFFSET must always be higher than the last known App Store build (currently 11).
+          # BASE_OFFSET must always be higher than the last known App Store build (currently 21).
           # Each Codemagic run has a unique CM_BUILD_NUMBER (1, 2, 3...) so BASE_OFFSET + CM_BUILD_NUMBER
           # is always unique and strictly increasing — no API delay issues.
-          BASE_OFFSET=20
+          BASE_OFFSET=30
           CM_NUM="${CM_BUILD_NUMBER:-1}"
           NEW_BUILD=$((BASE_OFFSET + CM_NUM))
           echo "CM_BUILD_NUMBER=$CM_NUM  BASE_OFFSET=$BASE_OFFSET  →  CFBundleVersion=$NEW_BUILD"
