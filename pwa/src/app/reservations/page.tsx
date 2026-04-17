@@ -732,6 +732,9 @@ export default function ReservationsPage() {
                     )}
                     {isMine && (r.status === 'CONFIRMED' || r.status === 'PENDING') && (
                       <div className="mt-3 space-y-2">
+                        <p className="text-[11px] text-emerald-500 text-center font-medium">
+                          Reserva confirmada para você
+                        </p>
                         {!r.confirmedAt && isToday(selectedDate!) && (
                           <button
                             onClick={() => openConfirmArrival(r)}
