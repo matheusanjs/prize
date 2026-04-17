@@ -27,4 +27,4 @@ pnpm-debug.log*
 # Runtime uploads/temp
 backend/uploads/
 tmp/
-temp/
+temp/backend/whatsapp-auth/

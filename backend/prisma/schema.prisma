@@ -155,6 +155,8 @@ model Reservation {
   @@index([userId])
   @@index([status])
   @@index([startDate, endDate])
+  @@index([boatId, startDate])
+  @@index([userId, status, startDate])
   @@map("reservations")
 }
 
@@ -197,6 +199,7 @@ model OperationalQueue {
   @@index([status])
   @@index([scheduledAt])
   @@index([position])
+  @@index([boatId, status, position])
   @@map("operational_queue")
 }
 
@@ -223,6 +226,7 @@ model Charge {
   @@index([status])
   @@index([dueDate])
   @@index([category])
+  @@index([userId, status, dueDate])
   @@map("charges")
 }
 
@@ -308,6 +312,7 @@ model FuelLog {
   @@index([boatId])
   @@index([operatorId])
   @@index([loggedAt])
+  @@index([boatId, loggedAt])
   @@map("fuel_logs")
 }
 
@@ -416,6 +421,7 @@ model Notification {
   @@index([read])
   @@index([type])
   @@index([sentAt])
+  @@index([userId, read, sentAt])
   @@map("notifications")
 }
 

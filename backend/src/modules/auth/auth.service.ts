@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException, ConflictException, Optional, Inject,
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
 import { WhatsAppAutomationService } from '../whatsapp/whatsapp-automation.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -97,8 +98,9 @@ export class AuthService {
   }
 
   async refreshTokens(dto: RefreshTokenDto) {
+    const tokenHash = this.hashToken(dto.refreshToken);
     const stored = await this.prisma.refreshToken.findUnique({
-      where: { token: dto.refreshToken },
+      where: { token: tokenHash },
       include: { user: true },
     });
 
@@ -152,12 +154,17 @@ export class AuthService {
     return { accessToken, refreshToken };
   }
 
+  private hashToken(token: string): string {
+    return crypto.createHash('sha256').update(token).digest('hex');
+  }
+
   private async saveRefreshToken(userId: string, token: string) {
     const expiresAt = new Date();
-    expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+    // 7 days retention (matches JWT expiry) — not 1 year
+    expiresAt.setDate(expiresAt.getDate() + 7);
 
     await this.prisma.refreshToken.create({
-      data: { token, userId, expiresAt },
+      data: { token: this.hashToken(token), userId, expiresAt },
     });
   }
 }

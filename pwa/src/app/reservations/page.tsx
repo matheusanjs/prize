@@ -10,6 +10,7 @@ import WeatherTimeline, { buildTimelineFromHistory, buildTimelineFromForecast } 
 import { useReservationPolling } from '@/hooks/useReservationPolling';
 import { useReservationsRealtime } from '@/hooks/useReservationsRealtime';
 import { saveCalendarCache, loadCalendarCache } from '@/utils/calendarCache';
+import { handleApiError, toastSuccess } from '@/lib/errors';
 
 interface ForecastDay {
   date: string;
@@ -474,6 +475,7 @@ export default function ReservationsPage() {
       invalidateCache('/reservations');
       invalidateCache('calendar');
       invalidateCache('boat/');
+      toastSuccess('Reserva criada!');
       // Background refresh (non-blocking) to reconcile with server truth
       loadCalendar();
       loadSelectedDayReservations(form.boatId, selectedDate);
@@ -515,7 +517,7 @@ export default function ReservationsPage() {
       setCalendarReservations(prevCalendar);
       setSelectedDayReservations(prevDay);
       setReservationLimit(prevLimit);
-      alert('Não foi possível cancelar a reserva. Tente novamente.');
+      handleApiError(null, 'Não foi possível cancelar a reserva. Tente novamente.');
     }
   };
 
@@ -568,7 +570,7 @@ export default function ReservationsPage() {
         message: swapForm.message || undefined,
       });
       setShowSwap(false);
-      alert('Solicitação de troca enviada!');
+      toastSuccess('Solicitação de troca enviada!');
     } catch (err: any) {
       setSwapError(err?.response?.data?.message || 'Erro ao solicitar troca');
     }

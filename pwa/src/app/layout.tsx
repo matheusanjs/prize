@@ -1,6 +1,7 @@
 import './globals.css';
 import type { Metadata, Viewport } from 'next';
 import { LayoutShell } from '@/components/layout/LayoutShell';
+import { Toaster } from 'sonner';
 
 export const metadata: Metadata = {
   title: 'Prize Clube',
@@ -44,6 +45,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="min-h-screen">
         <LayoutShell>{children}</LayoutShell>
+        <Toaster
+          position="top-center"
+          richColors
+          closeButton
+          expand={false}
+          toastOptions={{
+            style: { marginTop: 'env(safe-area-inset-top, 0px)' },
+          }}
+        />
       </body>
     </html>
   );
