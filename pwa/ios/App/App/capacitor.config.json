@@ -1,0 +1,20 @@
+{
+	"appId": "com.marinaprizeclub.app",
+	"appName": "Prize Clube",
+	"webDir": "out",
+	"ios": {
+		"contentInset": "automatic",
+		"scheme": "Prize Clube",
+		"preferredContentMode": "mobile"
+	},
+	"plugins": {
+		"PushNotifications": {
+			"presentationOptions": [
+				"badge",
+				"sound",
+				"alert"
+			]
+		}
+	},
+	"packageClassList": []
+}
