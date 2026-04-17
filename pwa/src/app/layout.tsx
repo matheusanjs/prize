@@ -2,7 +2,6 @@ import './globals.css';
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import { LayoutShell } from '@/components/layout/LayoutShell';
-import { Toaster } from 'sonner';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -51,17 +50,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="apple-touch-icon" href="/icon-192.png" />
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className="font-sans" style={{ minHeight: '100dvh' }}>
+      <body className="font-sans">
         <LayoutShell>{children}</LayoutShell>
-        <Toaster
-          position="top-center"
-          richColors
-          closeButton
-          expand={false}
-          toastOptions={{
-            style: { marginTop: 'env(safe-area-inset-top, 0px)' },
-          }}
-        />
       </body>
     </html>
   );

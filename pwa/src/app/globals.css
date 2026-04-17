@@ -122,5 +122,22 @@ input, select, textarea {
 /* Main content padding for fixed header/nav */
 .main-safe-padding {
   padding-top: calc(3.5rem + env(safe-area-inset-top, 0px) + 10px);
-  padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(4.5rem + 34px);
+}
+
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .main-safe-padding {
+    padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 34px));
+  }
+}
+
+/* Bottom nav: extend padding into safe area so bg covers home indicator */
+.nav-fixed-bottom {
+  padding-bottom: 34px;
+}
+
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .nav-fixed-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 34px);
+  }
 }

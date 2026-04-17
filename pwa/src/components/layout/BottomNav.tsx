@@ -77,47 +77,42 @@ export function BottomNav() {
         </div>
       </header>
 
-      {/* Bottom navigation — menu sits ABOVE safe area, safe area is just bg fill */}
-      <div
+      {/* Bottom navigation — single fixed bar covering safe area */}
+      <nav
+        className="border-t border-[var(--nav-border)] nav-fixed-bottom"
         style={{
           position: 'fixed',
           bottom: 0,
           left: 0,
           right: 0,
           zIndex: 9999,
+          backgroundColor: 'var(--nav-bg)',
         }}
       >
-        <nav
-          className="border-t border-[var(--nav-border)]"
-          style={{ backgroundColor: 'var(--nav-bg)' }}
-        >
-          <div className="flex items-center justify-evenly py-2.5 px-1">
-            {items.map((item) => {
-              const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={clsx(
-                    'relative flex flex-col items-center gap-0.5 px-3.5 py-1 rounded-lg transition-colors min-w-[68px]',
-                    isActive ? 'text-primary-500' : 'text-[var(--text-muted)]'
-                  )}
-                >
-                  {isActive && (
-                    <span className="absolute -top-[11px] left-1/2 -translate-x-1/2 w-14 h-1 rounded-full bg-primary-500" />
-                  )}
-                  <item.icon size={22} strokeWidth={isActive ? 2.5 : 1.5} />
-                  <span className={clsx('text-[10px]', isActive ? 'font-semibold' : 'font-medium')}>
-                    {item.label}
-                  </span>
-                </Link>
-              );
-            })}
-          </div>
-        </nav>
-        {/* Safe area fill below the menu */}
-        <div className="safe-area-bottom-fill" style={{ backgroundColor: 'var(--nav-bg)' }} />
-      </div>
+        <div className="flex items-center justify-evenly py-2.5 px-1">
+          {items.map((item) => {
+            const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={clsx(
+                  'relative flex flex-col items-center gap-0.5 px-3.5 py-1 rounded-lg transition-colors min-w-[68px]',
+                  isActive ? 'text-primary-500' : 'text-[var(--text-muted)]'
+                )}
+              >
+                {isActive && (
+                  <span className="absolute -top-[11px] left-1/2 -translate-x-1/2 w-14 h-1 rounded-full bg-primary-500" />
+                )}
+                <item.icon size={22} strokeWidth={isActive ? 2.5 : 1.5} />
+                <span className={clsx('text-[10px]', isActive ? 'font-semibold' : 'font-medium')}>
+                  {item.label}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
     </>
   );
 }
