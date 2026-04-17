@@ -49,24 +49,13 @@ workflows:
       - name: Increment build number
         script: |
           cd pwa/ios/App
-          # Read the current project version as a baseline floor
-          CURRENT_VERSION=$(agvtool vers -terse 2>/dev/null | grep -oE '[0-9]+' | head -1 || echo "1")
-          echo "Current project version: $CURRENT_VERSION"
-          # Try to get latest TestFlight build number from App Store Connect
-          LATEST_BUILD=$(app-store-connect get-latest-testflight-build-number "$BUNDLE_ID" 2>/dev/null | grep -oE '[0-9]+' | tail -1 || true)
-          echo "API returned: '$LATEST_BUILD'"
-          # Fallback to CM_BUILD_NUMBER if API fails
-          if [ -z "$LATEST_BUILD" ] || ! [[ "$LATEST_BUILD" =~ ^[0-9]+$ ]] || [ "$LATEST_BUILD" -lt 1 ]; then
-            LATEST_BUILD="${CM_BUILD_NUMBER:-10}"
-            echo "API lookup failed, using CM_BUILD_NUMBER fallback: LATEST_BUILD=$LATEST_BUILD"
-          fi
-          # Use whichever is higher: API result or current project version
-          if [ "$CURRENT_VERSION" -gt "$LATEST_BUILD" ]; then
-            LATEST_BUILD="$CURRENT_VERSION"
-            echo "Using project version as floor: $LATEST_BUILD"
-          fi
-          NEW_BUILD=$((LATEST_BUILD + 1))
-          echo "Setting build number: $NEW_BUILD"
+          # BASE_OFFSET must always be higher than the last known App Store build (currently 11).
+          # Each Codemagic run has a unique CM_BUILD_NUMBER (1, 2, 3...) so BASE_OFFSET + CM_BUILD_NUMBER
+          # is always unique and strictly increasing — no API delay issues.
+          BASE_OFFSET=20
+          CM_NUM="${CM_BUILD_NUMBER:-1}"
+          NEW_BUILD=$((BASE_OFFSET + CM_NUM))
+          echo "CM_BUILD_NUMBER=$CM_NUM  BASE_OFFSET=$BASE_OFFSET  →  CFBundleVersion=$NEW_BUILD"
           agvtool new-version -all "$NEW_BUILD"
       - name: Build IPA
         script: |
