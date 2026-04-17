@@ -1,30 +1,13 @@
 'use client';
 
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { Plus, X, ChevronLeft, ChevronRight, Clock, Ship, User, AlertCircle, Calendar, ArrowLeftRight, CheckCircle2, ChevronDown, ChevronUp, Sun, Wind } from 'lucide-react';
+import { Plus, X, ChevronLeft, ChevronRight, Clock, Ship, User, AlertCircle, Calendar, ArrowLeftRight, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '@/contexts/auth';
-import { getMyReservations, createReservation, cancelReservation, getShares, getAllBoatReservations, getWeatherForecast, getWeatherHistory, createSwapRequest, confirmArrival, invalidateCache } from '@/services/api';
+import { getMyReservations, createReservation, cancelReservation, getShares, getAllBoatReservations, createSwapRequest, confirmArrival, invalidateCache } from '@/services/api';
 import { format, startOfMonth, endOfMonth, addMonths, subMonths, eachDayOfInterval, isSameDay, isToday, parseISO, isBefore, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import WeatherTimeline, { buildTimelineFromHistory, buildTimelineFromForecast } from '@/components/WeatherTimeline';
 import { useReservationsRealtime } from '@/hooks/useReservationsRealtime';
-import { handleApiError, toastSuccess } from '@/lib/errors';
-
-interface ForecastDay {
-  date: string;
-  dayOfWeek: string;
-  navigationLevel: string;
-  navigationScore: number;
-  windSpeedMin: number;
-  windSpeedMax: number;
-  airTempMin: number;
-  airTempMax: number;
-  clientSummary: string;
-  humidity?: number;
-  rainProbability?: number;
-  description?: string;
-  condition?: string;
-}
+import { handleApiError } from '@/lib/errors';
 
 interface Reservation {
   id: string;
@@ -39,16 +22,6 @@ interface Reservation {
 
 interface BoatOption { id: string; name: string; status?: string; }
 
-interface WeatherHistoryItem {
-  collectedAt: string;
-  navigationLevel: string;
-  clientSummary?: string;
-  airTemperature?: number;
-  windSpeed?: number;
-  humidity?: number;
-  precipitation?: number;
-}
-
 const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || 'https://api.marinaprizeclub.com/api/v1').replace(/\/api\/v1$/, '');
 function resolveMediaUrl(url: string | undefined | null): string {
   if (!url) return '';
@@ -57,12 +30,6 @@ function resolveMediaUrl(url: string | undefined | null): string {
 }
 
 const HOURS = ['10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00'];
-
-function getBoatLocationLabel(boatName: string) {
-  if (/cabo frio|praia do forte/i.test(boatName)) return "Praia do Forte - Cabo Frio";
-  if (/guarapari/i.test(boatName)) return "Guarapari";
-  return "Praia do Forte - Cabo Frio";
-}
 
 export default function ReservationsPage() {
   const { user } = useAuth();
@@ -87,8 +54,7 @@ export default function ReservationsPage() {
   const [form, setForm] = useState({ boatId: '', startTime: '10:00', endTime: '17:00' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [forecastMap, setForecastMap] = useState<Record<string, ForecastDay>>({});
-  const [weatherHistoryByDate, setWeatherHistoryByDate] = useState<Record<string, WeatherHistoryItem[]>>({});
+
   const [showSwap, setShowSwap] = useState(false);
   const [swapReservation, setSwapReservation] = useState<Reservation | null>(null);
   const [myFutureReservations, setMyFutureReservations] = useState<Reservation[]>([]);
@@ -97,7 +63,7 @@ export default function ReservationsPage() {
   const [swapError, setSwapError] = useState('');
   const [reservationLimit, setReservationLimit] = useState<{ max: number; active: number } | null>(null);
   const [showConfirmArrival, setShowConfirmArrival] = useState(false);
-  const [showWeatherChart, setShowWeatherChart] = useState(false);
+
   const [confirmReservation, setConfirmReservation] = useState<Reservation | null>(null);
   const [arrivalTime, setArrivalTime] = useState('10:00');
   const [confirmSaving, setConfirmSaving] = useState(false);
@@ -123,17 +89,8 @@ export default function ReservationsPage() {
         : '';
       try {
         // Run all independent calls in parallel
-        const [sharesRes, forecastRes, weatherHistRes] = await Promise.allSettled([
+        const [sharesRes] = await Promise.allSettled([
           getShares({ userId }),
-          getWeatherForecast(),
-          (async () => {
-            try {
-              const monthStart = startOfMonth(new Date());
-              const diffHours = Math.ceil((Date.now() - monthStart.getTime()) / 3600_000) + 24;
-              const hours = Math.min(Math.max(diffHours, 24), 24 * 120);
-              return await getWeatherHistory(hours);
-            } catch { return { data: [] }; }
-          })(),
         ]);
 
         // Process shares
@@ -155,25 +112,6 @@ export default function ReservationsPage() {
           if (initialBoatId !== selectedBoatId) setSelectedBoatId(initialBoatId);
         }
 
-        // Process forecast
-        if (forecastRes.status === 'fulfilled') {
-          const days: ForecastDay[] = Array.isArray(forecastRes.value.data) ? forecastRes.value.data : forecastRes.value.data.data || [];
-          const map: Record<string, ForecastDay> = {};
-          days.forEach(d => { map[d.date] = d; });
-          setForecastMap(map);
-        }
-
-        // Process weather history
-        if (weatherHistRes.status === 'fulfilled') {
-          const list: WeatherHistoryItem[] = Array.isArray(weatherHistRes.value.data) ? weatherHistRes.value.data : weatherHistRes.value.data.data || [];
-          const grouped: Record<string, WeatherHistoryItem[]> = {};
-          list.forEach((item) => {
-            const dateKey = format(new Date(item.collectedAt), 'yyyy-MM-dd');
-            if (!grouped[dateKey]) grouped[dateKey] = [];
-            grouped[dateKey].push(item);
-          });
-          setWeatherHistoryByDate(grouped);
-        }
       } catch { /* empty */ } finally { setLoading(false); }
     })();
   }, [userId]);
@@ -327,7 +265,6 @@ export default function ReservationsPage() {
       setSelectedDayReservations([]);
       return;
     }
-    setShowWeatherChart(false);
     const key = format(selectedDate, 'yyyy-MM-dd');
     const dayList = calendarReservations.filter((r) => {
       if (r.status === 'CANCELLED') return false;
@@ -405,11 +342,7 @@ export default function ReservationsPage() {
   }, [getResForDay]);
 
   const selectedDayRes = selectedDate ? selectedDayReservations : [];
-  const selectedDayWeatherHistory = selectedDate
-    ? weatherHistoryByDate[format(selectedDate, 'yyyy-MM-dd')] || []
-    : [];
   const selectedBoat = boats.find(b => b.id === selectedBoatId);
-  const selectedBoatLocation = getBoatLocationLabel(selectedBoat?.name || "");
 
   // Blocked hours for create modal
   const getBlockedHours = () => {
@@ -489,7 +422,6 @@ export default function ReservationsPage() {
       invalidateCache('/reservations');
       invalidateCache('calendar');
       invalidateCache('boat/');
-      toastSuccess('Reserva criada!');
       // Background refresh (non-blocking) to reconcile with server truth
       loadSnapshot();
     } catch (err: any) {
@@ -582,7 +514,6 @@ export default function ReservationsPage() {
         message: swapForm.message || undefined,
       });
       setShowSwap(false);
-      toastSuccess('Solicitação de troca enviada!');
     } catch (err: any) {
       setSwapError(err?.response?.data?.message || 'Erro ao solicitar troca');
     }
@@ -645,70 +576,6 @@ export default function ReservationsPage() {
         </div>
       )}
 
-      {/* Weather for selected day */}
-      {selectedDate && (() => {
-        const dateKey = format(selectedDate, 'yyyy-MM-dd');
-        const selectedForecast = forecastMap[dateKey];
-        const timelineHours = selectedDayWeatherHistory.length > 0
-          ? buildTimelineFromHistory(selectedDayWeatherHistory)
-          : selectedForecast ? buildTimelineFromForecast(selectedForecast) : null;
-        const timelineTitle = selectedDayWeatherHistory.length > 0 ? 'Dados registrados' : 'Previsão';
-        const hasTimeline = timelineHours && timelineHours.some(h => h.temp != null || h.wind != null || h.rain != null);
-        if (!hasTimeline) return null;
-        const temps = timelineHours.map(h => h.temp).filter((v): v is number => v != null);
-        const tempMin = temps.length ? Math.min(...temps) : '-';
-        const tempMax = temps.length ? Math.max(...temps) : '-';
-        const maxWind = Math.round(Math.max(...timelineHours.map(h => h.wind || 0)) * 3.6);
-        const totalRain = timelineHours.reduce((s, h) => s + (h.rain || 0), 0);
-        return (
-          <div className="mb-2">
-            <button
-              onClick={() => setShowWeatherChart(!showWeatherChart)}
-              className="relative w-full overflow-hidden bg-[var(--card)] rounded-2xl border border-[var(--border)] px-4 py-3.5 flex items-center gap-3.5 text-left transition-all duration-200 hover:border-primary-500/20 hover:shadow-[0_8px_24px_var(--weather-card-shadow)] active:scale-[0.995]"
-            >
-              {/* Icon */}
-              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-primary-500/15 to-primary-400/5 border border-primary-500/10 flex items-center justify-center flex-shrink-0">
-                <Wind size={18} className="text-primary-500" />
-              </div>
-              {/* Content */}
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)] font-semibold mb-1.5">Clima do dia · {selectedBoatLocation}</p>
-                {/* Stats row */}
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1.5">
-                    <Sun size={13} className="text-amber-400 flex-shrink-0" />
-                    <span className="text-[13px] font-bold text-[var(--text)] tabular-nums">{tempMin ?? '-'}°–{tempMax ?? '-'}°</span>
-                  </div>
-                  <div className="w-px h-4 bg-[var(--border)]" />
-                  <div className="flex items-center gap-1.5">
-                    <Wind size={13} className="text-cyan-400 flex-shrink-0" />
-                    <span className="text-[13px] font-bold text-[var(--text)] tabular-nums">{maxWind} km/h</span>
-                  </div>
-                  {totalRain > 0.5 && (
-                    <>
-                      <div className="w-px h-4 bg-[var(--border)]" />
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[11px]">🌧</span>
-                        <span className="text-[12px] font-semibold text-[var(--text-muted)] tabular-nums">{totalRain.toFixed(1)}mm</span>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-              {/* Chevron */}
-              <div className="text-[var(--text-muted)] flex-shrink-0">
-                {showWeatherChart ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-              </div>
-            </button>
-            {showWeatherChart && (
-              <div className="mt-2">
-                <WeatherTimeline hours={timelineHours} title={timelineTitle} />
-              </div>
-            )}
-          </div>
-        );
-      })()}
-
       {/* Calendar */}
       <div className="bg-[var(--card)] rounded-3xl border border-[var(--border)] overflow-hidden shadow-[0_2px_20px_var(--calendar-shadow)]">
         {/* Calendar header */}
@@ -740,10 +607,8 @@ export default function ReservationsPage() {
               const isSelected = selectedDate && isSameDay(day, selectedDate);
               const today = isToday(day);
               const isPast = isBefore(day, startOfDay(new Date())) && !today;
-              const dayForecast = forecastMap[format(day, 'yyyy-MM-dd')];
               const availability = getDayAvailability(day);
               const hasMine = dayRes.some(r => r.user?.id === user?.id);
-
               const cellBg = isPast ? 'bg-transparent'
                 : hasMine ? 'bg-[#F98307]/20'
                 : availability === 'free' ? 'bg-emerald-500/25'
@@ -755,10 +620,6 @@ export default function ReservationsPage() {
                 : availability === 'free' ? 'border-emerald-500/50'
                 : availability === 'partial' ? 'border-amber-500/50'
                 : 'border-red-500/50';
-
-              const weatherEmoji = dayForecast ? (
-                dayForecast.navigationLevel === 'BOM' ? '☀️' : dayForecast.navigationLevel === 'ATENCAO' ? '⛅' : dayForecast.navigationLevel === 'RUIM' ? '🌊' : '⛔'
-              ) : null;
 
               return (
                 <button
@@ -774,9 +635,7 @@ export default function ReservationsPage() {
                           : `${cellBg} ${cellBorder} ${hasMine ? 'text-[#F98307] font-bold' : 'text-[var(--text)]'} hover:scale-[1.06] hover:bg-[var(--subtle-hover)] active:scale-[0.96]`
                   }`}
                 >
-                  {weatherEmoji && !isSelected && <span className="text-[7px] leading-none -mt-0.5 mb-[-2px]">{weatherEmoji}</span>}
                   <span>{day.getDate()}</span>
-                  {isSelected && weatherEmoji && <span className="text-[7px] leading-none mt-[-2px]">{weatherEmoji}</span>}
                   {!isPast && !isSelected && (
                     <div className={`absolute bottom-[3px] left-1/2 -translate-x-1/2 w-[7px] h-[7px] rounded-full ${
                       hasMine ? 'bg-[#F98307] shadow-[0_0_3px_rgba(249,131,7,0.5)]'
@@ -819,8 +678,17 @@ export default function ReservationsPage() {
             </div>
             {!isBefore(selectedDate, startOfDay(new Date())) && (
               boats.find(b => b.id === selectedBoatId)?.status === 'AVAILABLE' ? (() => {
-                const hasOtherOnly = selectedDayRes.length > 0 && selectedDayRes.every(r => r.user?.id !== user?.id && r.status === 'CONFIRMED');
+                const myActiveRes = selectedDayRes.find(r => r.user?.id === user?.id && (r.status === 'CONFIRMED' || r.status === 'PENDING'));
+                const hasOtherOnly = !myActiveRes && selectedDayRes.length > 0 && selectedDayRes.every(r => r.user?.id !== user?.id && r.status === 'CONFIRMED');
                 const otherRes = hasOtherOnly ? selectedDayRes.find(r => r.user?.id !== user?.id && r.status === 'CONFIRMED' && !isBefore(parseISO(r.startDate), new Date())) : null;
+                if (myActiveRes) return (
+                  <button
+                    onClick={() => handleCancel(myActiveRes.id)}
+                    className="text-[13px] text-red-500 font-semibold flex items-center gap-1.5 bg-red-500/10 px-4 py-2 rounded-xl border border-red-500/20 active:scale-[0.97] transition-all"
+                  >
+                    <X size={15} strokeWidth={2.5} /> Cancelar
+                  </button>
+                );
                 return hasOtherOnly && otherRes ? (
                   <button
                     onClick={() => openSwap(otherRes)}
@@ -848,6 +716,14 @@ export default function ReservationsPage() {
               </div>
               <p className="text-sm font-medium text-[var(--text-secondary)]">Nenhuma reserva neste dia</p>
               <p className="text-[11px] text-[var(--text-muted)] mt-1">Todos os horários disponíveis</p>
+              {!isBefore(selectedDate, startOfDay(new Date())) && boats.find(b => b.id === selectedBoatId)?.status === 'AVAILABLE' && (
+                <button
+                  onClick={() => openCreate(selectedDate)}
+                  className="mt-5 w-full text-[14px] text-white font-semibold flex items-center justify-center gap-2 bg-gradient-to-r from-primary-500 to-primary-400 py-3 rounded-2xl shadow-[0_4px_16px_rgba(0,117,119,0.3)] active:scale-[0.97] transition-all"
+                >
+                  <Plus size={18} strokeWidth={2.5} /> Reservar este dia
+                </button>
+              )}
             </div>
           ) : (
             <div className="space-y-2.5">
@@ -890,20 +766,20 @@ export default function ReservationsPage() {
                       </div>
                     )}
                     {isMine && (r.status === 'CONFIRMED' || r.status === 'PENDING') && (
-                      <div className="mt-3 flex gap-2 flex-wrap">
+                      <div className="mt-3 space-y-2">
                         {!r.confirmedAt && isToday(selectedDate!) && (
                           <button
                             onClick={() => openConfirmArrival(r)}
-                            className="text-[12px] text-white font-semibold bg-emerald-500 px-3.5 py-1.5 rounded-xl active:scale-[0.97] transition-all flex items-center gap-1.5 shadow-[0_2px_8px_rgba(16,185,129,0.25)]"
+                            className="w-full text-[13px] text-white font-semibold bg-emerald-500 py-2.5 rounded-xl active:scale-[0.97] transition-all flex items-center justify-center gap-2 shadow-[0_3px_12px_rgba(16,185,129,0.25)]"
                           >
-                            <CheckCircle2 size={13} /> Confirmar presença
+                            <CheckCircle2 size={15} /> Confirmar presença
                           </button>
                         )}
                         <button
                           onClick={() => handleCancel(r.id)}
-                          className="text-[12px] text-red-500 font-medium bg-red-500/8 px-3.5 py-1.5 rounded-xl active:scale-[0.97] transition-all border border-red-500/12 hover:bg-red-500/12"
+                          className="w-full text-[13px] text-red-500 font-semibold bg-red-500/10 py-2.5 rounded-xl active:scale-[0.97] transition-all border border-red-500/15 hover:bg-red-500/15 flex items-center justify-center gap-2"
                         >
-                          Cancelar
+                          <X size={15} strokeWidth={2.5} /> Cancelar reserva
                         </button>
                       </div>
                     )}
@@ -911,9 +787,9 @@ export default function ReservationsPage() {
                       <div className="mt-3">
                         <button
                           onClick={() => openSwap(r)}
-                          className="text-[12px] text-primary-500 font-medium bg-primary-500/8 px-3.5 py-1.5 rounded-xl active:scale-[0.97] transition-all flex items-center gap-1.5 border border-primary-500/12 hover:bg-primary-500/12"
+                          className="w-full text-[13px] text-primary-500 font-semibold bg-primary-500/10 py-2.5 rounded-xl active:scale-[0.97] transition-all flex items-center justify-center gap-2 border border-primary-500/15 hover:bg-primary-500/15"
                         >
-                          <ArrowLeftRight size={13} /> Trocar Data
+                          <ArrowLeftRight size={15} /> Trocar Data
                         </button>
                       </div>
                     )}
