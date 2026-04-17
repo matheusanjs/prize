@@ -67,7 +67,7 @@ export class AdminPushController {
     // Notifications per day (last 7 days)
     const dailyStats = await this.prisma.$queryRaw<
       { day: string; count: bigint }[]
-    >`SELECT DATE("sentAt") as day, COUNT(*) as count FROM "Notification" WHERE "sentAt" >= ${weekAgo} GROUP BY DATE("sentAt") ORDER BY day`;
+    >`SELECT DATE("sentAt") as day, COUNT(*) as count FROM "notifications" WHERE "sentAt" >= ${weekAgo} GROUP BY DATE("sentAt") ORDER BY day`;
 
     return {
       devices: {

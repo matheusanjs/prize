@@ -110,13 +110,13 @@ export class DashboardService {
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000);
     const revenueByDay = await this.prisma.$queryRaw<
       { day: string; total: number }[]
-    >`SELECT DATE("paidAt") as day, COALESCE(SUM(amount), 0)::float as total FROM "Payment" WHERE "paidAt" >= ${thirtyDaysAgo} GROUP BY DATE("paidAt") ORDER BY day`;
+    >`SELECT DATE("paidAt") as day, COALESCE(SUM(amount), 0)::float as total FROM "payments" WHERE "paidAt" >= ${thirtyDaysAgo} GROUP BY DATE("paidAt") ORDER BY day`;
 
     // Reservations per day (last 14 days)
     const fourteenDaysAgo = new Date(now.getTime() - 14 * 86400000);
     const reservationsByDay = await this.prisma.$queryRaw<
       { day: string; count: bigint }[]
-    >`SELECT DATE("startDate") as day, COUNT(*) as count FROM "Reservation" WHERE "startDate" >= ${fourteenDaysAgo} AND "startDate" <= ${new Date(now.getTime() + 7 * 86400000)} GROUP BY DATE("startDate") ORDER BY day`;
+    >`SELECT DATE("startDate") as day, COUNT(*) as count FROM "reservations" WHERE "startDate" >= ${fourteenDaysAgo} AND "startDate" <= ${new Date(now.getTime() + 7 * 86400000)} GROUP BY DATE("startDate") ORDER BY day`;
 
     // Recent charges by status
     const chargesByStatus = await this.prisma.charge.groupBy({
@@ -127,7 +127,7 @@ export class DashboardService {
     // Top boats by reservations this month
     const topBoats = await this.prisma.$queryRaw<
       { boatId: string; name: string; count: bigint }[]
-    >`SELECT r."boatId", b.name, COUNT(*) as count FROM "Reservation" r JOIN "Boat" b ON r."boatId" = b.id WHERE r."createdAt" >= ${startOfMonth} GROUP BY r."boatId", b.name ORDER BY count DESC LIMIT 5`;
+    >`SELECT r."boatId", b.name, COUNT(*) as count FROM "reservations" r JOIN "boats" b ON r."boatId" = b.id WHERE r."createdAt" >= ${startOfMonth} GROUP BY r."boatId", b.name ORDER BY count DESC LIMIT 5`;
 
     // Recent activity (latest 8 events)
     const [recentReservations, recentPayments] = await Promise.all([
