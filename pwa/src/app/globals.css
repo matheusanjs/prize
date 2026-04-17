@@ -80,7 +80,7 @@
    2. Let the main content area handle its own overflow
    This way, the WKWebView scrollView has no content to bounce. */
 html {
-  background-color: var(--nav-bg);
+  background-color: var(--bg);
   overscroll-behavior: none;
   -webkit-overflow-scrolling: auto;
   height: 100%;
@@ -91,7 +91,7 @@ body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
-  background-color: var(--nav-bg);
+  background-color: var(--bg);
   color: var(--text);
   height: 100%;
   overflow: hidden;
@@ -132,23 +132,6 @@ input, select, textarea {
 
 /* Spacer at bottom of scroll to clear fixed nav */
 .nav-clearance {
-  height: calc(4rem + 34px);
+  height: 3.5rem;
   flex-shrink: 0;
-}
-
-@supports (height: env(safe-area-inset-bottom)) {
-  .nav-clearance {
-    height: calc(4rem + env(safe-area-inset-bottom, 34px));
-  }
-}
-
-/* Bottom nav: extend padding into safe area so bg covers home indicator */
-.nav-fixed-bottom {
-  padding-bottom: 34px;
-}
-
-@supports (padding-bottom: env(safe-area-inset-bottom)) {
-  .nav-fixed-bottom {
-    padding-bottom: env(safe-area-inset-bottom, 34px);
-  }
 }

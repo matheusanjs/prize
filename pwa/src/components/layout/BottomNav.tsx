@@ -79,7 +79,7 @@ export function BottomNav() {
 
       {/* Bottom navigation — fixed at screen bottom */}
       <nav
-        className="border-t border-[var(--nav-border)] nav-fixed-bottom"
+        className="border-t border-[var(--nav-border)]"
         style={{
           position: 'fixed',
           bottom: 0,
