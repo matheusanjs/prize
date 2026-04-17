@@ -66,8 +66,17 @@ function getBoatLocationLabel(boatName: string) {
 
 export default function ReservationsPage() {
   const { user } = useAuth();
-  const [boats, setBoats] = useState<BoatOption[]>([]);
-  const [selectedBoatId, setSelectedBoatId] = useState<string>('');
+  // Hydrate boats + selected boat from localStorage synchronously so the
+  // UI has something to render BEFORE /shares resolves. This eliminates the
+  // "empty page" flash when re-entering the route.
+  const [boats, setBoats] = useState<BoatOption[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try { return JSON.parse(localStorage.getItem('pc:reservations:boats') || '[]'); } catch { return []; }
+  });
+  const [selectedBoatId, setSelectedBoatId] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    try { return localStorage.getItem('pc:reservations:selectedBoatId') || ''; } catch { return ''; }
+  });
   const [calendarReservations, setCalendarReservations] = useState<Reservation[]>([]);
   const [selectedDayReservations, setSelectedDayReservations] = useState<Reservation[]>([]);
   const [boatDayReservations, setBoatDayReservations] = useState<Reservation[]>([]);
@@ -104,7 +113,10 @@ export default function ReservationsPage() {
 
   useEffect(() => {
     if (!userId) return;
-    setLoading(true);
+    // Only show the full-page spinner if we have NOTHING cached — otherwise
+    // the cached view is already visible and we just revalidate silently.
+    const hasCachedBoats = boats.length > 0;
+    if (!hasCachedBoats) setLoading(true);
     (async () => {
       const preselectedBoatId = typeof window !== 'undefined'
         ? new URLSearchParams(window.location.search).get('boatId') || ''
@@ -134,10 +146,13 @@ export default function ReservationsPage() {
         setBoats(boatList);
         setShareCache(shareList);
         if (boatList.length > 0) {
-          const initialBoatId = preselectedBoatId && boatList.some((b: BoatOption) => b.id === preselectedBoatId)
-            ? preselectedBoatId
-            : (boatList.find((b: BoatOption) => b.status === 'AVAILABLE') || boatList[0]).id;
-          setSelectedBoatId(initialBoatId);
+          // Preference order: ?boatId= → cached selection (if still valid) → first AVAILABLE → first.
+          const cachedBoatId = selectedBoatId;
+          const initialBoatId =
+            (preselectedBoatId && boatList.some((b: BoatOption) => b.id === preselectedBoatId) && preselectedBoatId)
+            || (cachedBoatId && boatList.some((b: BoatOption) => b.id === cachedBoatId) && cachedBoatId)
+            || (boatList.find((b: BoatOption) => b.status === 'AVAILABLE') || boatList[0]).id;
+          if (initialBoatId !== selectedBoatId) setSelectedBoatId(initialBoatId);
         }
 
         // Process forecast
@@ -183,6 +198,30 @@ export default function ReservationsPage() {
   // ─── Snapshot: load ALL reservations for the boat ONCE per boat change ─
   // After this, month navigation + day selection are instant (derived from state).
   // Refetch happens only on user actions (create/cancel/swap) or realtime events.
+  //
+  // Stale-while-revalidate: we persist the last successful snapshot per boat
+  // in localStorage so subsequent entries to this page render INSTANTLY from
+  // cache, and then reconcile with fresh server data in the background.
+  const cacheKey = (boatId: string) => `pc:reservations:snapshot:${boatId}`;
+
+  const readCachedSnapshot = useCallback((boatId: string): Reservation[] | null => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = localStorage.getItem(cacheKey(boatId));
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed?.items)) return parsed.items as Reservation[];
+      return null;
+    } catch { return null; }
+  }, []);
+
+  const writeCachedSnapshot = useCallback((boatId: string, items: Reservation[]) => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(cacheKey(boatId), JSON.stringify({ items, savedAt: Date.now() }));
+    } catch { /* quota or disabled storage — ignore */ }
+  }, []);
+
   const loadSnapshot = useCallback(async () => {
     if (!selectedBoatId) return;
     const reqKey = `snap-${selectedBoatId}-${Date.now()}`;
@@ -192,18 +231,48 @@ export default function ReservationsPage() {
       if (snapshotRequestRef.current !== reqKey) return;
       const list: Reservation[] = Array.isArray(data) ? data : data.data || [];
       setCalendarReservations(list);
+      writeCachedSnapshot(selectedBoatId, list);
     } catch {
-      // Keep previous data on error
+      // Keep previous (possibly cached) data on error
     }
-  }, [selectedBoatId]);
+  }, [selectedBoatId, writeCachedSnapshot]);
 
   useEffect(() => {
     if (!selectedBoatId) return;
-    // Reset stale data from previous boat immediately so UI doesn't flash old info
-    setCalendarReservations([]);
-    setIsRefreshing(true);
-    loadSnapshot().finally(() => setIsRefreshing(false));
-  }, [selectedBoatId, loadSnapshot]);
+    // 1) Hydrate from cache synchronously — no empty state, no delay.
+    const cached = readCachedSnapshot(selectedBoatId);
+    if (cached && cached.length > 0) {
+      setCalendarReservations(cached);
+      setIsRefreshing(true);
+      // 2) Revalidate in background; any diff silently updates the UI.
+      loadSnapshot().finally(() => setIsRefreshing(false));
+    } else {
+      // No cache — show empty + fetch.
+      setCalendarReservations([]);
+      setIsRefreshing(true);
+      loadSnapshot().finally(() => setIsRefreshing(false));
+    }
+  }, [selectedBoatId, loadSnapshot, readCachedSnapshot]);
+
+  // Persist optimistic/realtime mutations to cache so next entry stays fresh
+  useEffect(() => {
+    if (!selectedBoatId) return;
+    if (calendarReservations.length === 0) return;
+    writeCachedSnapshot(selectedBoatId, calendarReservations);
+  }, [selectedBoatId, calendarReservations, writeCachedSnapshot]);
+
+  // Persist boats list + selected boat so the next entry hydrates instantly
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (boats.length === 0) return;
+    try { localStorage.setItem('pc:reservations:boats', JSON.stringify(boats)); } catch { /* ignore */ }
+  }, [boats]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!selectedBoatId) return;
+    try { localStorage.setItem('pc:reservations:selectedBoatId', selectedBoatId); } catch { /* ignore */ }
+  }, [selectedBoatId]);
 
   // ─── Realtime WebSocket sync — instant peer updates (<100ms) ───────
   const authToken = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
