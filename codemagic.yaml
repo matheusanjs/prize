@@ -49,10 +49,15 @@ workflows:
       - name: Increment build number
         script: |
           cd pwa/ios/App
-          LATEST_BUILD=$(app-store-connect get-latest-testflight-build-number "$BUNDLE_ID" || echo 0)
-          echo "Latest TestFlight build number: $LATEST_BUILD"
+          LATEST_BUILD=$(app-store-connect get-latest-testflight-build-number "$BUNDLE_ID" 2>/dev/null | grep -oE '[0-9]+' | tail -1 || true)
+          echo "API returned: '$LATEST_BUILD'"
+          # Fallback: if API fails, use Codemagic build number + offset to guarantee uniqueness
+          if [ -z "$LATEST_BUILD" ] || [ "$LATEST_BUILD" -lt 1 ]; then
+            LATEST_BUILD=1
+            echo "API lookup failed, using fallback LATEST_BUILD=$LATEST_BUILD"
+          fi
           NEW_BUILD=$((LATEST_BUILD + 1))
-          echo "Setting new build number: $NEW_BUILD"
+          echo "Setting build number: $NEW_BUILD"
           agvtool new-version -all "$NEW_BUILD"
       - name: Build IPA
         script: |
