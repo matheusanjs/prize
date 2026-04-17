@@ -12,5 +12,10 @@ class CustomViewController: CAPBridgeViewController {
         webView?.backgroundColor = darkColor
         webView?.isOpaque = false
         webView?.scrollView.backgroundColor = darkColor
+
+        // Disable rubber-band bounce on the main scrollView
+        webView?.scrollView.bounces = false
+        webView?.scrollView.alwaysBounceVertical = false
+        webView?.scrollView.alwaysBounceHorizontal = false
     }
 }

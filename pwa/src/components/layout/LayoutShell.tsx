@@ -1,6 +1,7 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
+import { useEffect } from 'react';
 import { AuthProvider } from '@/contexts/auth';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { PushManager } from '@/components/PushManager';
@@ -11,6 +12,23 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
   const isLoginPage = pathname === '/login';
   const isPublicPage = isLoginPage || pathname.startsWith('/social/share/');
 
+  // Sync html/body bg with theme to cover iOS safe-area gaps on all pages
+  useEffect(() => {
+    if (isPublicPage) return;
+    const sync = () => {
+      const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+      if (bg) {
+        document.documentElement.style.backgroundColor = bg;
+        document.body.style.backgroundColor = bg;
+      }
+    };
+    sync();
+    // Re-sync when theme toggles (class change on <html>)
+    const obs = new MutationObserver(sync);
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => obs.disconnect();
+  }, [isPublicPage]);
+
   return (
     <AuthProvider>
       <PushManager />
@@ -18,9 +36,9 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
       {isPublicPage ? (
         <>{children}</>
       ) : (
-        <div style={{ minHeight: '100dvh' }}>
+        <div style={{ minHeight: '100dvh', backgroundColor: 'var(--bg)' }}>
           <BottomNav />
-          <main className="pb-20 px-4" style={{ paddingTop: 'calc(3.5rem + env(safe-area-inset-top, 0px))', paddingBottom: 'calc(5rem + env(safe-area-inset-bottom, 0px))' }}>{children}</main>
+          <main className="px-4" style={{ paddingTop: 'calc(3.5rem + env(safe-area-inset-top, 0px) + 10px)', paddingBottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))' }}>{children}</main>
         </div>
       )}
     </AuthProvider>

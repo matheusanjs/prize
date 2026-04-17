@@ -52,8 +52,14 @@ export function BottomNav() {
 
   return (
     <>
-      {/* Top header */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-[var(--header-bg)] backdrop-blur border-b border-[var(--border)] px-4 py-2.5 flex items-center justify-between safe-area-top">
+      {/* Top header — bg extends behind status bar via before pseudo-element */}
+      <header
+        className="fixed top-0 left-0 right-0 z-50 border-b border-[var(--border)] px-4 py-2.5 flex items-center justify-between"
+        style={{
+          paddingTop: 'calc(env(safe-area-inset-top, 0px) + 10px)',
+          backgroundColor: 'var(--header-bg)',
+        }}
+      >
         <Link href="/boats">
           <Image src="/logo.png" alt="Prize Club" width={90} height={34} className="h-7 w-auto brightness-0 invert light:brightness-100 light:invert-0" style={{ filter: isDark ? 'brightness(0) invert(1)' : 'none' }} />
         </Link>
@@ -67,8 +73,14 @@ export function BottomNav() {
         </div>
       </header>
 
-      {/* Bottom navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-[var(--nav-bg)] border-t border-[var(--nav-border)] safe-area-bottom">
+      {/* Bottom navigation — bg extends behind home indicator */}
+      <nav
+        className="fixed bottom-0 left-0 right-0 z-50 border-t border-[var(--nav-border)]"
+        style={{
+          backgroundColor: 'var(--nav-bg)',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        }}
+      >
         <div className="flex items-center justify-evenly py-2.5 px-1">
           {items.map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
