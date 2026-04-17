@@ -10,7 +10,6 @@ class CustomViewController: CAPBridgeViewController {
         let darkColor = UIColor(red: 13/255, green: 27/255, blue: 42/255, alpha: 1) // #0D1B2A
         view.backgroundColor = darkColor
         webView?.backgroundColor = darkColor
-        webView?.isOpaque = false
         webView?.scrollView.backgroundColor = darkColor
 
         // Disable rubber-band bounce on the main scrollView
