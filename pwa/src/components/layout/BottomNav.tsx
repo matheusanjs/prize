@@ -54,8 +54,13 @@ export function BottomNav() {
     <>
       {/* Top header — bg extends behind status bar via before pseudo-element */}
       <header
-        className="fixed top-0 left-0 right-0 z-50 border-b border-[var(--border)] px-4 py-2.5 flex items-center justify-between"
+        className="border-b border-[var(--border)] px-4 py-2.5 flex items-center justify-between"
         style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 9999,
           paddingTop: 'calc(env(safe-area-inset-top, 0px) + 10px)',
           backgroundColor: 'var(--header-bg)',
         }}
@@ -75,8 +80,13 @@ export function BottomNav() {
 
       {/* Bottom navigation — bg extends behind home indicator */}
       <nav
-        className="fixed bottom-0 left-0 right-0 z-50 border-t border-[var(--nav-border)]"
+        className="border-t border-[var(--nav-border)]"
         style={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 9999,
           backgroundColor: 'var(--nav-bg)',
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
         }}
