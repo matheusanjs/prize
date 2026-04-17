@@ -36,7 +36,7 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
       {isPublicPage ? (
         <>{children}</>
       ) : (
-        <div style={{ height: '100dvh', backgroundColor: 'var(--bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'var(--bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <BottomNav />
           <main
             className="px-4 flex-1 main-safe-padding"

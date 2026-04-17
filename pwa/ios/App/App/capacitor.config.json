@@ -9,7 +9,6 @@
 		"allowNavigation": ["app.marinaprizeclub.com", "api.marinaprizeclub.com"]
 	},
 	"ios": {
-		"contentInset": "automatic",
 		"preferredContentMode": "mobile",
 		"backgroundColor": "#0D1B2A"
 	},
