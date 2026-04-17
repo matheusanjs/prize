@@ -4,6 +4,7 @@ const nextConfig = {
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'api.marinaprizeclub.com' },
+      { protocol: 'http', hostname: 'localhost' },
       { protocol: 'https', hostname: '*.amazonaws.com' },
       { protocol: 'https', hostname: '*.cloudfront.net' },
     ],

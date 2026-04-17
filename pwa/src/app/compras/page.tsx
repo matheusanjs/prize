@@ -6,6 +6,7 @@ import { getMarketplaceBoats } from '@/services/api';
 import { useCachedState, hasCached } from '@/hooks/useCachedState';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
+const API_ORIGIN = API_URL.replace(/\/api\/v\d+$/, '');
 const WHATSAPP_URL = 'https://wa.me/5522981581555';
 
 interface BoatMarketplace {
@@ -71,7 +72,7 @@ function BoatModal({ boat, onClose }: { boat: BoatMarketplace; onClose: () => vo
           {/* Image */}
           <div className="relative aspect-[16/9] overflow-hidden">
             <img
-              src={`${API_URL}${boat.imageUrl}`}
+              src={`${API_ORIGIN}${boat.imageUrl}`}
               alt={boat.name}
               className="w-full h-full object-cover"
             />
@@ -198,7 +199,7 @@ export default function ComprasPage() {
               {/* Image */}
               <div className="relative aspect-[16/10] overflow-hidden">
                 <img
-                  src={`${API_URL}${boat.imageUrl}`}
+                  src={`${API_ORIGIN}${boat.imageUrl}`}
                   alt={boat.name}
                   className="w-full h-full object-cover"
                   loading="lazy"

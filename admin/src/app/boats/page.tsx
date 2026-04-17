@@ -289,7 +289,7 @@ export default function BoatsPage() {
                     <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(boat.id)} className="w-4 h-4 rounded border-th text-primary-500 focus:ring-primary-500 cursor-pointer" />
                     <div className="w-14 h-14 bg-th-surface rounded-2xl flex items-center justify-center overflow-hidden">
                       {boat.imageUrl ? (
-                        <img src={boat.imageUrl} alt={boat.name} className="w-full h-full object-cover" />
+                        <img src={boat.imageUrl.startsWith('data:') || boat.imageUrl.startsWith('http') ? boat.imageUrl : `${process.env.NEXT_PUBLIC_API_URL?.replace(/\/api\/v\d+$/, '') || 'https://api.marinaprizeclub.com'}${boat.imageUrl}`} alt={boat.name} className="w-full h-full object-cover" />
                       ) : (
                         <Ship className="text-th-secondary" size={28} />
                       )}
@@ -462,7 +462,7 @@ export default function BoatsPage() {
                 <div className="flex items-center gap-4">
                   <div className="w-24 h-24 bg-th-surface rounded-xl flex items-center justify-center overflow-hidden border-2 border-dashed border-th">
                     {form.imageUrl ? (
-                      <img src={form.imageUrl} alt="Preview" className="w-full h-full object-cover" />
+                      <img src={form.imageUrl.startsWith('data:') || form.imageUrl.startsWith('http') ? form.imageUrl : `${process.env.NEXT_PUBLIC_API_URL?.replace(/\/api\/v\d+$/, '') || 'https://api.marinaprizeclub.com'}${form.imageUrl}`} alt="Preview" className="w-full h-full object-cover" />
                     ) : (
                       <Camera size={28} className="text-th-muted" />
                     )}

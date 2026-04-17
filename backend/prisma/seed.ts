@@ -101,6 +101,7 @@ async function main() {
       totalShares: 4,
       monthlyFee: 4800,
       locationBerth: 'Berço 01 — Pier A',
+      imageUrl: '/uploads/boats/wave-runner-pro.jpg',
     },
   });
 
@@ -121,6 +122,7 @@ async function main() {
       totalShares: 4,
       monthlyFee: 5200,
       locationBerth: 'Berço 02 — Pier A',
+      imageUrl: '/uploads/boats/sea-phantom.jpg',
     },
   });
 
@@ -141,6 +143,7 @@ async function main() {
       totalShares: 4,
       monthlyFee: 6000,
       locationBerth: 'Berço 03 — Pier B',
+      imageUrl: '/uploads/boats/thunder-jet.jpg',
     },
   });
 

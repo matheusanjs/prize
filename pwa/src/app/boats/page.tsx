@@ -431,7 +431,7 @@ export default function BoatsPage() {
                       {/* Photo */}
                       {boat.imageUrl ? (
                         <div className="relative w-full h-48">
-                          <Image src={boat.imageUrl} alt={boat.name} fill className="object-cover" sizes="(max-width: 768px) 100vw, 50vw" priority={idx === 0} loading={idx === 0 ? 'eager' : 'lazy'} />
+                          <Image src={resolveMediaUrl(boat.imageUrl)} alt={boat.name} fill className="object-cover" sizes="(max-width: 768px) 100vw, 50vw" priority={idx === 0} loading={idx === 0 ? 'eager' : 'lazy'} unoptimized={boat.imageUrl.startsWith('data:')} />
                           <div className="absolute inset-0" style={{ background: 'linear-gradient(0deg, rgba(10,20,35,0.9) 0%, rgba(10,20,35,0.2) 40%, transparent 70%)' }} />
                           <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(10,20,35,0.3) 0%, transparent 30%)' }} />
                           <div className="absolute top-3.5 right-3.5">

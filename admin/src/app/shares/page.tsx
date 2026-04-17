@@ -258,7 +258,7 @@ export default function SharesPage() {
                   >
                     <div className="flex items-center gap-3">
                       {(boat as any).imageUrl ? (
-                        <img src={(boat as any).imageUrl} alt={boat.name} className="w-10 h-10 rounded-lg object-cover" />
+                        <img src={(() => { const u = (boat as any).imageUrl; return u.startsWith('data:') || u.startsWith('http') ? u : `${process.env.NEXT_PUBLIC_API_URL?.replace(/\/api\/v\d+$/, '') || 'https://api.marinaprizeclub.com'}${u}`; })()} alt={boat.name} className="w-10 h-10 rounded-lg object-cover" />
                       ) : (
                         <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
                           <Ship size={20} className="text-primary-500" />
