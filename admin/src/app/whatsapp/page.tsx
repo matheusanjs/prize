@@ -128,6 +128,8 @@ export default function WhatsAppPage() {
   const [editTemplateName, setEditTemplateName] = useState('');
   const [savingTemplate, setSavingTemplate] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const convoPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const chatPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   /* ── Load status ── */
@@ -147,6 +149,15 @@ export default function WhatsAppPage() {
   }, []);
 
   useEffect(() => { loadStatus(); loadStats(); loadConversations(); }, [loadStatus, loadStats, loadConversations]);
+
+  /* ── Conversations polling (every 5s) ── */
+  useEffect(() => {
+    convoPollRef.current = setInterval(() => {
+      loadConversations();
+      loadStats();
+    }, 5000);
+    return () => { if (convoPollRef.current) clearInterval(convoPollRef.current); };
+  }, [loadConversations, loadStats]);
 
   /* ── QR polling ── */
   useEffect(() => {
@@ -170,9 +181,27 @@ export default function WhatsAppPage() {
     if (selectedPhone) loadChat(selectedPhone);
   }, [selectedPhone, loadChat]);
 
-  /* ── Auto-scroll to bottom ── */
+  /* ── Active chat polling (every 3s) ── */
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (chatPollRef.current) clearInterval(chatPollRef.current);
+    if (selectedPhone) {
+      chatPollRef.current = setInterval(() => loadChat(selectedPhone), 3000);
+    }
+    return () => { if (chatPollRef.current) clearInterval(chatPollRef.current); };
+  }, [selectedPhone, loadChat]);
+
+  /* ── Auto-scroll to bottom (only if near bottom) ── */
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const prevMsgCountRef = useRef(0);
+  useEffect(() => {
+    const container = chatContainerRef.current;
+    if (!container) { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); return; }
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+    const isNewMessage = chatMessages.length !== prevMsgCountRef.current;
+    prevMsgCountRef.current = chatMessages.length;
+    if (isNearBottom || isNewMessage) {
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [chatMessages]);
 
   /* ── Load templates ── */
@@ -552,7 +581,7 @@ export default function WhatsAppPage() {
             </div>
 
             {/* Chat body */}
-            <div className="flex-1 overflow-y-auto px-16 py-4 space-y-1"
+            <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-16 py-4 space-y-1"
               style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'6\' height=\'6\' viewBox=\'0 0 6 6\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Crect width=\'1\' height=\'1\' fill=\'%23e0e0e0\' fill-opacity=\'0.15\'/%3E%3C/svg%3E")' }}>
               {groupedMessages.map((group) => (
                 <div key={group.date}>
