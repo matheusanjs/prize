@@ -70,13 +70,17 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
       {isPublicPage ? (
         <>{children}</>
       ) : (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'var(--bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'var(--nav-bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <BottomNav />
           <main
             ref={mainRef}
-            className="px-4 flex-1 main-safe-top main-safe-bottom no-bounce"
-            style={{ overflowY: 'auto' }}
-          >{children}</main>
+            className="flex-1 no-bounce"
+            style={{ overflowY: 'auto', backgroundColor: 'var(--nav-bg)' }}
+          >
+            <div className="px-4 main-safe-top main-safe-bottom" style={{ backgroundColor: 'var(--bg)', minHeight: '100%' }}>
+              {children}
+            </div>
+          </main>
         </div>
       )}
     </AuthProvider>
