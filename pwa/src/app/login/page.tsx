@@ -17,17 +17,23 @@ export default function LoginPage() {
   useEffect(() => {
     const prevent = (e: TouchEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
-      // Allow touch on inputs so keyboard still works
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       e.preventDefault();
     };
     document.addEventListener('touchmove', prevent, { passive: false });
     document.body.style.overflow = 'hidden';
     document.documentElement.style.overflow = 'hidden';
+    // Force dark bg on html/body so native WKWebView safe-area gap is dark
+    const prevBodyBg = document.body.style.background;
+    const prevHtmlBg = document.documentElement.style.background;
+    document.body.style.background = '#0D1B2A';
+    document.documentElement.style.background = '#0D1B2A';
     return () => {
       document.removeEventListener('touchmove', prevent);
       document.body.style.overflow = '';
       document.documentElement.style.overflow = '';
+      document.body.style.background = prevBodyBg;
+      document.documentElement.style.background = prevHtmlBg;
     };
   }, []);
 
