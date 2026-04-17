@@ -70,16 +70,18 @@ export function LayoutShell({ children }: { children: React.ReactNode }) {
       {isPublicPage ? (
         <>{children}</>
       ) : (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'var(--nav-bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'var(--bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <BottomNav />
           <main
             ref={mainRef}
-            className="flex-1 no-bounce main-safe-bottom"
-            style={{ overflowY: 'auto', backgroundColor: 'var(--nav-bg)' }}
+            className="flex-1 no-bounce"
+            style={{ overflowY: 'auto', backgroundColor: 'var(--bg)' }}
           >
-            <div className="px-4 main-safe-top" style={{ backgroundColor: 'var(--bg)' }}>
+            <div className="px-4 main-safe-top">
               {children}
             </div>
+            {/* Spacer to clear fixed nav — same bg as content */}
+            <div className="nav-clearance" />
           </main>
         </div>
       )}
