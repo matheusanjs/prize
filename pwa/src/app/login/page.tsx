@@ -30,7 +30,7 @@ export default function LoginPage() {
   return (
     <div
       style={{
-        minHeight: '100dvh',
+        height: '100dvh',
         background: 'linear-gradient(160deg, #0D1B2A 0%, #003C3D 50%, #0D1B2A 100%)',
         display: 'flex',
         flexDirection: 'column',
@@ -41,6 +41,7 @@ export default function LoginPage() {
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
         position: 'relative',
         overflow: 'hidden',
+        boxSizing: 'border-box',
       }}
     >
       {/* Decorative circles */}

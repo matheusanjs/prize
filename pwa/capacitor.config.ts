@@ -13,6 +13,7 @@ const config: CapacitorConfig = {
     contentInset: 'automatic',
     scheme: 'Prize Clube',
     preferredContentMode: 'mobile',
+    backgroundColor: '#0D1B2A',
   },
   plugins: {
     PushNotifications: {
