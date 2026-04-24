@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import {
   getMyFuelLogs, getBoats, createFuelLog, getFuelPrice, setFuelPrice,
-  analyzeGauge, getSharesByBoat, getBoatReservations, getLastReturnInspection,
+  analyzeGauge, getRecentUsers, getLastReturnInspection,
 } from '@/services/api';
 import ReactCrop, { type Crop as CropType } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
@@ -248,7 +248,7 @@ function NewFuelingModal({ currentPrice, onClose, onSuccess }: {
   const [isCropping, setIsCropping]     = useState(false);
   const [croppedPreview, setCroppedPreview] = useState<string | null>(null);
   const [shareholders, setShareholders] = useState<{
-    userId: string; userName: string; shareNumber: number; hasReservationToday?: boolean;
+    userId: string; userName: string; shareNumber: number; hasReservationToday?: boolean; hasFuelCharge?: boolean; isShareholder?: boolean; source?: string;
   }[]>([]);
   const [targetUserId, setTargetUserId] = useState('');
   const [returnInspection, setReturnInspection] = useState<{ fuelPhotoUrl?: string; returnFuelPhotoUrl?: string; cotistaUserId?: string; cotistaName?: string } | null>(null);
@@ -264,25 +264,20 @@ function NewFuelingModal({ currentPrice, onClose, onSuccess }: {
 
   useEffect(() => {
     if (!selectedBoatId) { setShareholders([]); setTargetUserId(''); setReturnInspection(null); return; }
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
     Promise.all([
-      getSharesByBoat(selectedBoatId),
-      getBoatReservations(selectedBoatId, today).catch(() => ({ data: [] })),
+      getRecentUsers(selectedBoatId).catch(() => ({ data: [] })),
       getLastReturnInspection(selectedBoatId).catch(() => ({ data: null })),
-    ]).then(([sharesRes, reservRes, returnRes]) => {
-      const sharesList = Array.isArray(sharesRes.data) ? sharesRes.data : sharesRes.data?.data || [];
-      const reservations = Array.isArray(reservRes.data) ? reservRes.data : reservRes.data?.data || [];
-      const todayIds = new Set(reservations.map((r: { userId: string }) => r.userId));
-      const mapped = sharesList
-        .filter((s: { isActive?: boolean }) => s.isActive !== false)
-        .map((s: { userId: string; user?: { name: string }; userName?: string; shareNumber: number }) => ({
-          userId: s.userId,
-          userName: s.user?.name || s.userName || 'Cotista',
-          shareNumber: s.shareNumber,
-          hasReservationToday: todayIds.has(s.userId),
-        }))
-        .sort((a: { hasReservationToday?: boolean }, b: { hasReservationToday?: boolean }) =>
-          (b.hasReservationToday ? 1 : 0) - (a.hasReservationToday ? 1 : 0));
+    ]).then(([recentRes, returnRes]) => {
+      const recentList = Array.isArray(recentRes.data) ? recentRes.data : recentRes.data?.data || [];
+      const mapped = recentList.map((u: Record<string, unknown>, idx: number) => ({
+        userId: u.userId as string,
+        userName: (u.userName as string) || 'Usuário',
+        shareNumber: idx + 1,
+        hasReservationToday: !!u.reservationId,
+        hasFuelCharge: u.hasFuelCharge as boolean,
+        isShareholder: u.isShareholder as boolean,
+        source: u.source as string,
+      }));
       setShareholders(mapped);
 
       const ri = returnRes.data;
@@ -290,8 +285,8 @@ function NewFuelingModal({ currentPrice, onClose, onSuccess }: {
       if (ri?.cotistaUserId && mapped.some((s: { userId: string }) => s.userId === ri.cotistaUserId)) {
         setTargetUserId(ri.cotistaUserId);
       } else {
-        const sh = mapped.find((s: { hasReservationToday?: boolean }) => s.hasReservationToday);
-        setTargetUserId(sh ? sh.userId : (mapped[0]?.userId || ''));
+        const uncharged = mapped.find((s: { hasFuelCharge?: boolean }) => !s.hasFuelCharge);
+        setTargetUserId(uncharged ? uncharged.userId : (mapped.length > 0 ? mapped[0].userId : ''));
       }
     }).catch(() => setShareholders([]));
   }, [selectedBoatId]);
@@ -605,10 +600,18 @@ function NewFuelingModal({ currentPrice, onClose, onSuccess }: {
                         className="w-full bg-[var(--subtle)] border-2 border-[var(--border)] focus:border-orange-400 rounded-xl px-4 py-3 text-[var(--text)] text-sm focus:outline-none transition">
                         {shareholders.map(s => (
                           <option key={s.userId} value={s.userId}>
-                            Cota #{s.shareNumber} — {s.userName}{s.hasReservationToday ? ' (reserva hoje)' : ''}
+                            {s.userName}
+                            {s.source === 'reservation' && !s.isShareholder ? ' (reserva avulsa)' : ''}
+                            {s.hasFuelCharge ? ' ✅ cobrado' : ' ⚠️ pendente'}
+                            {s.hasReservationToday ? ' — hoje' : ''}
                           </option>
                         ))}
                       </select>
+                      {returnInspection?.cotistaUserId && returnInspection.cotistaUserId === targetUserId && (
+                        <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" /> Último cotista que usou — selecionado automaticamente
+                        </p>
+                      )}
                     </div>
                   )}
 

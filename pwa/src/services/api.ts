@@ -193,6 +193,7 @@ export const launchToWater = (queueId: string) => api.patch(`/operations/queue/$
 export const getChecklistsByBoat = (boatId: string) => api.get(`/operations/checklists/boat/${boatId}`);
 export const getChecklistById = (id: string) => api.get(`/operations/pre-launch/checklist/${id}`);
 export const getLastReturnInspection = (boatId: string) => api.get(`/operations/return-inspection/${boatId}`);
+export const getRecentUsers = (boatId: string) => api.get(`/operations/recent-users/${boatId}`);
 export const getLastMarksForBoat = (boatId: string) => api.get(`/operations/boat/${boatId}/last-marks`);
 
 // Queue
