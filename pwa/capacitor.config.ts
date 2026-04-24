@@ -18,7 +18,7 @@ const config: CapacitorConfig = {
       NSPhotoLibraryUsageDescription: 'O aplicativo precisa acessar a biblioteca de fotos para selecionar imagens de inspeção de embarcações e nível de combustível.',
       NSPhotoLibraryAddUsageDescription: 'O aplicativo precisa salvar fotos de inspeção na sua biblioteca.',
     },
-  },
+  } as any,
   plugins: {
     PushNotifications: {
       // Show banner + play sound + update badge even when the app is open (foreground).
