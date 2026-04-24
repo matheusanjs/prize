@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import { Activity, Ship, Clock, Fuel, ClipboardCheck, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { getMyUsages } from '@/services/api';
 import dynamic from 'next/dynamic';
@@ -91,7 +91,7 @@ export default function UsosPage() {
   );
 }
 
-function UsageCard({ item, expanded, onToggle, totalFuel, totalCost }: {
+const UsageCard = memo(function UsageCard({ item, expanded, onToggle, totalFuel, totalCost }: {
   item: UsageItem; expanded: boolean; onToggle: () => void; totalFuel: number; totalCost: number;
 }) {
   const cfg = statusConfig[item.status] || { label: item.status, bg: 'bg-[var(--subtle)]', text: 'text-[var(--text-secondary)]' };
@@ -193,4 +193,4 @@ function UsageCard({ item, expanded, onToggle, totalFuel, totalCost }: {
       )}
     </div>
   );
-}
+});

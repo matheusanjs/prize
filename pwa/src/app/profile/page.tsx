@@ -55,7 +55,7 @@ export default function ProfilePage() {
       setCpfCnpj(data.cpfCnpj || null);
       setAvatar(data.avatar || null);
     } catch { /* ignore */ }
-  }, []);
+  }, [setPhone, setCpfCnpj, setAvatar]);
 
   const loadChargesSummary = useCallback(async () => {
     try {

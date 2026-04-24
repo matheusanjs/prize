@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Wrench, Plus, X, CheckCircle, Clock, AlertTriangle, Ship } from 'lucide-react';
 import { getMaintenances, createMaintenance, updateMaintenance, getBoats } from '@/services/api';
 import { format, parseISO } from 'date-fns';
@@ -48,7 +48,7 @@ export default function MaintenancePage() {
     boatId: '', title: '', description: '', priority: 'MEDIUM', estimatedCost: '',
   });
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       const [mRes, bRes] = await Promise.all([getMaintenances(), getBoats()]);
       setItems(Array.isArray(mRes.data) ? mRes.data : mRes.data.data || []);
@@ -56,11 +56,11 @@ export default function MaintenancePage() {
       setBoats(b.map((x: BoatOption) => ({ id: x.id, name: x.name })));
     } catch { /* empty */ }
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => { load(); }, []);
 
-  const filtered = filter === 'all' ? items : items.filter(m => m.status === filter);
+  const filtered = useMemo(() => filter === 'all' ? items : items.filter(m => m.status === filter), [items, filter]);
   const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
   const handleCreate = async () => {

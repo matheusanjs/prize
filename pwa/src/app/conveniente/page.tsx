@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo, memo } from 'react';
 import {
   ShoppingBag, Plus, Minus, ChevronRight, ChevronLeft,
   QrCode, Copy, CheckCircle2, Loader2, ShoppingCart, AlertCircle, X, Sparkles,
@@ -20,7 +20,7 @@ const CAT_ICONS: Record<string, string> = {
 function getCatIcon(slug: string) { return CAT_ICONS[slug] || '🛍️'; }
 
 // Item card matching site cardapio design
-function ItemCard({ item, qty, onAdd, onRemove }: {
+const ItemCard = memo(function ItemCard({ item, qty, onAdd, onRemove }: {
   item: ConvenienceItem; qty: number; onAdd: () => void; onRemove: () => void;
 }) {
   const [imgLoaded, setImgLoaded] = useState(false);
@@ -62,7 +62,7 @@ function ItemCard({ item, qty, onAdd, onRemove }: {
       </div>
     </div>
   );
-}
+});
 
 const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1').replace(/\/api\/v\d+$/, '');
 
@@ -119,35 +119,35 @@ export default function ConvenientePage() {
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
   // ─── Cart ─────────────────────────────────────────────────
-  function addToCart(item: ConvenienceItem) {
+  const addToCart = useCallback((item: ConvenienceItem) => {
     setCart(prev => {
       const ex = prev.find(c => c.item.id === item.id);
       if (ex) return prev.map(c => c.item.id === item.id ? { ...c, quantity: c.quantity + 1 } : c);
       return [...prev, { item, quantity: 1 }];
     });
-  }
-  function removeFromCart(id: string) {
+  }, []);
+  const removeFromCart = useCallback((id: string) => {
     setCart(prev => {
       const ex = prev.find(c => c.item.id === id);
       if (!ex) return prev;
       if (ex.quantity === 1) return prev.filter(c => c.item.id !== id);
       return prev.map(c => c.item.id === id ? { ...c, quantity: c.quantity - 1 } : c);
     });
-  }
-  function deleteFromCart(id: string) { setCart(prev => prev.filter(c => c.item.id !== id)); }
-  const cartCount = cart.reduce((s, c) => s + c.quantity, 0);
-  const cartTotal = cart.reduce((s, c) => s + c.item.price * c.quantity, 0);
-  const itemQty = (id: string) => cart.find(c => c.item.id === id)?.quantity ?? 0;
+  }, []);
+  const deleteFromCart = useCallback((id: string) => { setCart(prev => prev.filter(c => c.item.id !== id)); }, []);
+  const cartCount = useMemo(() => cart.reduce((s, c) => s + c.quantity, 0), [cart]);
+  const cartTotal = useMemo(() => cart.reduce((s, c) => s + c.item.price * c.quantity, 0), [cart]);
+  const itemQty = useCallback((id: string) => cart.find(c => c.item.id === id)?.quantity ?? 0, [cart]);
 
   // ─── Groups ───────────────────────────────────────────────
-  const groups = Object.values(
+  const groups = useMemo(() => Object.values(
     items.reduce<Record<string, { catId: string; catName: string; slug: string; catItems: ConvenienceItem[] }>>((acc, item) => {
       const k = item.category.id;
       if (!acc[k]) acc[k] = { catId: k, catName: item.category.name, slug: item.category.slug || '', catItems: [] };
       acc[k].catItems.push(item);
       return acc;
     }, {})
-  );
+  ), [items]);
 
   // ─── PIX polling ─────────────────────────────────────────
   function startPolling(correlationID: string) {

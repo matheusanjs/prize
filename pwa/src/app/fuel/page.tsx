@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import {
   Fuel, Plus, Ship, DollarSign, Camera, Loader2, X,
   ChevronLeft, AlertCircle, CheckCircle2, RefreshCw, Settings, Search,
@@ -62,8 +62,8 @@ export default function FuelPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const totalLiters = logs.reduce((s, l) => s + (l.liters || 0), 0);
-  const totalCost = logs.reduce((s, l) => s + (l.totalCost || l.liters * l.pricePerLiter || 0), 0);
+  const totalLiters = useMemo(() => logs.reduce((s, l) => s + (l.liters || 0), 0), [logs]);
+  const totalCost = useMemo(() => logs.reduce((s, l) => s + (l.totalCost || l.liters * l.pricePerLiter || 0), 0), [logs]);
 
   return (
     <div className="p-4 pb-4 space-y-4">
@@ -165,7 +165,7 @@ export default function FuelPage() {
   );
 }
 
-function LogDetailSheet({ log, onClose }: { log: FuelLog; onClose: () => void }) {
+const LogDetailSheet = memo(function LogDetailSheet({ log, onClose }: { log: FuelLog; onClose: () => void }) {
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={onClose}>
       <div className="bg-[var(--card)] rounded-t-3xl w-full max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
@@ -208,7 +208,7 @@ function LogDetailSheet({ log, onClose }: { log: FuelLog; onClose: () => void })
       </div>
     </div>
   );
-}
+});
 
 function NewFuelingModal({ currentPrice, onClose, onSuccess }: {
   currentPrice: number; onClose: () => void; onSuccess: () => void;
@@ -319,7 +319,7 @@ function NewFuelingModal({ currentPrice, onClose, onSuccess }: {
 
   const selectedBoat = boats.find(b => b.id === selectedBoatId);
 
-  const filteredBoats = boats
+  const filteredBoats = useMemo(() => boats
     .filter(b => {
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase();
@@ -332,7 +332,7 @@ function NewFuelingModal({ currentPrice, onClose, onSuccess }: {
       const aPending = pendingBoats.has(a.id) ? 0 : 1;
       const bPending = pendingBoats.has(b.id) ? 0 : 1;
       return aPending - bPending;
-    });
+    }), [boats, searchQuery, shareholderNamesMap, pendingBoats]);
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -615,7 +615,7 @@ function NewFuelingModal({ currentPrice, onClose, onSuccess }: {
   );
 }
 
-function PriceModal({ currentPrice, onClose, onSuccess }: { currentPrice: number; onClose: () => void; onSuccess: () => void }) {
+const PriceModal = memo(function PriceModal({ currentPrice, onClose, onSuccess }: { currentPrice: number; onClose: () => void; onSuccess: () => void }) {
   const [price, setPrice] = useState(currentPrice.toString());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -663,4 +663,4 @@ function PriceModal({ currentPrice, onClose, onSuccess }: { currentPrice: number
       </div>
     </div>
   );
-}
+});

@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, memo } from 'react';
 import { Wind, Droplets, Sun, ChevronDown, ChevronUp, MapPin, CloudRain, Calendar, CheckCircle2, X, Sparkles, Ship } from 'lucide-react';
-import { getWeatherCurrent, getWeatherForecast } from '@/services/api';
 import { format, parseISO } from 'date-fns';
+import { useWeatherCurrentQuery, useWeatherForecastQuery } from '@/hooks/queries/useWeatherQuery';
 
 interface WeatherData {
   id: string;
@@ -89,25 +89,13 @@ interface Props {
 }
 
 export default function WeatherWidget({ variant = 'client', todayReservations = [], onConfirmArrival, onDeclineReservation, aiSummary }: Props) {
-  const [weather, setWeather] = useState<WeatherData | null>(null);
-  const [forecast, setForecast] = useState<ForecastDay[]>([]);
-  const [loading, setLoading] = useState(true);
+  const weatherQ = useWeatherCurrentQuery();
+  const forecastQ = useWeatherForecastQuery();
+  const weather: WeatherData | null = weatherQ.data || null;
+  const forecast: ForecastDay[] = forecastQ.data || [];
+  const loading = weatherQ.isLoading && !weatherQ.data;
   const [showForecast, setShowForecast] = useState(false);
   const [showAiModal, setShowAiModal] = useState(false);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const [currentRes, forecastRes] = await Promise.all([
-          getWeatherCurrent(),
-          getWeatherForecast(),
-        ]);
-        if (currentRes.data.ok && currentRes.data.data) setWeather(currentRes.data.data);
-        if (forecastRes.data.ok && forecastRes.data.data) setForecast(forecastRes.data.data);
-      } catch { /* silent */ }
-      setLoading(false);
-    })();
-  }, []);
 
   if (loading) {
     return (
