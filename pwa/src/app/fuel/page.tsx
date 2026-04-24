@@ -3,15 +3,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Fuel, Plus, Ship, DollarSign, Camera, Loader2, X,
-  Upload, Sparkles, ChevronLeft, AlertCircle, CheckCircle2,
-  Crop, ZoomIn, RefreshCw, Settings,
+  ChevronLeft, AlertCircle, CheckCircle2, RefreshCw, Settings, Search,
 } from 'lucide-react';
 import {
   getMyFuelLogs, getBoats, createFuelLog, getFuelPrice, setFuelPrice,
-  analyzeGauge, getRecentUsers, getLastReturnInspection,
+  getRecentUsers, getLastReturnInspection, getSharesByBoat,
 } from '@/services/api';
-import ReactCrop, { type Crop as CropType } from 'react-image-crop';
-import 'react-image-crop/dist/ReactCrop.css';
 import WeatherWidget from '@/components/WeatherWidget';
 import { useCachedState, hasCached } from '@/hooks/useCachedState';
 
@@ -37,26 +34,15 @@ interface Boat {
   fuelType: string;
 }
 
-interface GaugeAnalysis {
-  success: boolean;
-  message?: string;
-  tankCapacity?: number;
-  gaugePercentage?: number;
-  currentLiters?: number;
-  litersNeeded?: number;
-  confidence?: number;
-  observation?: string;
-}
-
 const fmtCurrency = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtDate = (s?: string) =>
   s ? new Date(s).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'America/Sao_Paulo' }) : '—';
 
 export default function FuelPage() {
-  const [logs, setLogs]           = useCachedState<FuelLog[]>('pc:fuel:logs', []);
-  const [loading, setLoading]     = useState(() => !hasCached('pc:fuel:logs'));
+  const [logs, setLogs] = useCachedState<FuelLog[]>('pc:fuel:logs', []);
+  const [loading, setLoading] = useState(() => !hasCached('pc:fuel:logs'));
   const [showModal, setShowModal] = useState(false);
-  const [viewLog, setViewLog]     = useState<FuelLog | null>(null);
+  const [viewLog, setViewLog] = useState<FuelLog | null>(null);
   const [currentPrice, setCurrentPrice] = useCachedState<number>('pc:fuel:currentPrice', 0);
   const [showPriceModal, setShowPriceModal] = useState(false);
 
@@ -77,7 +63,7 @@ export default function FuelPage() {
   useEffect(() => { loadData(); }, [loadData]);
 
   const totalLiters = logs.reduce((s, l) => s + (l.liters || 0), 0);
-  const totalCost   = logs.reduce((s, l) => s + (l.totalCost || l.liters * l.pricePerLiter || 0), 0);
+  const totalCost = logs.reduce((s, l) => s + (l.totalCost || l.liters * l.pricePerLiter || 0), 0);
 
   return (
     <div className="p-4 pb-4 space-y-4">
@@ -103,7 +89,6 @@ export default function FuelPage() {
         </div>
       </div>
 
-      {/* Primary action — full width, always visible */}
       <button onClick={() => setShowModal(true)}
         className="w-full flex items-center justify-center gap-2 py-3.5 bg-orange-500 hover:bg-orange-400 active:scale-[0.98] text-white rounded-2xl text-sm font-bold shadow-lg shadow-orange-500/20 transition-all">
         <Plus className="w-4 h-4" />Registrar Abastecimento
@@ -128,9 +113,9 @@ export default function FuelPage() {
       </div>
 
       {currentPrice > 0 && (
-        <div className="flex items-center gap-2 px-3 py-2.5 bg-orange-500/10 border border-orange-100 rounded-xl">
+        <div className="flex items-center gap-2 px-3 py-2.5 bg-orange-500/10 border border-orange-500/20 dark:border-orange-500/20 rounded-xl">
           <Fuel className="w-3.5 h-3.5 text-orange-500" />
-          <p className="text-xs text-orange-700">Preço atual: <strong>{fmtCurrency(currentPrice)}/L</strong></p>
+          <p className="text-xs text-orange-700 dark:text-orange-400">Preço atual: <strong>{fmtCurrency(currentPrice)}/L</strong></p>
         </div>
       )}
 
@@ -140,7 +125,7 @@ export default function FuelPage() {
         <div className="text-center py-16">
           <Fuel className="w-12 h-12 mx-auto mb-3 text-[var(--text-muted)]" />
           <p className="text-sm text-[var(--text-muted)] font-medium">Nenhum abastecimento registrado</p>
-          <p className="text-xs text-[var(--text-muted)] mt-1">Toque em "Abastecer" para registrar</p>
+          <p className="text-xs text-[var(--text-muted)] mt-1">Toque em "Registrar Abastecimento" para começar</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -214,9 +199,9 @@ function LogDetailSheet({ log, onClose }: { log: FuelLog; onClose: () => void })
             </div>
           </div>
           {log.notes && (
-            <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
-              <p className="text-xs font-semibold text-amber-700 mb-1">Observações</p>
-              <p className="text-sm text-amber-800">{log.notes}</p>
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3">
+              <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 mb-1">Observações</p>
+              <p className="text-sm text-amber-700 dark:text-amber-300">{log.notes}</p>
             </div>
           )}
         </div>
@@ -225,40 +210,51 @@ function LogDetailSheet({ log, onClose }: { log: FuelLog; onClose: () => void })
   );
 }
 
-type ModalStep = 'select' | 'photo' | 'review';
-
 function NewFuelingModal({ currentPrice, onClose, onSuccess }: {
   currentPrice: number; onClose: () => void; onSuccess: () => void;
 }) {
-  const [boats, setBoats]               = useState<Boat[]>([]);
+  const [boats, setBoats] = useState<Boat[]>([]);
   const [selectedBoatId, setSelectedBoatId] = useState('');
-  const [step, setStep]                 = useState<ModalStep>('select');
+  const [step, setStep] = useState<'select' | 'form'>('select');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [imageBase64, setImageBase64]   = useState('');
-  const [imageMime, setImageMime]       = useState('image/jpeg');
-  const [analyzing, setAnalyzing]       = useState(false);
-  const [analysis, setAnalysis]         = useState<GaugeAnalysis | null>(null);
+  const [imageBase64, setImageBase64] = useState('');
+  const [imageMime, setImageMime] = useState('image/jpeg');
   const [manualLiters, setManualLiters] = useState('');
-  const [manualMode, setManualMode]     = useState(false);
-  const [notes, setNotes]               = useState('');
-  const [submitting, setSubmitting]     = useState(false);
-  const [error, setError]               = useState('');
-  const [successMsg, setSuccessMsg]     = useState('');
-  const [crop, setCrop]                 = useState<CropType>();
-  const [isCropping, setIsCropping]     = useState(false);
-  const [croppedPreview, setCroppedPreview] = useState<string | null>(null);
+  const [notes, setNotes] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [pendingBoats, setPendingBoats] = useState<Set<string>>(new Set());
+  const [shareholderNamesMap, setShareholderNamesMap] = useState<Record<string, string[]>>({});
   const [shareholders, setShareholders] = useState<{
-    userId: string; userName: string; shareNumber: number; hasReservationToday?: boolean; hasFuelCharge?: boolean; isShareholder?: boolean; source?: string;
+    userId: string; userName: string; shareNumber: number; hasReservationToday?: boolean; hasFuelCharge?: boolean; isShareholder?: boolean; source?: string; lastChecklistAt?: string;
   }[]>([]);
   const [targetUserId, setTargetUserId] = useState('');
   const [returnInspection, setReturnInspection] = useState<{ fuelPhotoUrl?: string; returnFuelPhotoUrl?: string; cotistaUserId?: string; cotistaName?: string } | null>(null);
-  const imgRef  = useRef<HTMLImageElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    getBoats().then((res: any) => {
+    getBoats().then(async (res: any) => {
       const d = res.data;
-      setBoats((Array.isArray(d) ? d : d?.data || []).filter((b: Boat) => b.fuelCapacity > 0));
+      const boatList = (Array.isArray(d) ? d : d?.data || []).filter((b: Boat) => b.fuelCapacity > 0);
+      setBoats(boatList);
+      const results = await Promise.allSettled(
+        boatList.map((b: Boat) => getRecentUsers(b.id).catch(() => ({ data: [] })))
+      );
+      const pending = new Set<string>();
+      const namesMap: Record<string, string[]> = {};
+      results.forEach((result, idx) => {
+        const boatId = boatList[idx].id;
+        const list = result.status === 'fulfilled'
+          ? (Array.isArray(result.value.data) ? result.value.data : result.value.data?.data || [])
+          : [];
+        namesMap[boatId] = list.map((u: Record<string, unknown>) => u.userName as string).filter(Boolean);
+        const hasUncharged = list.some((u: Record<string, unknown>) => !u.hasFuelCharge && u.isShareholder);
+        if (hasUncharged) pending.add(boatId);
+      });
+      setPendingBoats(pending);
+      setShareholderNamesMap(namesMap);
     }).catch(() => setBoats([]));
   }, []);
 
@@ -267,17 +263,47 @@ function NewFuelingModal({ currentPrice, onClose, onSuccess }: {
     Promise.all([
       getRecentUsers(selectedBoatId).catch(() => ({ data: [] })),
       getLastReturnInspection(selectedBoatId).catch(() => ({ data: null })),
-    ]).then(([recentRes, returnRes]) => {
+      getSharesByBoat(selectedBoatId).catch(() => ({ data: [] })),
+    ]).then(([recentRes, returnRes, sharesRes]) => {
       const recentList = Array.isArray(recentRes.data) ? recentRes.data : recentRes.data?.data || [];
-      const mapped = recentList.map((u: Record<string, unknown>, idx: number) => ({
-        userId: u.userId as string,
-        userName: (u.userName as string) || 'Usuário',
-        shareNumber: idx + 1,
-        hasReservationToday: !!u.reservationId,
-        hasFuelCharge: u.hasFuelCharge as boolean,
-        isShareholder: u.isShareholder as boolean,
-        source: u.source as string,
-      }));
+      const sharesList = Array.isArray(sharesRes.data) ? sharesRes.data : sharesRes.data?.data || [];
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+      const mapped = recentList.map((u: Record<string, unknown>, idx: number) => {
+        const lastUsedDate = u.lastUsedAt ? new Date(u.lastUsedAt as string).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }) : '';
+        return {
+          userId: u.userId as string,
+          userName: (u.userName as string) || 'Usuário',
+          shareNumber: idx + 1,
+          hasReservationToday: lastUsedDate === today,
+          hasFuelCharge: u.hasFuelCharge as boolean,
+          isShareholder: u.isShareholder as boolean,
+          source: u.source as string,
+          lastChecklistAt: u.lastUsedAt as string | undefined,
+        };
+      });
+
+      const existingIds = new Set(mapped.map((m: typeof mapped[number]) => m.userId));
+      for (const share of sharesList) {
+        const user = (share as Record<string, unknown>).user as Record<string, unknown> | undefined;
+        if (!user || existingIds.has(user.id as string)) continue;
+        mapped.push({
+          userId: user.id as string,
+          userName: (user.name as string) || 'Usuário',
+          shareNumber: ((share as Record<string, unknown>).shareNumber as number) || mapped.length + 1,
+          hasReservationToday: false,
+          hasFuelCharge: true,
+          isShareholder: true,
+          source: 'shareholder',
+          lastChecklistAt: undefined,
+        });
+      }
+
+      mapped.sort((a: typeof mapped[number], b: typeof mapped[number]) => {
+        if (a.hasFuelCharge !== b.hasFuelCharge) return a.hasFuelCharge ? 1 : -1;
+        const aDate = a.lastChecklistAt ? new Date(a.lastChecklistAt).getTime() : 0;
+        const bDate = b.lastChecklistAt ? new Date(b.lastChecklistAt).getTime() : 0;
+        return aDate - bDate;
+      });
       setShareholders(mapped);
 
       const ri = returnRes.data;
@@ -293,6 +319,21 @@ function NewFuelingModal({ currentPrice, onClose, onSuccess }: {
 
   const selectedBoat = boats.find(b => b.id === selectedBoatId);
 
+  const filteredBoats = boats
+    .filter(b => {
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      const names = shareholderNamesMap[b.id] || [];
+      return b.name.toLowerCase().includes(q)
+        || b.model.toLowerCase().includes(q)
+        || names.some(n => n.toLowerCase().includes(q));
+    })
+    .sort((a, b) => {
+      const aPending = pendingBoats.has(a.id) ? 0 : 1;
+      const bPending = pendingBoats.has(b.id) ? 0 : 1;
+      return aPending - bPending;
+    });
+
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -303,50 +344,9 @@ function NewFuelingModal({ currentPrice, onClose, onSuccess }: {
       const result = reader.result as string;
       setImagePreview(result);
       setImageBase64(result.split(',')[1]);
-      setCrop(undefined); setCroppedPreview(null); setIsCropping(true); setError('');
+      setError('');
     };
     reader.readAsDataURL(file);
-  };
-
-  const getCroppedBase64 = (): Promise<string> =>
-    new Promise(resolve => {
-      if (!crop || !imgRef.current || !crop.width || !crop.height) { resolve(imageBase64); return; }
-      const img = imgRef.current;
-      const canvas = document.createElement('canvas');
-      const sx = img.naturalWidth / img.width, sy = img.naturalHeight / img.height;
-      const px = { x: crop.x * sx, y: crop.y * sy, w: crop.width * sx, h: crop.height * sy };
-      canvas.width = px.w; canvas.height = px.h;
-      canvas.getContext('2d')!.drawImage(img, px.x, px.y, px.w, px.h, 0, 0, px.w, px.h);
-      resolve(canvas.toDataURL(imageMime).split(',')[1]);
-    });
-
-  const generateCroppedPreview = () => {
-    if (!crop || !imgRef.current || !crop.width || !crop.height) return;
-    const img = imgRef.current;
-    const canvas = document.createElement('canvas');
-    const sx = img.naturalWidth / img.width, sy = img.naturalHeight / img.height;
-    const px = { x: crop.x * sx, y: crop.y * sy, w: crop.width * sx, h: crop.height * sy };
-    canvas.width = px.w; canvas.height = px.h;
-    canvas.getContext('2d')!.drawImage(img, px.x, px.y, px.w, px.h, 0, 0, px.w, px.h);
-    setCroppedPreview(canvas.toDataURL(imageMime));
-  };
-
-  const handleAnalyze = async () => {
-    if (!selectedBoatId || !imageBase64) return;
-    setAnalyzing(true); setError('');
-    try {
-      const hasCrop = !!(crop && crop.width && crop.height);
-      const finalBase64 = hasCrop ? await getCroppedBase64() : imageBase64;
-      const res = await analyzeGauge(selectedBoatId, finalBase64, imageMime, hasCrop);
-      setAnalysis(res.data);
-      if (res.data.success) {
-        setManualLiters(res.data.litersNeeded?.toString() || '0');
-        setStep('review');
-      } else {
-        setError(res.data.message || 'Não foi possível analisar a imagem.');
-      }
-    } catch { setError('Erro ao analisar imagem'); }
-    finally { setAnalyzing(false); }
   };
 
   const handleSubmit = async () => {
@@ -358,7 +358,7 @@ function NewFuelingModal({ currentPrice, onClose, onSuccess }: {
     try {
       await createFuelLog({
         boatId: selectedBoatId, liters, pricePerLiter: currentPrice,
-        notes: notes || (analysis?.observation ? `IA: ${analysis.observation}` : undefined),
+        notes: notes || undefined,
         targetUserId,
         imageUrl: imageBase64 ? `data:${imageMime};base64,${imageBase64}` : undefined,
       });
@@ -371,36 +371,34 @@ function NewFuelingModal({ currentPrice, onClose, onSuccess }: {
 
   const totalCost = parseFloat(manualLiters || '0') * currentPrice;
 
-  const goBack = () => {
-    if (step === 'review') { setStep(manualMode ? 'select' : 'photo'); setManualMode(false); }
-    else if (step === 'photo') setStep('select');
-  };
-
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-end">
-      <div className="bg-[var(--card)] rounded-t-3xl w-full max-h-[92dvh] flex flex-col">
-        <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
-          <div className="w-10 h-1 bg-[var(--subtle-hover)] rounded-full" />
+    <>
+      <div style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50, background: 'var(--card)', borderTopLeftRadius: '1.5rem', borderTopRightRadius: '1.5rem', height: '90vh', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+        {/* HEADER */}
+        <div style={{ display: 'flex', justifyContent: 'center', paddingTop: '0.75rem', paddingBottom: '0.25rem' }}>
+          <div style={{ width: '2.5rem', height: '0.25rem', borderRadius: '9999px', background: 'var(--subtle-hover)' }} />
         </div>
-        <div className="flex items-center justify-between px-5 pb-3 flex-shrink-0 border-b border-[var(--border)]">
-          <div className="flex items-center gap-2">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 1.25rem 0.75rem', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             {step !== 'select' && (
-              <button onClick={goBack} className="p-1.5 hover:bg-[var(--subtle)] rounded-xl mr-0.5">
+              <button onClick={() => setStep('select')} className="p-1.5 hover:bg-[var(--subtle)] rounded-xl mr-0.5">
                 <ChevronLeft className="w-5 h-5 text-[var(--text-secondary)]" />
               </button>
             )}
             <Fuel className="w-5 h-5 text-orange-500" />
             <p className="font-bold text-[var(--text)] text-sm">
-              {step === 'select' ? 'Novo Abastecimento' : step === 'photo' ? 'Foto do Painel' : 'Confirmar Dados'}
+              {step === 'select' ? 'Novo Abastecimento' : 'Confirmar Dados'}
             </p>
           </div>
           <button onClick={onClose} className="p-1.5 hover:bg-[var(--subtle)] rounded-xl"><X className="w-5 h-5 text-[var(--text-secondary)]" /></button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4" style={{ paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom, 0px))' }}>
+        {/* SCROLLABLE CONTENT — pb-24 leaves room for the floating button */}
+        <div style={{ height: 'calc(100% - 4rem)', overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0.75rem 1.25rem 8rem' }} className="space-y-3">
           {successMsg ? (
             <div className="flex flex-col items-center justify-center py-12 gap-4 text-center">
-              <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center">
+              <div className="w-20 h-20 rounded-full bg-green-500/20 flex items-center justify-center">
                 <CheckCircle2 className="w-10 h-10 text-green-500" />
               </div>
               <p className="font-bold text-[var(--text)]">{successMsg}</p>
@@ -409,146 +407,81 @@ function NewFuelingModal({ currentPrice, onClose, onSuccess }: {
             <>
               {error && (
                 <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-sm text-red-400">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0" />{error}
+                  <AlertCircle className="w-4 h-4 shrink-0" />{error}
                 </div>
               )}
 
-              {/* SELECT BOAT */}
+              {/* STEP 1: Select Boat */}
               {step === 'select' && (
-                <div className="space-y-3">
-                  {boats.length === 0 ? (
+                <div className="space-y-2">
+                  {boats.length > 1 && (
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                        placeholder="Buscar por nome, modelo ou cotista..."
+                        className="w-full bg-[var(--subtle)] border border-[var(--border)] focus:border-orange-400 rounded-xl px-4 py-2.5 pl-10 text-sm text-[var(--text)] focus:outline-none transition"
+                      />
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+                      {searchQuery && (
+                        <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2">
+                          <X className="w-4 h-4 text-[var(--text-muted)]" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {filteredBoats.length === 0 && boats.length > 0 ? (
+                    <div className="text-center py-8">
+                      <Ship className="w-10 h-10 mx-auto mb-2 text-[var(--text-muted)]" />
+                      <p className="text-sm text-[var(--text-muted)]">Nenhuma embarcação encontrada</p>
+                    </div>
+                  ) : boats.length === 0 ? (
                     <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-orange-500" /></div>
-                  ) : boats.map(boat => (
+                  ) : filteredBoats.map(boat => (
                     <button key={boat.id} onClick={() => setSelectedBoatId(boat.id)}
-                      className={`w-full flex items-center gap-3 p-4 rounded-2xl border-2 text-left transition-all ${
+                      className={`w-full flex items-center gap-2.5 p-3 rounded-xl border-2 text-left transition-all ${
                         selectedBoatId === boat.id ? 'border-orange-400 bg-orange-500/10' : 'border-[var(--border)] bg-[var(--subtle)] hover:border-[var(--border)]'
                       }`}>
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${selectedBoatId === boat.id ? 'bg-orange-500/20' : 'bg-[var(--subtle)]'}`}>
-                        <Ship className={`w-5 h-5 ${selectedBoatId === boat.id ? 'text-orange-500' : 'text-[var(--text-muted)]'}`} />
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${selectedBoatId === boat.id ? 'bg-orange-500/20' : 'bg-[var(--subtle)]'}`}>
+                        <Ship className={`w-4 h-4 ${selectedBoatId === boat.id ? 'text-orange-500' : 'text-[var(--text-muted)]'}`} />
                       </div>
-                      <div className="flex-1">
-                        <p className="font-bold text-[var(--text)] text-sm">{boat.name}</p>
-                        <p className="text-xs text-[var(--text-secondary)]">{boat.model} · {boat.fuelType} · {boat.fuelCapacity}L</p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <p className="font-semibold text-[var(--text)] text-sm truncate">{boat.name}</p>
+                          {pendingBoats.has(boat.id) && (
+                            <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-500 dark:text-amber-400 border border-amber-500/30">Pendente</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-[var(--text-secondary)] truncate">{boat.model} · {boat.fuelCapacity}L</p>
                       </div>
                     </button>
                   ))}
-                  {selectedBoatId && (
-                    <div className="flex gap-2 pt-2">
-                      <button onClick={() => setStep('photo')}
-                        className="flex-1 flex items-center justify-center gap-2 py-3.5 bg-orange-500 text-white rounded-xl font-bold text-sm">
-                        <Camera className="w-4 h-4" />Analisar por Foto (IA)
-                      </button>
-                      <button onClick={() => { setManualMode(true); setStep('review'); }}
-                        className="flex items-center justify-center gap-2 px-5 py-3.5 border-2 border-[var(--border)] text-[var(--text-secondary)] rounded-xl font-medium text-sm">
-                        Manual
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
 
-              {/* PHOTO + AI */}
-              {step === 'photo' && (
-                <div className="space-y-4">
-                  <div className="flex items-start gap-2.5 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl text-sm text-blue-700">
-                    <Sparkles className="w-4 h-4 mt-0.5 flex-shrink-0 text-blue-500" />
-                    <span>{!imagePreview ? 'Tire foto do painel de combustível para análise automática'
-                      : isCropping ? 'Selecione a área do medidor arrastando para melhor precisão'
-                      : 'Imagem pronta. Clique em Analisar para continuar'}</span>
-                  </div>
-
-                  {!imagePreview ? (
-                    <div onClick={() => fileRef.current?.click()}
-                      className="border-2 border-dashed border-[var(--border)] rounded-2xl p-10 text-center cursor-pointer hover:border-orange-300 transition flex flex-col items-center gap-3">
-                      <Upload className="w-10 h-10 text-[var(--text-muted)]" />
-                      <p className="text-sm text-[var(--text-secondary)] font-medium">Toque para capturar ou selecionar</p>
-                    </div>
-                  ) : (
-                    <div className="relative rounded-2xl overflow-hidden border border-[var(--border)] bg-[var(--subtle)]">
-                      {isCropping ? (
-                        <ReactCrop crop={crop} onChange={c => setCrop(c)} className="max-h-72">
-                          <img loading="lazy" decoding="async" ref={imgRef} src={imagePreview} alt="Painel" className="w-full max-h-72 object-contain block" />
-                        </ReactCrop>
-                      ) : croppedPreview ? (
-                        <div className="relative">
-                          <img loading="lazy" decoding="async" src={croppedPreview} alt="Recortado" className="w-full max-h-72 object-contain" />
-                          <div className="absolute top-2 left-2 bg-emerald-500/90 text-white text-xs px-2 py-1 rounded-lg flex items-center gap-1.5">
-                            <CheckCircle2 className="w-3 h-3" />Medidor recortado
-                          </div>
-                          <img loading="lazy" decoding="async" ref={imgRef} src={imagePreview} alt="" className="hidden" />
-                        </div>
-                      ) : (
-                        <img loading="lazy" decoding="async" ref={imgRef} src={imagePreview} alt="Painel" className="w-full max-h-72 object-contain" />
-                      )}
-                      <button onClick={() => { setImagePreview(null); setImageBase64(''); setCrop(undefined); setCroppedPreview(null); setIsCropping(false); }}
-                        className="absolute top-2 right-2 bg-black/60 text-white rounded-full p-1.5"><X className="w-3.5 h-3.5" /></button>
-                    </div>
-                  )}
-
-                  <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={handleImageSelect} className="hidden" />
-
-                  {imagePreview && (
-                    isCropping ? (
-                      <button onClick={() => { generateCroppedPreview(); setIsCropping(false); }}
-                        disabled={!crop || !crop.width || !crop.height}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium bg-orange-500 text-white disabled:opacity-40">
-                        <Crop className="w-4 h-4" />Confirmar Recorte
-                      </button>
-                    ) : (
-                      <button onClick={() => { setCrop(undefined); setCroppedPreview(null); setIsCropping(true); }}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border border-[var(--border)] text-[var(--text-secondary)]">
-                        {croppedPreview ? <ZoomIn className="w-4 h-4" /> : <Crop className="w-4 h-4" />}
-                        {croppedPreview ? 'Nova área' : 'Recortar medidor'}
-                      </button>
-                    )
-                  )}
-
-                  <button onClick={handleAnalyze} disabled={!imageBase64 || analyzing || isCropping}
-                    className="w-full py-3.5 bg-orange-500 disabled:bg-[var(--subtle-hover)] disabled:text-[var(--text-muted)] text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
-                    {analyzing
-                      ? <><Loader2 className="w-4 h-4 animate-spin" />Analisando com IA...</>
-                      : <><Sparkles className="w-4 h-4" />Analisar Medidor</>}
-                  </button>
-                </div>
-              )}
-
-              {/* REVIEW */}
-              {step === 'review' && (
-                <div className="space-y-4">
-                  {analysis?.success && !manualMode && (
-                    <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Sparkles className="w-4 h-4 text-blue-500" />
-                        <span className="text-blue-400 font-semibold text-sm">Análise da IA</span>
-                        {analysis.confidence && (
-                          <span className="ml-auto text-xs bg-blue-100 text-blue-400 px-2 py-0.5 rounded-full">{analysis.confidence}% conf.</span>
+                  {selectedBoatId && (returnInspection?.returnFuelPhotoUrl || returnInspection?.fuelPhotoUrl) && (
+                    <div className="border border-blue-300 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-500/10 rounded-xl p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-base">⛽</span>
+                        <span className="text-sm font-semibold text-blue-700 dark:text-blue-400">
+                          {returnInspection.returnFuelPhotoUrl ? 'Foto do tanque — Retorno' : 'Foto do tanque — Saída'}
+                        </span>
+                        {returnInspection.cotistaName && (
+                          <span className="text-xs text-blue-500 ml-auto">Cotista: {returnInspection.cotistaName}</span>
                         )}
                       </div>
-                      <div className="grid grid-cols-3 gap-3 text-center">
-                        <div>
-                          <p className="text-xs text-[var(--text-secondary)] mb-1">Nível</p>
-                          <p className="font-bold text-[var(--text)]">{analysis.gaugePercentage}%</p>
-                          <div className="w-full h-1.5 rounded-full bg-[var(--subtle-hover)] mt-1 overflow-hidden">
-                            <div className="h-full bg-blue-500 rounded-full" style={{ width: `${analysis.gaugePercentage}%` }} />
-                          </div>
-                        </div>
-                        <div>
-                          <p className="text-xs text-[var(--text-secondary)] mb-1">Atual</p>
-                          <p className="font-bold text-[var(--text)]">{analysis.currentLiters}L</p>
-                          <p className="text-xs text-[var(--text-muted)]">de {analysis.tankCapacity}L</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-[var(--text-secondary)] mb-1">Necessário</p>
-                          <p className="font-bold text-orange-500">{analysis.litersNeeded}L</p>
-                        </div>
-                      </div>
-                      {analysis.observation && <p className="text-xs text-[var(--text-secondary)] mt-2 italic">"{analysis.observation}"</p>}
+                      <img loading="lazy" decoding="async" src={returnInspection.returnFuelPhotoUrl || returnInspection.fuelPhotoUrl} alt="Tanque" className="w-full max-h-40 object-contain rounded-lg" />
                     </div>
                   )}
+                </div>
+              )}
 
+              {/* STEP 2: Form */}
+              {step === 'form' && (
+                <div className="space-y-4">
                   {selectedBoat && (
                     <div className="flex items-center gap-3 bg-[var(--subtle)] rounded-xl p-3 border border-[var(--border)]">
-                      <Ship className="w-5 h-5 text-orange-500 flex-shrink-0" />
+                      <Ship className="w-5 h-5 text-orange-500 shrink-0" />
                       <div>
                         <p className="font-semibold text-[var(--text)] text-sm">{selectedBoat.name}</p>
                         <p className="text-xs text-[var(--text-secondary)]">{selectedBoat.model} · {selectedBoat.fuelCapacity}L</p>
@@ -556,7 +489,6 @@ function NewFuelingModal({ currentPrice, onClose, onSuccess }: {
                     </div>
                   )}
 
-                  {/* Return inspection fuel photo */}
                   {(returnInspection?.returnFuelPhotoUrl || returnInspection?.fuelPhotoUrl) && (
                     <div className="border border-blue-300 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-500/10 rounded-xl p-3">
                       <div className="flex items-center gap-2 mb-2">
@@ -598,42 +530,45 @@ function NewFuelingModal({ currentPrice, onClose, onSuccess }: {
                       <p className="text-sm text-[var(--text-secondary)] mb-2 font-medium">Cobrar cotista</p>
                       <select value={targetUserId} onChange={e => setTargetUserId(e.target.value)}
                         className="w-full bg-[var(--subtle)] border-2 border-[var(--border)] focus:border-orange-400 rounded-xl px-4 py-3 text-[var(--text)] text-sm focus:outline-none transition">
-                        {shareholders.map(s => (
-                          <option key={s.userId} value={s.userId}>
-                            {s.userName}
-                            {s.source === 'reservation' && !s.isShareholder ? ' (reserva avulsa)' : ''}
-                            {s.hasFuelCharge ? ' ✅ cobrado' : ' ⚠️ pendente'}
-                            {s.hasReservationToday ? ' — hoje' : ''}
-                          </option>
-                        ))}
+                        {shareholders.map(s => {
+                          const dateStr = s.lastChecklistAt
+                            ? new Date(s.lastChecklistAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'America/Sao_Paulo' })
+                            : null;
+                          return (
+                            <option key={s.userId} value={s.userId}>
+                              {s.userName}
+                              {dateStr ? ` (${dateStr})` : ''}
+                              {s.source === 'reservation' && !s.isShareholder ? ' — reserva avulsa' : ''}
+                              {s.hasFuelCharge ? ' ✅ cobrado' : ' ⚠️ pendente'}
+                            </option>
+                          );
+                        })}
                       </select>
                       {returnInspection?.cotistaUserId && returnInspection.cotistaUserId === targetUserId && (
-                        <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                        <p className="text-xs text-green-600 dark:text-green-400 mt-1 flex items-center gap-1">
                           <CheckCircle2 className="w-3 h-3" /> Último cotista que usou — selecionado automaticamente
                         </p>
                       )}
                     </div>
                   )}
 
-                  {manualMode && (
-                    <div>
-                      <p className="text-sm text-[var(--text-secondary)] mb-2 font-medium">Foto (opcional)</p>
-                      {imagePreview ? (
-                        <div className="relative rounded-xl overflow-hidden border border-[var(--border)]">
-                          <img loading="lazy" decoding="async" src={imagePreview} alt="Foto" className="w-full h-36 object-cover" />
-                          <button onClick={() => { setImagePreview(null); setImageBase64(''); }}
-                            className="absolute top-2 right-2 bg-black/60 text-white rounded-full p-1.5"><X className="w-3.5 h-3.5" /></button>
-                        </div>
-                      ) : (
-                        <button onClick={() => fileRef.current?.click()}
-                          className="w-full border-2 border-dashed border-[var(--border)] rounded-xl p-5 flex items-center justify-center gap-2 hover:border-orange-300 transition">
-                          <Camera className="w-5 h-5 text-[var(--text-muted)]" />
-                          <span className="text-sm text-[var(--text-muted)]">Adicionar foto</span>
-                        </button>
-                      )}
-                      <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={handleImageSelect} className="hidden" />
-                    </div>
-                  )}
+                  <div>
+                    <p className="text-sm text-[var(--text-secondary)] mb-2 font-medium">Foto do abastecimento (opcional)</p>
+                    {imagePreview ? (
+                      <div className="relative rounded-xl overflow-hidden border border-[var(--border)]">
+                        <img loading="lazy" decoding="async" src={imagePreview} alt="Foto" className="w-full h-36 object-cover" />
+                        <button onClick={() => { setImagePreview(null); setImageBase64(''); }}
+                          className="absolute top-2 right-2 bg-black/60 text-white rounded-full p-1.5"><X className="w-3.5 h-3.5" /></button>
+                      </div>
+                    ) : (
+                      <button onClick={() => fileRef.current?.click()}
+                        className="w-full border-2 border-dashed border-[var(--border)] rounded-xl p-5 flex items-center justify-center gap-2 hover:border-orange-300 transition">
+                        <Camera className="w-5 h-5 text-[var(--text-muted)]" />
+                        <span className="text-sm text-[var(--text-muted)]">Adicionar foto</span>
+                      </button>
+                    )}
+                    <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={handleImageSelect} className="hidden" />
+                  </div>
 
                   <div>
                     <p className="text-sm text-[var(--text-secondary)] mb-2 font-medium">Observações (opcional)</p>
@@ -643,25 +578,40 @@ function NewFuelingModal({ currentPrice, onClose, onSuccess }: {
                   </div>
 
                   {targetUserId && shareholders.length > 0 && (
-                    <div className="flex items-center gap-2 p-3 bg-emerald-500/10 border border-green-100 rounded-xl text-xs text-emerald-400">
-                      <DollarSign className="w-3.5 h-3.5 flex-shrink-0" />
+                    <div className="flex items-center gap-2 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-emerald-500 dark:text-emerald-400">
+                      <DollarSign className="w-3.5 h-3.5 shrink-0" />
                       Fatura será gerada para <strong>{shareholders.find(s => s.userId === targetUserId)?.userName}</strong>
                     </div>
                   )}
-
-                  <button onClick={handleSubmit} disabled={submitting || !parseFloat(manualLiters)}
-                    className="w-full py-4 bg-orange-500 disabled:bg-[var(--subtle-hover)] disabled:text-[var(--text-muted)] text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
-                    {submitting
-                      ? <><Loader2 className="w-4 h-4 animate-spin" />Registrando...</>
-                      : <><CheckCircle2 className="w-4 h-4" />Confirmar Abastecimento</>}
-                  </button>
                 </div>
               )}
             </>
           )}
         </div>
+
+        {/* FLOATING ACTION BUTTON — absolute, above tab bar */}
+        {!successMsg && (
+          <div style={{ position: 'absolute', bottom: '4.5rem', left: 0, right: 0, zIndex: 60, padding: '0 1.25rem', pointerEvents: 'none' }}>
+            <div style={{ padding: '1.25rem 0 0.5rem', background: 'linear-gradient(to top, var(--card) 70%, transparent)', pointerEvents: 'auto' }}>
+              {step === 'select' && (
+                <button onClick={() => selectedBoatId && setStep('form')} disabled={!selectedBoatId}
+                  className="w-full py-4 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 bg-orange-500 text-white shadow-lg shadow-orange-500/30 disabled:bg-[var(--subtle-hover)] disabled:text-[var(--text-muted)] disabled:shadow-none active:scale-[0.98] transition-all">
+                  Continuar
+                </button>
+              )}
+              {step === 'form' && (
+                <button onClick={handleSubmit} disabled={submitting || !parseFloat(manualLiters)}
+                  className="w-full py-4 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 bg-orange-500 text-white shadow-lg shadow-orange-500/30 disabled:bg-[var(--subtle-hover)] disabled:text-[var(--text-muted)] disabled:shadow-none active:scale-[0.98] transition-all">
+                  {submitting
+                    ? <><Loader2 className="w-4 h-4 animate-spin" />Registrando...</>
+                    : <><CheckCircle2 className="w-4 h-4" />Confirmar Abastecimento</>}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
-    </div>
+    </>
   );
 }
 

@@ -56,11 +56,11 @@ workflows:
           </body></html>
           FALLBACK
           npx cap sync ios
-      - name: Set app version to 1.1 and ensure camera permissions
+      - name: Set app version to 1.2 and ensure camera permissions
         script: |
           cd pwa/ios/App
           # Use agvtool to set marketing version (sets MARKETING_VERSION in Xcode project)
-          agvtool new-marketing-version 1.1
+          agvtool new-marketing-version 1.2
           # Ensure camera permission is in Info.plist
           ruby -e '
           path = "App/Info.plist"

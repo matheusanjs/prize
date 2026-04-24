@@ -118,27 +118,31 @@ export class FuelService {
         const costPerShare = totalCost / targetShares.length;
         const today = new Date();
         today.setHours(23, 59, 59, 999);
-        for (const share of targetShares) {
-          const charge = await this.prisma.charge.create({
-            data: {
-              userId: share.userId,
-              description: `Combustível — ${boat.name} (${dto.liters}L)`,
-              amount: costPerShare,
-              dueDate: today,
-              category: 'FUEL',
-              reference: `fuel-${fuelLog.id}`,
-              boatId: dto.boatId,
-            },
-          });
 
-          // Send push notification for fuel charge
+        const charges = await Promise.all(
+          targetShares.map((share) =>
+            this.prisma.charge.create({
+              data: {
+                userId: share.userId,
+                description: `Combustível — ${boat.name} (${dto.liters}L)`,
+                amount: costPerShare,
+                dueDate: today,
+                category: 'FUEL',
+                reference: `fuel-${fuelLog.id}`,
+                boatId: dto.boatId,
+              },
+            }),
+          ),
+        );
+
+        for (const charge of charges) {
           this.notificationsService.send({
-            userId: share.userId,
+            userId: charge.userId,
             type: 'FUEL',
             title: '⛽ Combustível registrado',
             body: `Abastecimento de ${dto.liters}L na ${boat.name} — R$ ${costPerShare.toFixed(2)}`,
             data: { chargeId: charge.id, fuelLogId: fuelLog.id, url: '/faturas' },
-            pushTag: `fuel-${fuelLog.id}-${share.userId}`,
+            pushTag: `fuel-${fuelLog.id}-${charge.userId}`,
           }).catch(() => {});
         }
       }

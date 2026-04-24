@@ -15,6 +15,7 @@ const config: CapacitorConfig = {
     backgroundColor: '#0D1B2A',
     infoPlist: {
       NSCameraUsageDescription: 'O aplicativo precisa acessar a câmera para registrar fotos de inspeção de embarcações, nível de combustível e evidências de danos.',
+      NSMicrophoneUsageDescription: 'O aplicativo precisa acessar o microfone para gravar vídeos de inspeção de embarcações.',
       NSPhotoLibraryUsageDescription: 'O aplicativo precisa acessar a biblioteca de fotos para selecionar imagens de inspeção de embarcações e nível de combustível.',
       NSPhotoLibraryAddUsageDescription: 'O aplicativo precisa salvar fotos de inspeção na sua biblioteca.',
     },

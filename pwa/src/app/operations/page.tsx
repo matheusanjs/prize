@@ -1009,7 +1009,7 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
   return (
     <div className="fixed inset-0 z-[10000] bg-[var(--card)] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--border)] flex-shrink-0">
+        <div className="flex items-center justify-between px-5 border-b border-[var(--border)] flex-shrink-0" style={{ paddingTop: 'calc(0.75rem + env(safe-area-inset-top, 0px))', paddingBottom: '0.75rem' }}>
           <div className="flex items-center gap-3">
             <ClipboardCheck className="w-5 h-5 text-primary-500" />
             <div>
@@ -1084,7 +1084,7 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
                       <p className="text-xs text-primary-500 mt-0.5">{fmt(r.startDate)} → {fmt(r.endDate)}</p>
                     </div>
                     {r.checklist ? (
-                      <span className={`text-xs px-2 py-1 rounded-full flex-shrink-0 ${r.checklist.status === 'APPROVED' ? 'bg-green-100 text-emerald-400' : 'bg-yellow-100 text-yellow-400'}`}>
+                      <span className={`text-xs px-2 py-1 rounded-full flex-shrink-0 ${r.checklist.status === 'APPROVED' ? 'bg-green-500/15 text-emerald-500 dark:text-emerald-400' : 'bg-yellow-500/15 text-yellow-500 dark:text-yellow-400'}`}>
                         {r.checklist.status === 'APPROVED' ? '✓ Feito' : 'Pendente'}
                       </span>
                     ) : <ChevronRight className="w-4 h-4 text-[var(--text-muted)] flex-shrink-0" />}
@@ -1235,7 +1235,7 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
                 <div className="flex flex-col items-center justify-center gap-3 p-8 border-2 border-dashed border-[var(--border)] rounded-2xl cursor-pointer bg-[var(--subtle)]" onClick={() => document.getElementById('pwa-video-input')?.click()}>
                   <Video className="w-10 h-10 text-[var(--text-muted)]" />
                   <div className="text-center"><p className="text-sm font-medium text-[var(--text-secondary)]">Gravar ou selecionar</p><p className="text-xs text-[var(--text-muted)] mt-1">MP4, MOV · máx. 100MB</p></div>
-                  <input id="pwa-video-input" type="file" accept="video/*" className="hidden" onChange={e => setVideoFile(e.target.files?.[0] || null)} />
+                  <input id="pwa-video-input" type="file" accept="video/*" capture="environment" className="hidden" onChange={e => setVideoFile(e.target.files?.[0] || null)} />
                 </div>
               ) : (
                 <div className="bg-[var(--subtle)] border border-[var(--border)] rounded-2xl p-4 flex items-center gap-3">
@@ -1250,7 +1250,7 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
           {/* CONFIRM */}
           {step === 'confirm' && (
             <div className="space-y-4">
-              <div className="bg-[var(--subtle)] border border-[var(--border)] rounded-2xl divide-y divide-gray-100">
+              <div className="bg-[var(--subtle)] border border-[var(--border)] rounded-2xl divide-y divide-[var(--border)]">
                 {[['Embarcação', boatName], ['Itens', `${itemsData.filter(i=>i.checked).length}/${itemsData.length} ✓`], ['Croqui', 'Incluído'], ['⛽ Tanque', fuelPhotoFile ? fuelPhotoFile.name : 'Não incluído'], ['Vídeo', videoFile ? videoFile.name : 'Não incluído'], ...(lifeVestsLoaned > 0 ? [['🦺 Coletes emprestados', `${lifeVestsLoaned}`]] : [])].map(([k,v])=>(
                   <div key={k} className="flex justify-between px-4 py-3">
                     <span className="text-sm text-[var(--text-secondary)]">{k}</span>
@@ -1259,8 +1259,8 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
                 ))}
                 {observations && <div className="px-4 py-3"><p className="text-xs text-[var(--text-secondary)] mb-1">Observações</p><p className="text-sm text-[var(--text)]">{observations}</p></div>}
               </div>
-              <div className="p-3 bg-primary-500/10 border border-primary-100 rounded-xl">
-                <p className="text-xs text-primary-700">⚠️ Ao enviar, a reserva (se houver) será marcada como <strong>Em Uso</strong>.</p>
+              <div className="p-3 bg-primary-500/10 border border-primary-500/20 rounded-xl">
+                <p className="text-xs text-primary-600 dark:text-primary-400">⚠️ Ao enviar, a reserva (se houver) será marcada como <strong>Em Uso</strong>.</p>
               </div>
               <div className="flex gap-2"></div>
             </div>
@@ -1269,7 +1269,7 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
           {/* SUCCESS */}
           {step === 'success' && (
             <div className="flex flex-col items-center justify-center py-8 gap-4 text-center">
-              <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center">
+              <div className="w-20 h-20 rounded-full bg-green-500/20 flex items-center justify-center">
                 <CheckCircle className="w-10 h-10 text-green-500" />
               </div>
               <div>

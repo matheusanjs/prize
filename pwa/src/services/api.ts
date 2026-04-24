@@ -1,76 +1,49 @@
-import axios from 'axios';
+import axios, { AxiosResponse } from 'axios';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
-// ─── Lightweight GET response cache (30s TTL) ────────────────────────────
+// ─── In-flight GET request deduplicator ───────────────────────────────────
+// Coalesces simultaneous GET requests to the same URL so only one HTTP call
+// is made. Does NOT cache responses — every completed request is forgotten,
+// so component remounts always get fresh data from the server.
 
-const CACHE_TTL = 10_000; // 10 seconds
-const NO_CACHE_URLS = ['/reservations/calendar/', '/reservations/boat/'];
-const responseCache = new Map<string, { data: unknown; expiresAt: number }>();
+const inflight = new Map<string, Promise<AxiosResponse>>();
 
-// Clear stale cache on route navigation — prevents cross-page cache hits
-if (typeof window !== 'undefined') {
-  let lastPath = window.location.pathname;
-  const observer = new MutationObserver(() => {
-    const newPath = window.location.pathname;
-    if (newPath !== lastPath) { lastPath = newPath; responseCache.clear(); }
-  });
-  observer.observe(document.documentElement, { subtree: true, attributes: true, childList: true });
-}
-
-function cacheKey(url: string, params?: Record<string, unknown>): string {
+function dedupKey(url: string, params?: Record<string, unknown>): string {
   return url + (params ? '?' + JSON.stringify(params) : '');
 }
 
-export function invalidateCache(pattern?: string | RegExp) {
-  if (!pattern) { responseCache.clear(); return; }
-  for (const key of responseCache.keys()) {
-    if (typeof pattern === 'string' ? key.includes(pattern) : pattern.test(key)) {
-      responseCache.delete(key);
-    }
-  }
+function dedupGet(url: string, params?: Record<string, unknown>): Promise<AxiosResponse> {
+  const key = dedupKey(url, params);
+  const existing = inflight.get(key);
+  if (existing) return existing;
+  const promise = api.get(url, { params });
+  inflight.set(key, promise);
+  promise.finally(() => inflight.delete(key));
+  return promise;
 }
 
-export function getCachedData<T>(key: string): T | undefined {
-  const entry = responseCache.get(key);
-  if (entry && entry.expiresAt > Date.now()) return entry.data as T;
-  if (entry) responseCache.delete(key);
-  return undefined;
+export function invalidateCache(pattern?: string | RegExp) {
+  if (!pattern) { inflight.clear(); return; }
+  for (const key of inflight.keys()) {
+    if (typeof pattern === 'string' ? key.includes(pattern) : pattern.test(key)) {
+      inflight.delete(key);
+    }
+  }
 }
 
 const api = axios.create({ baseURL: BASE_URL });
 
 api.interceptors.request.use((config) => {
-  // Always attach token first, even for cached responses
   if (typeof window !== 'undefined') {
     const token = localStorage.getItem('token');
     if (token) config.headers.Authorization = `Bearer ${token}`;
-  }
-
-  // Only cache GET requests
-  if (config.method === 'get' && config.url) {
-    // Never cache calendar and boat reservation endpoints
-    if (NO_CACHE_URLS.some(u => config.url!.includes(u))) return config;
-    const key = cacheKey(config.url, config.params);
-    const cached = responseCache.get(key);
-    if (cached && cached.expiresAt > Date.now()) {
-      // Return a resolved AxiosResponse-like object to skip the network call
-      return Promise.resolve({ data: cached.data, status: 200, statusText: 'OK', headers: {}, config } as any);
-    }
   }
   return config;
 });
 
 api.interceptors.response.use(
-  (r) => {
-    // Cache GET responses for deduplication
-    if (r.config.method === 'get' && r.config.url) {
-      if (NO_CACHE_URLS.some(u => r.config.url!.includes(u))) return r;
-      const key = cacheKey(r.config.url, r.config.params);
-      responseCache.set(key, { data: r.data, expiresAt: Date.now() + CACHE_TTL });
-    }
-    return r;
-  },
+  (r) => r,
   async (error) => {
     const originalRequest = error.config;
 
@@ -95,7 +68,6 @@ api.interceptors.response.use(
           originalRequest.headers.Authorization = `Bearer ${accessToken}`;
           return api(originalRequest);
         } catch {
-          // Refresh failed — only clear if server explicitly rejected (not network error)
           localStorage.removeItem('token');
           localStorage.removeItem('refreshToken');
           localStorage.removeItem('cachedUser');
@@ -119,98 +91,98 @@ export const registerUser = (data: { name: string; email: string; password: stri
   api.post('/auth/register', { ...data, role: 'CLIENT' });
 
 // Users
-export const getUsers = (params?: Record<string, unknown>) => api.get('/users', { params: { page: 1, limit: 100, ...params } });
+export const getUsers = (params?: Record<string, unknown>) => dedupGet('/users', { page: 1, limit: 100, ...params });
 
 // Boats
-export const getBoats = (params?: Record<string, unknown>) => api.get('/boats', { params: { page: 1, limit: 100, ...params } });
+export const getBoats = (params?: Record<string, unknown>) => dedupGet('/boats', { page: 1, limit: 100, ...params });
 
 // Shares
-export const getShares = (params?: { boatId?: string; userId?: string }) => api.get('/shares', { params });
+export const getShares = (params?: { boatId?: string; userId?: string }) => dedupGet('/shares', params);
 
 // Reservations
-export const getReservations = (params?: Record<string, unknown>) => api.get('/reservations', { params });
-export const getMyReservations = () => api.get('/reservations/my-reservations');
-export const getBoatReservations = (boatId: string, date?: string) => api.get(`/reservations/boat/${boatId}`, { params: date ? { date } : undefined });
-export const getBoatCalendar = (boatId: string, month: number, year: number) => api.get(`/reservations/calendar/${boatId}`, { params: { month, year } });
+export const getReservations = (params?: Record<string, unknown>) => dedupGet('/reservations', params);
+export const getMyReservations = () => dedupGet('/reservations/my-reservations');
+export const getBoatReservations = (boatId: string, date?: string) => dedupGet(`/reservations/boat/${boatId}`, date ? { date } : undefined);
+export const getBoatCalendar = (boatId: string, month: number, year: number) => dedupGet(`/reservations/calendar/${boatId}`, { month, year });
 export const getAllBoatReservations = (boatId: string, opts?: { pastDays?: number; futureMonths?: number }) =>
-  api.get(`/reservations/boat/${boatId}/all`, { params: opts });
+  dedupGet(`/reservations/boat/${boatId}/all`, opts);
 export const createReservation = (data: Record<string, unknown>) => api.post('/reservations', data);
 export const cancelReservation = (id: string, reason?: string) => api.patch(`/reservations/${id}/cancel`, { reason });
 export const confirmArrival = (id: string, expectedArrivalTime: string) => api.patch(`/reservations/${id}/confirm-arrival`, { expectedArrivalTime });
 
 // Reservation Swaps
 export const createSwapRequest = (data: { targetReservationId: string; offeredReservationId: string; message?: string }) => api.post('/reservations/swap', data);
-export const getMySwaps = () => api.get('/reservations/swaps/my');
-export const getPendingSwaps = () => api.get('/reservations/swaps/pending');
+export const getMySwaps = () => dedupGet('/reservations/swaps/my');
+export const getPendingSwaps = () => dedupGet('/reservations/swaps/pending');
 export const respondToSwap = (id: string, accept: boolean) => api.patch(`/reservations/swaps/${id}/respond`, { accept });
-export const getCoOwners = (boatId: string) => api.get(`/reservations/co-owners/${boatId}`);
+export const getCoOwners = (boatId: string) => dedupGet(`/reservations/co-owners/${boatId}`);
 
 // Reservation Substitutes (Suplente de cota)
 export const registerSubstitute = (reservationId: string, message?: string) =>
   api.post(`/reservations/${reservationId}/substitute`, { message });
 export const cancelSubstitute = (substituteId: string) =>
   api.patch(`/reservations/substitutes/${substituteId}/cancel`);
-export const getMySubstituteRequests = () => api.get('/reservations/substitutes/my');
-export const getIncomingSubstitutes = () => api.get('/reservations/substitutes/incoming');
-export const getSubstitutableReservations = () => api.get('/reservations/substitutes/available');
+export const getMySubstituteRequests = () => dedupGet('/reservations/substitutes/my');
+export const getIncomingSubstitutes = () => dedupGet('/reservations/substitutes/incoming');
+export const getSubstitutableReservations = () => dedupGet('/reservations/substitutes/available');
 export const listReservationSubstitutes = (reservationId: string) =>
-  api.get(`/reservations/${reservationId}/substitutes`);
+  dedupGet(`/reservations/${reservationId}/substitutes`);
 export const passToNextSubstitute = (reservationId: string) =>
   api.post(`/reservations/${reservationId}/pass-to-substitute`);
 
 // Finance / Charges
-export const getCharges = (params?: Record<string, unknown>) => api.get('/finance/charges', { params });
-export const getMyCharges = (params?: Record<string, unknown>) => api.get('/finance/my-charges', { params });
+export const getCharges = (params?: Record<string, unknown>) => dedupGet('/finance/charges', params);
+export const getMyCharges = (params?: Record<string, unknown>) => dedupGet('/finance/my-charges', params);
 
 // Fuel
-export const getFuelLogs = (params?: Record<string, unknown>) => api.get('/fuel', { params });
-export const getMyFuelLogs = (params?: Record<string, unknown>) => api.get('/fuel/my-logs', { params });
-export const getFuelLog = (id: string) => api.get(`/fuel/${id}`);
+export const getFuelLogs = (params?: Record<string, unknown>) => dedupGet('/fuel', params);
+export const getMyFuelLogs = (params?: Record<string, unknown>) => dedupGet('/fuel/my-logs', params);
+export const getFuelLog = (id: string) => dedupGet(`/fuel/${id}`);
 export const createFuelLog = (data: Record<string, unknown>) => api.post('/fuel', data);
-export const getFuelPrice = (fuelType?: string) => api.get('/fuel/price', { params: { fuelType } });
+export const getFuelPrice = (fuelType?: string) => dedupGet('/fuel/price', fuelType ? { fuelType } : undefined);
 export const setFuelPrice = (price: number, fuelType?: string, notes?: string) => api.put('/fuel/price', { price, fuelType, notes });
 export const analyzeGauge = (boatId: string, image: string, mimeType?: string, cropped?: boolean) => api.post('/fuel/analyze-gauge', { boatId, image, mimeType, cropped });
-export const getSharesByBoat = (boatId: string) => api.get(`/shares/boat/${boatId}`);
+export const getSharesByBoat = (boatId: string) => dedupGet(`/shares/boat/${boatId}`);
 
 // Maintenance
-export const getMaintenances = (params?: Record<string, unknown>) => api.get('/maintenance', { params });
+export const getMaintenances = (params?: Record<string, unknown>) => dedupGet('/maintenance', params);
 export const createMaintenance = (data: Record<string, unknown>) => api.post('/maintenance', data);
 export const updateMaintenance = (id: string, data: Record<string, unknown>) => api.patch(`/maintenance/${id}`, data);
 
 // Operations
-export const getChecklists = (params?: Record<string, unknown>) => api.get('/operations/checklists', { params });
+export const getChecklists = (params?: Record<string, unknown>) => dedupGet('/operations/checklists', params);
 export const createChecklist = (data: Record<string, unknown>) => api.post('/operations/checklists', data);
 export const startPreLaunch = (reservationId: string) => api.post(`/operations/pre-launch/${reservationId}/start`);
 export const submitPreLaunch = (checklistId: string, data: Record<string, unknown>) => api.post(`/operations/pre-launch/${checklistId}/submit`, data);
-export const getMyReservationsForChecklist = () => api.get('/operations/pre-launch/my-reservations');
-export const getMyUsages = () => api.get('/operations/usages/my');
-export const getTodayReservationsForOperator = () => api.get('/operations/pre-launch/today-reservations');
+export const getMyReservationsForChecklist = () => dedupGet('/operations/pre-launch/my-reservations');
+export const getMyUsages = () => dedupGet('/operations/usages/my');
+export const getTodayReservationsForOperator = () => dedupGet('/operations/pre-launch/today-reservations');
 export const startAdHocPreLaunch = (boatId: string, reservationId?: string) => api.post('/operations/pre-launch/start-adhoc', { boatId, reservationId });
 export const deleteChecklist = (id: string) => api.delete(`/operations/checklists/${id}`);
 export const liftBoat = (queueId: string, returnData?: Record<string, unknown>) => api.patch(`/operations/queue/${queueId}/lift`, returnData || {});
 export const liftAllBoats = () => api.patch('/operations/queue/lift-all');
 export const launchToWater = (queueId: string) => api.patch(`/operations/queue/${queueId}/launch`);
-export const getChecklistsByBoat = (boatId: string) => api.get(`/operations/checklists/boat/${boatId}`);
-export const getChecklistById = (id: string) => api.get(`/operations/pre-launch/checklist/${id}`);
-export const getLastReturnInspection = (boatId: string) => api.get(`/operations/return-inspection/${boatId}`);
-export const getRecentUsers = (boatId: string) => api.get(`/operations/recent-users/${boatId}`);
-export const getLastMarksForBoat = (boatId: string) => api.get(`/operations/boat/${boatId}/last-marks`);
+export const getChecklistsByBoat = (boatId: string) => dedupGet(`/operations/checklists/boat/${boatId}`);
+export const getChecklistById = (id: string) => dedupGet(`/operations/pre-launch/checklist/${id}`);
+export const getLastReturnInspection = (boatId: string) => dedupGet(`/operations/return-inspection/${boatId}`);
+export const getRecentUsers = (boatId: string) => dedupGet(`/operations/recent-users/${boatId}`);
+export const getLastMarksForBoat = (boatId: string) => dedupGet(`/operations/boat/${boatId}/last-marks`);
 
 // Queue
-export const getQueue = () => api.get('/queue/today');
+export const getQueue = () => dedupGet('/queue/today');
 export const updateQueueStatus = (id: string, status: string) => api.patch(`/queue/${id}/status`, { status });
 
 // Weather
-export const getWeatherCurrent = () => api.get('/weather/current');
-export const getWeatherHistory = (hours?: number) => api.get('/weather/history', { params: hours ? { hours } : {} });
-export const getWeatherForecast = () => api.get('/weather/forecast');
-export const getWeatherAiSummary = () => api.get('/weather/ai-summary');
+export const getWeatherCurrent = () => dedupGet('/weather/current');
+export const getWeatherHistory = (hours?: number) => dedupGet('/weather/history', hours ? { hours } : undefined);
+export const getWeatherForecast = () => dedupGet('/weather/forecast');
+export const getWeatherAiSummary = () => dedupGet('/weather/ai-summary');
 
 export const getMarketplaceBoats = () => axios.get(`${BASE_URL}/public/boats/marketplace`);
 
 // ─── Woovi (Pix Payments) ───────────────────────────────
 export const createWooviCharge = (chargeId: string) => api.post(`/payments/woovi/charge/${chargeId}`);
-export const getWooviChargeStatus = (correlationID: string) => api.get(`/payments/woovi/charge/${correlationID}`);
+export const getWooviChargeStatus = (correlationID: string) => dedupGet(`/payments/woovi/charge/${correlationID}`);
 
 // Profile
 export const updateProfile = (data: { name?: string; phone?: string; avatar?: string }) =>
@@ -222,7 +194,7 @@ export const changePassword = (data: { currentPassword: string; newPassword: str
 export const deleteAccount = () => api.delete('/users/profile');
 
 // ─── Convenience Store (APP COTISTA) ───────────────────
-export const getConvenienceItems = () => api.get('/menu/convenience');
+export const getConvenienceItems = () => dedupGet('/menu/convenience');
 export const createConvenienceOrder = (data: {
   items: { menuItemId: string; quantity: number; notes?: string }[];
   notes?: string;
