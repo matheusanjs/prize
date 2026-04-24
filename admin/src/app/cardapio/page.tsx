@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import {
   UtensilsCrossed, Plus, Edit, Trash2, X, Save, ChevronDown, ChevronUp,
-  Eye, EyeOff, Search, FolderPlus, DollarSign, ImageIcon, Upload,
+  Eye, EyeOff, Search, FolderPlus, DollarSign, ImageIcon, Upload, ExternalLink,
+  CheckSquare, Square, Minus, Tag, ShoppingBag, TrendingUp, TrendingDown, Loader2,
 } from 'lucide-react';
 import {
   getMenuCategories, createMenuCategory, updateMenuCategory, deleteMenuCategory,
@@ -19,6 +20,7 @@ interface MenuItem {
   costPrice?: number;
   image?: string;
   isAvailable: boolean;
+  isConvenience: boolean;
   order: number;
 }
 
@@ -35,7 +37,7 @@ function slugify(str: string) {
   return str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 }
 
-const emptyItem = { name: '', description: '', price: 0, costPrice: 0, image: '', isAvailable: true };
+const emptyItem = { name: '', description: '', price: 0, costPrice: 0, image: '', isAvailable: true, isConvenience: false };
 const emptyCat = { name: '', slug: '' };
 
 export default function CardapioPage() {
@@ -61,6 +63,14 @@ export default function CardapioPage() {
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'category' | 'item'; id: string; name: string } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [imageMode, setImageMode] = useState<'url' | 'upload'>('url');
+
+  // Bulk selection
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkPriceModal, setBulkPriceModal] = useState(false);
+  const [bulkPriceMode, setBulkPriceMode] = useState<'fixed' | 'pct_up' | 'pct_down' | 'val_up' | 'val_down'>('pct_up');
+  const [bulkPriceValue, setBulkPriceValue] = useState<number>(0);
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
 
   useEffect(() => { load(); }, []);
 
@@ -125,6 +135,7 @@ export default function CardapioPage() {
       costPrice: item.costPrice || 0,
       image: item.image || '',
       isAvailable: item.isAvailable,
+      isConvenience: item.isConvenience ?? false,
     });
     setShowItemModal(true);
   }
@@ -140,6 +151,7 @@ export default function CardapioPage() {
         costPrice: itemForm.costPrice ? Number(itemForm.costPrice) : undefined,
         image: itemForm.image || undefined,
         isAvailable: itemForm.isAvailable,
+        isConvenience: itemForm.isConvenience,
       };
       if (editingItem) {
         await updateMenuItem(editingItem.id, payload);
@@ -169,6 +181,77 @@ export default function CardapioPage() {
     } catch (e: any) { alert(e.response?.data?.message || 'Erro ao excluir'); }
   }
 
+  // ─── Bulk selection ──────────────────────────────────────
+
+  function isCatAllSelected(cat: MenuCategory) {
+    return cat.items.length > 0 && cat.items.every(i => selectedItems.has(i.id));
+  }
+  function isCatSomeSelected(cat: MenuCategory) {
+    return cat.items.some(i => selectedItems.has(i.id)) && !isCatAllSelected(cat);
+  }
+  function toggleCatSelection(cat: MenuCategory) {
+    setSelectedItems(prev => {
+      const next = new Set(prev);
+      if (isCatAllSelected(cat)) { cat.items.forEach(i => next.delete(i.id)); }
+      else { cat.items.forEach(i => next.add(i.id)); }
+      return next;
+    });
+  }
+  function toggleItemSelection(id: string) {
+    setSelectedItems(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+  function clearSelection() { setSelectedItems(new Set()); }
+
+  async function executeBulkAction(action: 'pause' | 'activate' | 'convenience_on' | 'convenience_off' | 'delete') {
+    if (selectedItems.size === 0) return;
+    setBulkLoading(true);
+    try {
+      const ids = [...selectedItems];
+      if (action === 'delete') {
+        await Promise.all(ids.map(id => deleteMenuItem(id)));
+      } else {
+        const update =
+          action === 'pause'           ? { isAvailable: false } :
+          action === 'activate'        ? { isAvailable: true } :
+          action === 'convenience_on'  ? { isConvenience: true } :
+                                         { isConvenience: false };
+        await Promise.all(ids.map(id => updateMenuItem(id, update)));
+      }
+      clearSelection();
+      setBulkDeleteConfirm(false);
+      await load();
+    } catch (e: any) { alert(e.response?.data?.message || 'Erro na ação em massa'); }
+    finally { setBulkLoading(false); }
+  }
+
+  async function executeBulkPrice() {
+    if (selectedItems.size === 0 || !bulkPriceValue) return;
+    setBulkLoading(true);
+    try {
+      const itemMap = Object.fromEntries(categories.flatMap(c => c.items).map(i => [i.id, i]));
+      await Promise.all([...selectedItems].map(id => {
+        const item = itemMap[id];
+        if (!item) return Promise.resolve();
+        let newPrice: number;
+        if (bulkPriceMode === 'fixed')    newPrice = bulkPriceValue;
+        else if (bulkPriceMode === 'pct_up')  newPrice = item.price * (1 + bulkPriceValue / 100);
+        else if (bulkPriceMode === 'pct_down') newPrice = item.price * (1 - bulkPriceValue / 100);
+        else if (bulkPriceMode === 'val_up')   newPrice = item.price + bulkPriceValue;
+        else                                   newPrice = item.price - bulkPriceValue;
+        return updateMenuItem(id, { price: Math.max(0.01, Math.round(newPrice * 100) / 100) });
+      }));
+      clearSelection();
+      setBulkPriceModal(false);
+      setBulkPriceValue(0);
+      await load();
+    } catch (e: any) { alert(e.response?.data?.message || 'Erro ao alterar preços'); }
+    finally { setBulkLoading(false); }
+  }
+
   // ─── Filter ─────────────────────────────────────────────
 
   const filtered = categories.filter(c => {
@@ -190,6 +273,15 @@ export default function CardapioPage() {
           <p className="text-sm text-th-muted mt-1">{categories.length} categorias · {totalItems} itens</p>
         </div>
         <div className="flex gap-2">
+          <a
+            href="https://marinaprizeclub.com/cardapio"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 bg-th-card border border-th hover:border-primary-500/50 hover:text-primary-500 text-th px-4 py-2 rounded-xl text-sm font-semibold transition"
+            title="Abrir cardápio público em nova aba"
+          >
+            <ExternalLink size={16} /> Ver cardápio público
+          </a>
           <button onClick={openCreateCat} className="flex items-center gap-2 bg-primary-500 hover:bg-primary-400 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">
             <FolderPlus size={16} /> Nova Categoria
           </button>
@@ -227,6 +319,17 @@ export default function CardapioPage() {
                   onClick={() => setExpandedCat(isExpanded ? null : cat.id)}
                 >
                   <div className="flex items-center gap-3">
+                    <button
+                      onClick={e => { e.stopPropagation(); toggleCatSelection(cat); }}
+                      className="p-0.5 text-th-muted hover:text-primary-500 transition shrink-0"
+                      title="Selecionar todos desta categoria"
+                    >
+                      {isCatAllSelected(cat)
+                        ? <CheckSquare size={18} className="text-primary-500" />
+                        : isCatSomeSelected(cat)
+                        ? <Minus size={18} className="text-primary-500" />
+                        : <Square size={18} />}
+                    </button>
                     {isExpanded ? <ChevronUp size={18} className="text-th-muted" /> : <ChevronDown size={18} className="text-th-muted" />}
                     <div>
                       <h3 className="font-bold text-th">{cat.name}</h3>
@@ -258,6 +361,7 @@ export default function CardapioPage() {
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="text-th-muted text-xs uppercase tracking-wider border-b border-th">
+                            <th className="px-4 py-3 w-8"></th>
                             <th className="text-left px-5 py-3 w-12">Foto</th>
                             <th className="text-left px-3 py-3">Item</th>
                             <th className="text-right px-3 py-3">Preço</th>
@@ -271,7 +375,14 @@ export default function CardapioPage() {
                           {filteredItems.map(item => {
                             const margin = item.costPrice ? (((item.price - item.costPrice) / item.price) * 100).toFixed(0) : '—';
                             return (
-                              <tr key={item.id} className="border-b border-th/50 hover:bg-primary-500/5 transition">
+                              <tr key={item.id} className={`border-b border-th/50 hover:bg-primary-500/5 transition ${selectedItems.has(item.id) ? 'bg-primary-500/5' : ''}`}>
+                                <td className="px-4 py-2 w-8">
+                                  <button onClick={() => toggleItemSelection(item.id)} className="text-th-muted hover:text-primary-500 transition">
+                                    {selectedItems.has(item.id)
+                                      ? <CheckSquare size={16} className="text-primary-500" />
+                                      : <Square size={16} />}
+                                  </button>
+                                </td>
                                 <td className="px-5 py-2 w-12">
                                   {item.image ? (
                                     <img src={item.image} alt={item.name} className="w-10 h-10 rounded-lg object-cover" />
@@ -314,6 +425,85 @@ export default function CardapioPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Bulk action bar */}
+      {selectedItems.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-3xl">
+          <div className="bg-[#1a1d23] border border-white/10 rounded-2xl shadow-2xl px-4 py-3 flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-sm font-bold text-white">{selectedItems.size} selecionado{selectedItems.size > 1 ? 's' : ''}</span>
+              <button onClick={clearSelection} className="p-1 rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition">
+                <X size={14} />
+              </button>
+            </div>
+            <div className="h-5 w-px bg-white/10 shrink-0 hidden sm:block" />
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                onClick={() => executeBulkAction('activate')}
+                disabled={bulkLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-green-500/15 hover:bg-green-500/25 text-green-400 text-xs font-semibold transition disabled:opacity-50"
+              >
+                <Eye size={13} /> Ativar
+              </button>
+              <button
+                onClick={() => executeBulkAction('pause')}
+                disabled={bulkLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-yellow-500/15 hover:bg-yellow-500/25 text-yellow-400 text-xs font-semibold transition disabled:opacity-50"
+              >
+                <EyeOff size={13} /> Pausar
+              </button>
+              <button
+                onClick={() => executeBulkAction('convenience_on')}
+                disabled={bulkLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-500/15 hover:bg-orange-500/25 text-orange-400 text-xs font-semibold transition disabled:opacity-50"
+              >
+                <ShoppingBag size={13} /> App Cotista
+              </button>
+              <button
+                onClick={() => executeBulkAction('convenience_off')}
+                disabled={bulkLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-white/60 text-xs font-semibold transition disabled:opacity-50"
+              >
+                <ShoppingBag size={13} /> Remover App
+              </button>
+              <button
+                onClick={() => { setBulkPriceValue(0); setBulkPriceMode('pct_up'); setBulkPriceModal(true); }}
+                disabled={bulkLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary-500/20 hover:bg-primary-500/30 text-primary-400 text-xs font-semibold transition disabled:opacity-50"
+              >
+                <Tag size={13} /> Preço
+              </button>
+              {!bulkDeleteConfirm ? (
+                <button
+                  onClick={() => setBulkDeleteConfirm(true)}
+                  disabled={bulkLoading}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-500/15 hover:bg-red-500/25 text-red-400 text-xs font-semibold transition disabled:opacity-50"
+                >
+                  <Trash2 size={13} /> Excluir
+                </button>
+              ) : (
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-red-400 font-semibold">Excluir {selectedItems.size} itens?</span>
+                  <button
+                    onClick={() => executeBulkAction('delete')}
+                    disabled={bulkLoading}
+                    className="px-3 py-1.5 rounded-xl bg-red-500 hover:bg-red-400 text-white text-xs font-bold transition disabled:opacity-50"
+                  >
+                    Sim
+                  </button>
+                  <button
+                    onClick={() => setBulkDeleteConfirm(false)}
+                    className="px-3 py-1.5 rounded-xl bg-white/10 text-white/60 text-xs font-semibold transition"
+                  >
+                    Não
+                  </button>
+                </div>
+              )}
+              {bulkLoading && <Loader2 size={16} className="animate-spin text-white/50" />}
+            </div>
+          </div>
         </div>
       )}
 
@@ -433,6 +623,13 @@ export default function CardapioPage() {
                 </label>
                 <span className="text-sm text-th">Disponível no cardápio</span>
               </div>
+              <div className="flex items-center gap-3">
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" checked={itemForm.isConvenience} onChange={e => setItemForm({ ...itemForm, isConvenience: e.target.checked })} className="sr-only peer" />
+                  <div className="w-9 h-5 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500"></div>
+                </label>
+                <span className="text-sm text-th">Exibir na Conveniência (APP COTISTA)</span>
+              </div>
             </div>
             <div className="flex justify-end gap-2 mt-6">
               <button onClick={() => setShowItemModal(false)} className="px-4 py-2 text-sm text-th-muted hover:text-th transition">Cancelar</button>
@@ -457,6 +654,63 @@ export default function CardapioPage() {
             <div className="flex justify-center gap-3">
               <button onClick={() => setDeleteTarget(null)} className="px-5 py-2 text-sm text-th-muted hover:text-th transition rounded-xl border border-th">Cancelar</button>
               <button onClick={confirmDelete} className="px-5 py-2 text-sm bg-red-500 hover:bg-red-400 text-white font-semibold rounded-xl transition">Excluir</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Bulk price modal */}
+      {bulkPriceModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-th-card border border-th rounded-2xl p-6 w-full max-w-sm">
+            <div className="flex justify-between items-center mb-5">
+              <h2 className="text-lg font-bold text-th flex items-center gap-2">
+                <Tag size={18} className="text-primary-500" /> Alterar Preço em Massa
+              </h2>
+              <button onClick={() => setBulkPriceModal(false)} className="p-1 hover:bg-th rounded-lg"><X size={20} className="text-th-muted" /></button>
+            </div>
+            <p className="text-sm text-th-muted mb-4">{selectedItems.size} item{selectedItems.size > 1 ? 's' : ''} selecionado{selectedItems.size > 1 ? 's' : ''}</p>
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              {([
+                { key: 'pct_up',  label: '% Aumento',   icon: TrendingUp,   color: 'text-green-500' },
+                { key: 'pct_down',label: '% Desconto',   icon: TrendingDown, color: 'text-red-500' },
+                { key: 'val_up',  label: '+ R$ Fixo',    icon: TrendingUp,   color: 'text-blue-400' },
+                { key: 'val_down',label: '- R$ Fixo',    icon: TrendingDown, color: 'text-orange-400' },
+                { key: 'fixed',   label: 'Preço fixo',   icon: Tag,          color: 'text-primary-500' },
+              ] as const).map(({ key, label, icon: Icon, color }) => (
+                <button
+                  key={key}
+                  onClick={() => setBulkPriceMode(key)}
+                  className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-semibold transition ${bulkPriceMode === key ? 'border-primary-500 bg-primary-500/10 text-th' : 'border-th bg-th text-th-muted hover:border-primary-500/50'}`}
+                >
+                  <Icon size={14} className={bulkPriceMode === key ? color : ''} />
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="mb-5">
+              <label className="block text-xs font-semibold text-th-muted mb-1.5">
+                {bulkPriceMode === 'fixed' ? 'Novo preço (R$)' : bulkPriceMode.startsWith('pct') ? 'Porcentagem (%)' : 'Valor (R$)'}
+              </label>
+              <input
+                type="number"
+                min="0"
+                step={bulkPriceMode.startsWith('pct') ? '1' : '0.01'}
+                value={bulkPriceValue || ''}
+                onChange={e => setBulkPriceValue(parseFloat(e.target.value) || 0)}
+                placeholder={bulkPriceMode.startsWith('pct') ? 'Ex: 10' : 'Ex: 5.00'}
+                className="w-full bg-th border border-th rounded-xl px-4 py-2.5 text-sm text-th focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setBulkPriceModal(false)} className="px-4 py-2 text-sm text-th-muted hover:text-th transition">Cancelar</button>
+              <button
+                onClick={executeBulkPrice}
+                disabled={bulkLoading || !bulkPriceValue}
+                className="flex items-center gap-2 bg-primary-500 hover:bg-primary-400 disabled:opacity-50 text-white px-5 py-2 rounded-xl text-sm font-semibold transition"
+              >
+                {bulkLoading ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                Aplicar
+              </button>
             </div>
           </div>
         </div>

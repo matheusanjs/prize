@@ -1,6 +1,37 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+
+/** Compress image for iOS memory safety — uses createObjectURL, not FileReader */
+async function compressImage(file: File, maxSize = 1200, quality = 0.7): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Failed to load image')); };
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      try {
+        let w = img.width, h = img.height;
+        if (w > maxSize || h > maxSize) {
+          if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
+          else { w = Math.round(w * maxSize / h); h = maxSize; }
+        }
+        const maxPixels = 2_000_000;
+        if (w * h > maxPixels) { const ratio = Math.sqrt(maxPixels / (w * h)); w = Math.round(w * ratio); h = Math.round(h * ratio); }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      } catch { try {
+        const w2 = 640, h2 = Math.round((img.height / img.width) * 640);
+        const c2 = document.createElement('canvas'); c2.width = w2; c2.height = h2;
+        c2.getContext('2d')!.drawImage(img, 0, 0, w2, h2);
+        resolve(c2.toDataURL('image/jpeg', 0.5));
+      } catch (e2) { reject(e2); } }
+    };
+    img.src = url;
+  });
+}
 import dynamic from 'next/dynamic';
 import {
   ClipboardCheck, CheckCircle, ChevronRight, ChevronLeft,
@@ -248,7 +279,7 @@ function OperatorView() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1.5 bg-[var(--subtle)] p-1.5 rounded-2xl overflow-x-auto">
+      <div className="flex gap-1.5 bg-[var(--subtle)] p-1.5 rounded-2xl overflow-x-auto scrollbar-hide">
         {tabs.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={`relative flex-1 whitespace-nowrap px-3 py-2 rounded-xl text-xs font-semibold transition-all ${tab === t.id ? 'bg-[var(--card)] text-[var(--text)] shadow-sm' : 'text-[var(--text-secondary)]'}`}>
@@ -478,7 +509,7 @@ function OperatorView() {
         />
       )}
       {!showWizard && postChecklistQueue && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/60 z-[10000] flex items-end sm:items-center justify-center p-4">
           <div className="bg-[var(--card)] rounded-t-3xl sm:rounded-2xl w-full sm:max-w-sm shadow-2xl p-6">
             <div className="text-center mb-5">
               <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-3">
@@ -529,16 +560,16 @@ function OperatorView() {
 /* ─── Queue detail bottom sheet ─────────────────────────────────────────── */
 function QueueDetailSheet({ item, onClose }: { item: QueueEntry; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-end">
-      <div className="bg-[var(--card)] rounded-t-3xl w-full max-h-[70vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-5 border-b border-[var(--border)]">
+    <div className="fixed inset-0 bg-black/50 z-[10000] flex items-end" onClick={onClose}>
+      <div className="bg-[var(--card)] rounded-t-3xl w-full max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 border-b border-[var(--border)] flex-shrink-0">
           <div>
             <h2 className="font-bold text-[var(--text)]">Uso Concluído — {item.boat?.name}</h2>
             <p className="text-xs text-[var(--text-secondary)]">{item.boat?.model}</p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-[var(--subtle)] rounded-xl"><X className="w-5 h-5 text-[var(--text-secondary)]" /></button>
         </div>
-        <div className="p-5 space-y-3 pb-10">
+        <div className="p-5 space-y-3 overflow-y-auto flex-1" style={{ paddingBottom: 'calc(2rem + env(safe-area-inset-bottom, 0px))' }}>
           <span className="inline-block px-3 py-1 bg-teal-50 border border-teal-100 rounded-full text-xs font-semibold text-teal-600">Concluído</span>
           {item.client?.name && (
             <div className="flex items-center gap-3 p-3 bg-[var(--subtle)] rounded-xl">
@@ -639,7 +670,7 @@ function CLDetailSheet({ cl: initialCL, onClose }: { cl: ChecklistEntry; onClose
   const fmtDT = (s: string) => new Date(s).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: BRT });
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-end">
+    <div className="fixed inset-0 bg-black/50 z-[10000] flex items-end" onClick={onClose}>
       {/* Photo zoom overlay */}
       {zoomImg && (
         <div className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-4" onClick={() => setZoomImg(null)}>
@@ -647,15 +678,15 @@ function CLDetailSheet({ cl: initialCL, onClose }: { cl: ChecklistEntry; onClose
           <img loading="lazy" decoding="async" src={resolveMediaUrl(zoomImg)} alt="Zoom" className="max-w-full max-h-full object-contain rounded-xl" onClick={e => e.stopPropagation()} />
         </div>
       )}
-      <div className="bg-[var(--card)] rounded-t-3xl w-full max-h-[85vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-5 border-b border-[var(--border)]">
+      <div className="bg-[var(--card)] rounded-t-3xl w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 border-b border-[var(--border)] flex-shrink-0">
           <div>
             <h2 className="font-bold text-[var(--text)]">Checklist — {cl.boat?.name}</h2>
             <p className="text-xs text-[var(--text-secondary)]">{cl.operator?.name} · {cl.createdAt ? fmtDT(cl.createdAt) : ''}{hasReturn ? ` → ${fmtDT(cl.returnCompletedAt!)}` : ''}</p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-[var(--subtle)] rounded-xl"><X className="w-5 h-5 text-[var(--text-secondary)]" /></button>
         </div>
-        <div className="p-5 space-y-3 pb-10">
+        <div className="p-5 space-y-3 overflow-y-auto flex-1" style={{ paddingBottom: 'calc(2rem + env(safe-area-inset-bottom, 0px))' }}>
           {/* Status + stats */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -957,8 +988,13 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
       const hullSketchUrl = sketchUrl;
       let videoUrl: string | undefined;
       let fuelPhotoUrl: string | undefined;
-      if (videoFile) videoUrl = await new Promise<string>(resolve => { const r = new FileReader(); r.onload = e => resolve(e.target?.result as string); r.readAsDataURL(videoFile); });
-      if (fuelPhotoFile) fuelPhotoUrl = await new Promise<string>(resolve => { const r = new FileReader(); r.onload = e => resolve(e.target?.result as string); r.readAsDataURL(fuelPhotoFile); });
+      if (videoFile) {
+        if (videoFile.size > 50 * 1024 * 1024) throw new Error('Vídeo muito grande. Máximo 50MB.');
+        videoUrl = await new Promise<string>(resolve => { const r = new FileReader(); r.onload = e => resolve(e.target?.result as string); r.readAsDataURL(videoFile); });
+      }
+      if (fuelPhotoFile) {
+        fuelPhotoUrl = await compressImage(fuelPhotoFile, 1200, 0.7);
+      }
       await submitPreLaunch(checklistId, { items: itemsData, hullSketchUrl, hullSketchMarks: sketchMarks, videoUrl, fuelPhotoUrl, additionalObservations: observations || undefined, lifeVestsLoaned });
       setStep('success');
     } catch (e: unknown) {
@@ -971,7 +1007,7 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
   const stepIdx = wizSteps.indexOf(step);
 
   return (
-    <div className="fixed inset-0 z-50 bg-[var(--card)] flex flex-col">
+    <div className="fixed inset-0 z-[10000] bg-[var(--card)] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--border)] flex-shrink-0">
           <div className="flex items-center gap-3">
@@ -1003,9 +1039,11 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
         {error && <div className="mx-5 mb-2 flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-sm text-red-400 flex-shrink-0"><AlertCircle className="w-4 h-4 flex-shrink-0" />{error}</div>}
 
         {step === 'sketch' ? (
-          <div className="flex-1 min-h-0 flex flex-col">
-            <JetSki3DSketch ref={sketchRef} fillHeight initialMarks={lastBoatMarks.length > 0 ? lastBoatMarks : undefined} />
-            <div className="flex-shrink-0 flex gap-2 px-4 py-3 bg-[var(--card)] border-t border-[var(--border)]">
+          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <JetSki3DSketch ref={sketchRef} fillHeight initialMarks={lastBoatMarks.length > 0 ? lastBoatMarks : undefined} />
+            </div>
+            <div className="flex-shrink-0 flex gap-2 px-4 py-3 bg-[var(--card)] border-t border-[var(--border)]" style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}>
               <button onClick={() => setStep('items')} className="flex items-center gap-2 px-4 py-2.5 border border-[var(--border)] text-[var(--text-secondary)] rounded-xl text-sm hover:bg-[var(--subtle)]"><ChevronLeft className="w-4 h-4" />Voltar</button>
               <button onClick={captureAndGoFuel} className="flex-1 py-2.5 bg-gradient-to-r from-primary-500 to-primary-400 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
                 Próximo: Combustível <ChevronRight className="w-4 h-4" />
@@ -1013,7 +1051,8 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
             </div>
           </div>
         ) : (
-        <div className="flex-1 overflow-y-auto px-5 pb-8 space-y-4">
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        <div className="flex-1 overflow-y-auto px-5 pt-2 space-y-4" style={{ paddingBottom: '0.5rem' }}>
           {/* PICK */}
           {step === 'pick' && (
             <div className="space-y-4">
@@ -1099,18 +1138,7 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
                   ))}
                 </div>
               )}
-              <div className="flex gap-2 pt-1">
-                <button onClick={() => setStep('pick')} className="flex items-center gap-2 px-4 py-2.5 border border-[var(--border)] text-[var(--text-secondary)] rounded-xl text-sm hover:bg-[var(--subtle)]">
-                  <ChevronLeft className="w-4 h-4" />Voltar
-                </button>
-                <button onClick={handleConfirmCotista}
-                  className="flex-1 py-2.5 bg-gradient-to-r from-primary-500 to-primary-400 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:from-primary-600 hover:to-primary-500 transition-colors">
-                  {selectedCotistaId
-                    ? <><CheckCircle2 className="w-4 h-4" />Confirmar Cotista</>
-                    : <>Continuar sem cotista <ChevronRight className="w-4 h-4" /></>
-                  }
-                </button>
-              </div>
+              <div className="flex gap-2 pt-1"></div>
             </div>
           )}
 
@@ -1162,11 +1190,6 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
                   placeholder="Descreva qualquer problema..."
                   className="w-full px-3 py-2.5 text-sm bg-[var(--subtle)] border border-[var(--border)] rounded-xl resize-none focus:outline-none focus:border-primary-400" />
               </div>
-              <button onClick={() => setStep('sketch')} disabled={!allChecked}
-                className="w-full py-3.5 bg-gradient-to-r from-primary-500 to-primary-400 disabled:opacity-50 disabled:text-[var(--text-muted)] text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
-                Próximo: Croqui <ChevronRight className="w-4 h-4" />
-              </button>
-              {!allChecked && <p className="text-xs text-center text-[var(--text-muted)]">Marque todos os {itemsData.length} itens</p>}
             </div>
           )}
 
@@ -1178,14 +1201,14 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
                 <p className="text-xs text-[var(--text-secondary)] mt-1">Tire uma foto do medidor de combustível</p>
               </div>
               {!fuelPhotoFile ? (
-                <label className="flex flex-col items-center justify-center gap-3 p-8 border-2 border-dashed border-[var(--border)] rounded-2xl cursor-pointer bg-[var(--subtle)]">
+                <div className="flex flex-col items-center justify-center gap-3 p-8 border-2 border-dashed border-[var(--border)] rounded-2xl cursor-pointer bg-[var(--subtle)]" onClick={() => document.getElementById('pwa-fuel-input')?.click()}>
                   <span className="text-5xl">⛽</span>
                   <div className="text-center">
                     <p className="text-sm font-medium text-[var(--text-secondary)]">Abrir câmera ou selecionar foto</p>
                     <p className="text-xs text-[var(--text-muted)] mt-1">JPG, PNG, HEIC · Foto do nível do tanque</p>
                   </div>
-                  <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => setFuelPhotoFile(e.target.files?.[0] || null)} />
-                </label>
+                  <input id="pwa-fuel-input" type="file" accept="image/*" className="hidden" onChange={e => setFuelPhotoFile(e.target.files?.[0] || null)} />
+                </div>
               ) : (
                 <div className="space-y-3">
                   <div className="rounded-xl overflow-hidden border border-[var(--border)]">
@@ -1201,16 +1224,6 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
                   </div>
                 </div>
               )}
-              <div className="flex gap-2">
-                <button onClick={() => setStep('sketch')} className="flex items-center gap-2 px-4 py-2.5 border border-[var(--border)] text-[var(--text-secondary)] rounded-xl text-sm hover:bg-[var(--subtle)]"><ChevronLeft className="w-4 h-4" />Voltar</button>
-                <button onClick={() => setStep('video')} disabled={!fuelPhotoFile}
-                  className="flex-1 py-2.5 bg-gradient-to-r from-primary-500 to-primary-400 disabled:opacity-50 disabled:text-[var(--text-muted)] text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
-                  Próximo: Vídeo <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-              <button onClick={() => setStep('video')} className="w-full text-center text-xs text-[var(--text-muted)] hover:text-[var(--text)] underline underline-offset-2">
-                Pular foto do tanque
-              </button>
             </div>
           )}
 
@@ -1219,11 +1232,11 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
             <div className="space-y-4">
               <p className="text-xs text-[var(--text-secondary)]">Opcional — grave um vídeo da inspeção</p>
               {!videoFile ? (
-                <label className="flex flex-col items-center justify-center gap-3 p-8 border-2 border-dashed border-[var(--border)] rounded-2xl cursor-pointer bg-[var(--subtle)]">
+                <div className="flex flex-col items-center justify-center gap-3 p-8 border-2 border-dashed border-[var(--border)] rounded-2xl cursor-pointer bg-[var(--subtle)]" onClick={() => document.getElementById('pwa-video-input')?.click()}>
                   <Video className="w-10 h-10 text-[var(--text-muted)]" />
                   <div className="text-center"><p className="text-sm font-medium text-[var(--text-secondary)]">Gravar ou selecionar</p><p className="text-xs text-[var(--text-muted)] mt-1">MP4, MOV · máx. 100MB</p></div>
-                  <input type="file" accept="video/*" capture="environment" className="hidden" onChange={e => setVideoFile(e.target.files?.[0] || null)} />
-                </label>
+                  <input id="pwa-video-input" type="file" accept="video/*" className="hidden" onChange={e => setVideoFile(e.target.files?.[0] || null)} />
+                </div>
               ) : (
                 <div className="bg-[var(--subtle)] border border-[var(--border)] rounded-2xl p-4 flex items-center gap-3">
                   <Video className="w-8 h-8 text-primary-500 flex-shrink-0" />
@@ -1231,12 +1244,6 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
                   <button onClick={() => setVideoFile(null)} className="p-1.5 hover:bg-[var(--subtle-hover)] rounded-lg"><X className="w-4 h-4 text-[var(--text-secondary)]" /></button>
                 </div>
               )}
-              <div className="flex gap-2">
-                <button onClick={() => setStep('fuel')} className="flex items-center gap-2 px-4 py-2.5 border border-[var(--border)] text-[var(--text-secondary)] rounded-xl text-sm hover:bg-[var(--subtle)]"><ChevronLeft className="w-4 h-4" />Voltar</button>
-                <button onClick={() => setStep('confirm')} className="flex-1 py-2.5 bg-gradient-to-r from-primary-500 to-primary-400 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
-                  {videoFile ? 'Próximo' : 'Pular'} <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
             </div>
           )}
 
@@ -1255,12 +1262,7 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
               <div className="p-3 bg-primary-500/10 border border-primary-100 rounded-xl">
                 <p className="text-xs text-primary-700">⚠️ Ao enviar, a reserva (se houver) será marcada como <strong>Em Uso</strong>.</p>
               </div>
-              <div className="flex gap-2">
-                <button onClick={() => setStep('video')} className="flex items-center gap-2 px-4 py-2.5 border border-[var(--border)] text-[var(--text-secondary)] rounded-xl text-sm hover:bg-[var(--subtle)]"><ChevronLeft className="w-4 h-4" />Voltar</button>
-                <button onClick={handleSubmit} disabled={submitting} className="flex-1 py-3 bg-gradient-to-r from-primary-500 to-primary-400 disabled:opacity-60 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
-                  {submitting ? <><Loader2 className="w-4 h-4 animate-spin" />Enviando...</> : <><CheckCircle className="w-4 h-4" />Enviar Checklist</>}
-                </button>
-              </div>
+              <div className="flex gap-2"></div>
             </div>
           )}
 
@@ -1277,6 +1279,55 @@ function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, on
               <button onClick={onSuccess} className="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-400 text-white rounded-xl font-bold text-sm">Feito</button>
             </div>
           )}
+        </div>
+        {/* Sticky bottom action bar — always visible, never scrolls off screen */}
+        {step !== 'pick' && step !== 'success' && (
+          <div className="flex-shrink-0 border-t border-[var(--border)] bg-[var(--card)] px-4 py-3 space-y-2" style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}>
+            {step === 'cotista' && (
+              <div className="flex gap-2">
+                <button onClick={() => setStep('pick')} className="flex items-center gap-2 px-4 py-2.5 border border-[var(--border)] text-[var(--text-secondary)] rounded-xl text-sm hover:bg-[var(--subtle)]"><ChevronLeft className="w-4 h-4" />Voltar</button>
+                <button onClick={handleConfirmCotista} className="flex-1 py-2.5 bg-gradient-to-r from-primary-500 to-primary-400 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
+                  {selectedCotistaId ? <><CheckCircle2 className="w-4 h-4" />Confirmar Cotista</> : <>Continuar sem cotista <ChevronRight className="w-4 h-4" /></>}
+                </button>
+              </div>
+            )}
+            {step === 'items' && (
+              <>
+                <button onClick={() => setStep('sketch')} disabled={!allChecked} className="w-full py-3 bg-gradient-to-r from-primary-500 to-primary-400 disabled:opacity-50 disabled:text-[var(--text-muted)] text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
+                  Próximo: Croqui <ChevronRight className="w-4 h-4" />
+                </button>
+                {!allChecked && <p className="text-xs text-center text-[var(--text-muted)]">Marque todos os {itemsData.length} itens</p>}
+              </>
+            )}
+            {step === 'fuel' && (
+              <>
+                <div className="flex gap-2">
+                  <button onClick={() => setStep('sketch')} className="flex items-center gap-2 px-4 py-2.5 border border-[var(--border)] text-[var(--text-secondary)] rounded-xl text-sm hover:bg-[var(--subtle)]"><ChevronLeft className="w-4 h-4" />Voltar</button>
+                  <button onClick={() => setStep('video')} disabled={!fuelPhotoFile} className="flex-1 py-2.5 bg-gradient-to-r from-primary-500 to-primary-400 disabled:opacity-50 disabled:text-[var(--text-muted)] text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
+                    Próximo: Vídeo <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+                <button onClick={() => setStep('video')} className="w-full text-center text-xs text-[var(--text-muted)] hover:text-[var(--text)] underline underline-offset-2">Pular foto do tanque</button>
+              </>
+            )}
+            {step === 'video' && (
+              <div className="flex gap-2">
+                <button onClick={() => setStep('fuel')} className="flex items-center gap-2 px-4 py-2.5 border border-[var(--border)] text-[var(--text-secondary)] rounded-xl text-sm hover:bg-[var(--subtle)]"><ChevronLeft className="w-4 h-4" />Voltar</button>
+                <button onClick={() => setStep('confirm')} className="flex-1 py-2.5 bg-gradient-to-r from-primary-500 to-primary-400 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
+                  {videoFile ? 'Próximo' : 'Pular'} <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+            {step === 'confirm' && (
+              <div className="flex gap-2">
+                <button onClick={() => setStep('video')} className="flex items-center gap-2 px-4 py-2.5 border border-[var(--border)] text-[var(--text-secondary)] rounded-xl text-sm hover:bg-[var(--subtle)]"><ChevronLeft className="w-4 h-4" />Voltar</button>
+                <button onClick={handleSubmit} disabled={submitting} className="flex-1 py-3 bg-gradient-to-r from-primary-500 to-primary-400 disabled:opacity-60 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
+                  {submitting ? <><Loader2 className="w-4 h-4 animate-spin" />Enviando...</> : <><CheckCircle className="w-4 h-4" />Enviar Checklist</>}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         </div>
         )}
     </div>
@@ -1592,13 +1643,18 @@ function ReturnInspectionModal({ item, onClose, onConfirm }: {
   const lifeVests = launchCL?.lifeVestsLoaned || 0;
   const launchMarks = launchCL?.hullSketchMarks;
 
-  const handleFuelPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFuelPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setFuelPhotoFile(file);
-    const reader = new FileReader();
-    reader.onload = ev => setFuelPreview(ev.target?.result as string);
-    reader.readAsDataURL(file);
+    try {
+      const compressed = await compressImage(file, 800, 0.6);
+      setFuelPreview(compressed);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = ev => setFuelPreview(ev.target?.result as string);
+      reader.readAsDataURL(file);
+    }
   };
 
   const captureSketch = () => {
@@ -1616,14 +1672,10 @@ function ReturnInspectionModal({ item, onClose, onConfirm }: {
 
   const handleSubmit = async () => {
     setSubmitting(true);
-    let returnFuelPhotoUrl: string | undefined;
-    if (fuelPhotoFile) {
-      returnFuelPhotoUrl = await new Promise<string>(resolve => {
-        const r = new FileReader(); r.onload = e => resolve(e.target?.result as string); r.readAsDataURL(fuelPhotoFile);
-      });
-    }
+    const returnFuelPhotoUrl = fuelPreview || undefined; // already compressed
     let returnDamageVideoUrl: string | undefined;
     if (damageVideoFile) {
+      if (damageVideoFile.size > 50 * 1024 * 1024) { alert('Vídeo muito grande. Máximo 50MB.'); setSubmitting(false); return; }
       returnDamageVideoUrl = await new Promise<string>(resolve => {
         const r = new FileReader(); r.onload = e => resolve(e.target?.result as string); r.readAsDataURL(damageVideoFile);
       });
@@ -1642,8 +1694,8 @@ function ReturnInspectionModal({ item, onClose, onConfirm }: {
   const fmt = (s: string) => new Date(s).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: BRT });
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center sm:p-4">
-      <div className="bg-[var(--card)] rounded-t-3xl sm:rounded-2xl w-full sm:max-w-2xl max-h-[92vh] overflow-y-auto shadow-2xl flex flex-col">
+    <div className="fixed inset-0 bg-black/60 z-[10000] flex items-end sm:items-center justify-center sm:p-4">
+      <div className="bg-[var(--card)] rounded-t-3xl sm:rounded-2xl w-full sm:max-w-2xl max-h-[92dvh] shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-[var(--border)] flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center"><ArrowUp className="w-5 h-5 text-blue-500" /></div>
@@ -1670,7 +1722,7 @@ function ReturnInspectionModal({ item, onClose, onConfirm }: {
           </div>
         )}
 
-        <div className="p-5 sm:p-6 flex-1 min-h-0">
+        <div className="p-5 sm:p-6 flex-1 min-h-0 overflow-y-auto">
           {loadingCL ? (
             <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>
           ) : step === 'items' ? (
@@ -1690,12 +1742,6 @@ function ReturnInspectionModal({ item, onClose, onConfirm }: {
                 <textarea value={observations} onChange={e => setObservations(e.target.value)}
                   className="w-full p-3 border border-[var(--border)] rounded-xl text-sm bg-[var(--card)] text-[var(--text)] focus:ring-2 focus:ring-blue-500 resize-none" rows={2} placeholder="Observações..." />
               </div>
-              <div className="flex gap-2 pt-2">
-                <button onClick={onClose} className="flex-1 py-2.5 border border-[var(--border)] text-[var(--text)] rounded-xl font-medium text-sm hover:bg-[var(--bg)]">Cancelar</button>
-                <button onClick={() => setStep('sketch')} className="flex-[2] py-2.5 bg-blue-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
-                  Próximo: Avarias <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
             </div>
           ) : step === 'sketch' ? (
             <div className="space-y-3">
@@ -1704,33 +1750,36 @@ function ReturnInspectionModal({ item, onClose, onConfirm }: {
               <JetSki3DSketch ref={sketchRef} initialMarks={launchMarks ? (JSON.parse(launchMarks) as InitialMark[]) : undefined} markColor="#39ff14" />
               <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-300 dark:border-amber-500/30 rounded-xl">
                 <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-2">🎬 Vídeo da avaria (opcional)</p>
-                <input type="file" accept="video/*" capture="environment" onChange={handleDamageVideo}
+                <input type="file" accept="video/*" onChange={handleDamageVideo}
                   className="block w-full text-sm text-[var(--text-muted)] file:mr-4 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-amber-500 file:text-white file:font-medium file:cursor-pointer file:text-xs" />
                 {damageVideoPreview && (
                   <video src={damageVideoPreview} controls className="mt-2 w-full max-h-40 rounded-lg" />
                 )}
               </div>
-              <div className="flex gap-2 pt-2">
-                <button onClick={() => setStep('items')} className="flex items-center gap-2 px-4 py-2.5 border border-[var(--border)] text-[var(--text-muted)] rounded-xl text-sm hover:bg-[var(--bg)]"><ChevronLeft className="w-4 h-4" />Voltar</button>
-                <button onClick={captureSketch} className="flex-1 py-2.5 bg-blue-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
-                  Próximo: Combustível <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
             </div>
           ) : step === 'fuel' ? (
             <div className="space-y-4">
               <p className="text-sm font-semibold text-[var(--text)]">📸 Foto do Tanque de Combustível</p>
-              <div className="border-2 border-dashed border-[var(--border)] rounded-xl p-4">
-                <input type="file" accept="image/*" capture="environment" onChange={handleFuelPhoto}
-                  className="block w-full text-sm text-[var(--text-muted)] file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-blue-500 file:text-white file:font-medium file:cursor-pointer" />
-                {fuelPreview && <img loading="lazy" decoding="async" src={fuelPreview} alt="Tanque" className="mt-3 w-full max-h-48 object-contain rounded-xl" />}
-              </div>
-              <div className="flex gap-2 pt-2">
-                <button onClick={() => setStep('sketch')} className="flex items-center gap-2 px-4 py-2.5 border border-[var(--border)] text-[var(--text-muted)] rounded-xl text-sm hover:bg-[var(--bg)]"><ChevronLeft className="w-4 h-4" />Voltar</button>
-                <button onClick={() => setStep('confirm')} className="flex-1 py-2.5 bg-blue-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
-                  Próximo: Confirmar <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
+              {!fuelPhotoFile ? (
+                <label className="flex flex-col items-center justify-center gap-3 p-8 border-2 border-dashed border-[var(--border)] rounded-2xl cursor-pointer bg-[var(--subtle)] hover:border-blue-400 transition-colors">
+                  <span className="text-5xl">⛽</span>
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-[var(--text-secondary)]">Abrir câmera ou selecionar foto</p>
+                    <p className="text-xs text-[var(--text-muted)] mt-1">Foto do nível do tanque no retorno</p>
+                  </div>
+                  <input type="file" accept="image/*" onChange={handleFuelPhoto} className="hidden" />
+                </label>
+              ) : (
+                <div className="space-y-2">
+                  <div className="rounded-xl overflow-hidden border border-[var(--border)]">
+                    <img loading="lazy" decoding="async" src={fuelPreview!} alt="Tanque" className="w-full object-contain max-h-48" />
+                  </div>
+                  <button onClick={() => { setFuelPhotoFile(null); setFuelPreview(null); }}
+                    className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] hover:text-red-400 transition">
+                    <X className="w-3.5 h-3.5" /> Trocar foto
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-4">
@@ -1745,13 +1794,43 @@ function ReturnInspectionModal({ item, onClose, onConfirm }: {
                 {observations && <div><span className="text-[var(--text-muted)]">Observações:</span><p className="text-[var(--text)] mt-1">{observations}</p></div>}
               </div>
               {fuelPreview && <img loading="lazy" decoding="async" src={fuelPreview} alt="Tanque" className="w-full max-h-32 object-contain rounded-xl border border-[var(--border)]" />}
-              <div className="flex gap-2 pt-2">
-                <button onClick={() => setStep('fuel')} className="flex items-center gap-2 px-4 py-2.5 border border-[var(--border)] text-[var(--text-muted)] rounded-xl text-sm hover:bg-[var(--bg)]"><ChevronLeft className="w-4 h-4" />Voltar</button>
-                <button onClick={handleSubmit} disabled={submitting}
-                  className="flex-[2] py-2.5 bg-green-500 hover:bg-green-600 disabled:bg-gray-400 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
-                  {submitting ? <><Loader2 className="w-4 h-4 animate-spin" />Subindo...</> : <><ArrowUp className="w-4 h-4" />Confirmar e Subir Jet</>}
-                </button>
-              </div>
+              <div className="flex gap-2 pt-2"></div>
+            </div>
+          )}
+        </div>
+        {/* Sticky bottom action bar */}
+        <div className="flex-shrink-0 border-t border-[var(--border)] bg-[var(--card)] px-4 py-3 space-y-2" style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}>
+          {step === 'items' && (
+            <div className="flex gap-2">
+              <button onClick={onClose} className="flex-1 py-2.5 border border-[var(--border)] text-[var(--text)] rounded-xl font-medium text-sm hover:bg-[var(--bg)]">Cancelar</button>
+              <button onClick={() => setStep('sketch')} className="flex-[2] py-2.5 bg-blue-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
+                Próximo: Avarias <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+          {step === 'sketch' && (
+            <div className="flex gap-2">
+              <button onClick={() => setStep('items')} className="flex items-center gap-2 px-4 py-2.5 border border-[var(--border)] text-[var(--text-muted)] rounded-xl text-sm hover:bg-[var(--bg)]"><ChevronLeft className="w-4 h-4" />Voltar</button>
+              <button onClick={captureSketch} className="flex-1 py-2.5 bg-blue-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
+                Próximo: Combustível <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+          {step === 'fuel' && (
+            <div className="flex gap-2">
+              <button onClick={() => setStep('sketch')} className="flex items-center gap-2 px-4 py-2.5 border border-[var(--border)] text-[var(--text-muted)] rounded-xl text-sm hover:bg-[var(--bg)]"><ChevronLeft className="w-4 h-4" />Voltar</button>
+              <button onClick={() => setStep('confirm')} className="flex-1 py-2.5 bg-blue-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
+                Próximo: Confirmar <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+          {step === 'confirm' && (
+            <div className="flex gap-2">
+              <button onClick={() => setStep('fuel')} className="flex items-center gap-2 px-4 py-2.5 border border-[var(--border)] text-[var(--text-muted)] rounded-xl text-sm hover:bg-[var(--bg)]"><ChevronLeft className="w-4 h-4" />Voltar</button>
+              <button onClick={handleSubmit} disabled={submitting}
+                className="flex-[2] py-2.5 bg-green-500 hover:bg-green-600 disabled:bg-gray-400 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
+                {submitting ? <><Loader2 className="w-4 h-4 animate-spin" />Subindo...</> : <><ArrowUp className="w-4 h-4" />Confirmar e Subir Jet</>}
+              </button>
             </div>
           )}
         </div>

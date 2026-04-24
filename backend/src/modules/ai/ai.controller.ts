@@ -26,7 +26,14 @@ export class AiController {
 
   @Get('insights')
   @Roles('ADMIN')
-  @ApiOperation({ summary: 'Gerar insights com IA (Admin)' })
+  @ApiOperation({ summary: 'Buscar último insight salvo (Admin)' })
+  getLatestInsight() {
+    return this.aiService.getLatestInsight();
+  }
+
+  @Post('insights/generate')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Gerar novo insight com IA (Admin)' })
   generateInsights(@CurrentUser('id') userId: string) {
     return this.aiService.generateInsights(userId);
   }

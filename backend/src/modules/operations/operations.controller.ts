@@ -112,6 +112,13 @@ export class OperationsController {
     return this.operationsService.getLastReturnInspection(boatId);
   }
 
+  @Get('recent-users/:boatId')
+  @Roles('ADMIN', 'OPERATOR')
+  @ApiOperation({ summary: 'Usuários recentes da embarcação com status de cobrança de combustível' })
+  getRecentUsers(@Param('boatId') boatId: string) {
+    return this.operationsService.getRecentUsersWithFuelStatus(boatId);
+  }
+
   @Get('boat/:boatId/last-marks')
   @Roles('ADMIN', 'OPERATOR')
   @ApiOperation({ summary: 'Últimas marcas de avaria de uma embarcação' })

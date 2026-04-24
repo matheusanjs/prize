@@ -2,6 +2,15 @@
 const nextConfig = {
   reactStrictMode: true,
   turbopack: {},
+  images: {
+    remotePatterns: [
+      { protocol: 'https', hostname: 'api.marinaprizeclub.com', pathname: '/uploads/**' },
+    ],
+    formats: ['image/avif', 'image/webp'],
+    minimumCacheTTL: 31536000,
+    deviceSizes: [390, 640, 828],
+    imageSizes: [200, 400],
+  },
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.optimization.splitChunks = {

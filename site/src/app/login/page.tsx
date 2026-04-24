@@ -24,7 +24,7 @@ export default function LoginPage() {
       const { data } = await loginUser({ email, password });
       const { accessToken, refreshToken, user } = data;
 
-      if (user.role === 'ADMIN') {
+      if (user.role === 'ADMIN' || user.role === 'OPERATOR') {
         const adminUrl = process.env.NEXT_PUBLIC_ADMIN_URL || 'http://localhost:3001';
         window.location.href = `${adminUrl}/dashboard?token=${accessToken}&refreshToken=${refreshToken}`;
       } else if (user.role === 'WAITER') {

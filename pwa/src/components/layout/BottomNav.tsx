@@ -70,9 +70,15 @@ export function BottomNav() {
           <button onClick={toggleTheme} className="p-1.5 rounded-lg bg-[var(--subtle)] text-[var(--text-secondary)] hover:bg-[var(--subtle-hover)] transition">
             {isDark ? <Sun size={14} /> : <Moon size={14} />}
           </button>
+          {user.role === 'CLIENT' && (
+            <Link href="/conveniente" className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-500/15 text-orange-500 hover:bg-orange-500/25 transition text-xs font-semibold">
+              <ShoppingBag size={14} />
+              <span>Conveniência</span>
+            </Link>
+          )}
           <Link href="/profile" className="block w-8 h-8 rounded-full overflow-hidden bg-[var(--subtle)] flex items-center justify-center">
             {user.avatar ? (
-              <Image src={user.avatar} alt="" width={32} height={32} className="w-full h-full object-cover" unoptimized />
+              <Image src={user.avatar.startsWith('/') ? `${(process.env.NEXT_PUBLIC_API_URL || '').replace(/\/api\/v1$/, '')}${user.avatar}` : user.avatar} alt="" width={32} height={32} className="w-full h-full object-cover" unoptimized />
             ) : (
               <User size={16} className="text-[var(--text-muted)]" />
             )}

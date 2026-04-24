@@ -88,6 +88,14 @@ export class MenuService {
 
   // ─── Public menu (site) ─────────────────────────────────
 
+  async getConvenienceItems() {
+    return this.prisma.menuItem.findMany({
+      where: { isConvenience: true, isAvailable: true, category: { isActive: true } },
+      include: { category: { select: { id: true, name: true } } },
+      orderBy: { order: 'asc' },
+    });
+  }
+
   async getPublicMenu() {
     return this.prisma.menuCategory.findMany({
       where: { isActive: true },

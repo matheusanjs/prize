@@ -115,6 +115,8 @@ api.interceptors.response.use(
 
 // Auth
 export const login = (email: string, password: string) => api.post('/auth/login', { email, password });
+export const registerUser = (data: { name: string; email: string; password: string; phone?: string; cpfCnpj?: string }) =>
+  api.post('/auth/register', { ...data, role: 'CLIENT' });
 
 // Users
 export const getUsers = (params?: Record<string, unknown>) => api.get('/users', { params: { page: 1, limit: 100, ...params } });
@@ -142,6 +144,19 @@ export const getMySwaps = () => api.get('/reservations/swaps/my');
 export const getPendingSwaps = () => api.get('/reservations/swaps/pending');
 export const respondToSwap = (id: string, accept: boolean) => api.patch(`/reservations/swaps/${id}/respond`, { accept });
 export const getCoOwners = (boatId: string) => api.get(`/reservations/co-owners/${boatId}`);
+
+// Reservation Substitutes (Suplente de cota)
+export const registerSubstitute = (reservationId: string, message?: string) =>
+  api.post(`/reservations/${reservationId}/substitute`, { message });
+export const cancelSubstitute = (substituteId: string) =>
+  api.patch(`/reservations/substitutes/${substituteId}/cancel`);
+export const getMySubstituteRequests = () => api.get('/reservations/substitutes/my');
+export const getIncomingSubstitutes = () => api.get('/reservations/substitutes/incoming');
+export const getSubstitutableReservations = () => api.get('/reservations/substitutes/available');
+export const listReservationSubstitutes = (reservationId: string) =>
+  api.get(`/reservations/${reservationId}/substitutes`);
+export const passToNextSubstitute = (reservationId: string) =>
+  api.post(`/reservations/${reservationId}/pass-to-substitute`);
 
 // Finance / Charges
 export const getCharges = (params?: Record<string, unknown>) => api.get('/finance/charges', { params });
@@ -204,5 +219,13 @@ export const changePassword = (data: { currentPassword: string; newPassword: str
   api.post('/auth/change-password', data);
 
 export const deleteAccount = () => api.delete('/users/profile');
+
+// ─── Convenience Store (APP COTISTA) ───────────────────
+export const getConvenienceItems = () => api.get('/menu/convenience');
+export const createConvenienceOrder = (data: {
+  items: { menuItemId: string; quantity: number; notes?: string }[];
+  notes?: string;
+  paymentMethod: 'PIX' | 'PICKUP';
+}) => api.post('/orders/app-cotista', data);
 
 export default api;

@@ -81,10 +81,12 @@ const ORIGIN_CFG: Record<string, { label: string; emoji: string; class: string }
   GARCOM: { label: 'Garçom', emoji: '👤', class: 'bg-violet-500/15 text-violet-500' },
   PDV: { label: 'PDV', emoji: '🖥️', class: 'bg-sky-500/15 text-sky-500' },
   AUTO: { label: 'Auto-atend.', emoji: '📱', class: 'bg-teal-500/15 text-teal-500' },
+  APP_COTISTA: { label: 'APP COTISTA', emoji: '🛒', class: 'bg-orange-500/15 text-orange-500' },
   MANUAL: { label: 'Manual', emoji: '📝', class: 'bg-gray-400/15 text-gray-400' },
 };
 
 function getOrigin(order: Order) {
+  if (order.tableNumber === 'APP COTISTA') return ORIGIN_CFG.APP_COTISTA;
   if (order.waiterId || order.waiter) return ORIGIN_CFG.GARCOM;
   if (order.cashRegisterId) return ORIGIN_CFG.PDV;
   if (order.restaurantTable) return ORIGIN_CFG.AUTO;
@@ -284,7 +286,7 @@ export default function PedidosPage() {
                     >
                       {/* Mesa / Header */}
                       <div className="flex items-center justify-between mb-2">
-                        {order.tableNumber ? (
+                        {order.tableNumber && order.tableNumber !== 'APP COTISTA' ? (
                           <span className="text-base font-black text-th bg-primary-500/10 px-2.5 py-0.5 rounded-lg">
                             Mesa {order.tableNumber}
                           </span>
@@ -297,8 +299,13 @@ export default function PedidosPage() {
                       </div>
 
                       {/* Customer if table */}
-                      {order.tableNumber && order.customerName && (
+                      {order.tableNumber && order.tableNumber !== 'APP COTISTA' && order.customerName && (
                         <p className="text-xs text-th-muted mb-1 truncate">{order.customerName}</p>
+                      )}
+
+                      {/* Notes for APP COTISTA */}
+                      {order.tableNumber === 'APP COTISTA' && order.notes && (
+                        <p className="text-xs text-orange-400 mb-1 truncate">💬 {order.notes}</p>
                       )}
 
                       {/* Waiter name */}

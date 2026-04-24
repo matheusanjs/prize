@@ -14,9 +14,10 @@ export class ReportsController {
   constructor(private reports: ReportsService) {}
 
   private parseDates(from?: string, to?: string): { from: Date; to: Date } {
-    const now = new Date();
-    const toDate = to ? new Date(to) : now;
-    const fromDate = from ? new Date(from) : new Date(now.getFullYear(), now.getMonth() - 5, 1); // default 6 months
+    // Use São Paulo timezone for date boundaries
+    const nowBrt = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    const toDate = to ? new Date(to + 'T23:59:59.999') : new Date(nowBrt.getFullYear(), nowBrt.getMonth(), nowBrt.getDate(), 23, 59, 59, 999);
+    const fromDate = from ? new Date(from + 'T00:00:00') : new Date(nowBrt.getFullYear(), nowBrt.getMonth() - 5, 1, 0, 0, 0, 0);
     return { from: fromDate, to: toDate };
   }
 
@@ -66,6 +67,14 @@ export class ReportsController {
   operations(@Query('from') from?: string, @Query('to') to?: string) {
     const d = this.parseDates(from, to);
     return this.reports.getOperationsReport(d.from, d.to);
+  }
+
+  @Get('pending-fuel')
+  @ApiOperation({ summary: 'Relatório de abastecimentos pendentes' })
+  @ApiQuery({ name: 'from', required: false })
+  @ApiQuery({ name: 'to', required: false })
+  getPendingFuel(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.reports.getPendingFuel(from, to);
   }
 
   @Get('restaurant')

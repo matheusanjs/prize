@@ -1,60 +1,65 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
-import { Ship, AlertTriangle, FileText, ArrowLeftRight, Check, X as XIcon, Calendar, Clock, Anchor, DollarSign, CheckCircle2, AlertCircle, MapPin, ChevronRight, Navigation, Sparkles, Users, Star } from 'lucide-react';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import {
+  Ship, AlertTriangle, ArrowLeftRight, Check, X as XIcon,
+  Calendar, Anchor, CheckCircle2, AlertCircle,
+  MapPin, Users, Star, Wind, Droplets, Sun,
+  Cloud, CloudRain, CloudLightning, CloudSnow, CloudDrizzle, CloudFog,
+  Thermometer,
+} from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth';
-import { getShares, getMyCharges, getPendingSwaps, respondToSwap, getMyReservations, confirmArrival, cancelReservation } from '@/services/api';
-import { format, parseISO, isToday } from 'date-fns';
+import {
+  getShares, getMyCharges, getPendingSwaps, respondToSwap,
+  getMyReservations, confirmArrival, cancelReservation, getWeatherCurrent,
+} from '@/services/api';
+import { format, parseISO, isToday, differenceInCalendarDays } from 'date-fns';
 import api from '@/services/api';
 import { useCachedState, hasCached } from '@/hooks/useCachedState';
+import ReservationsManager from '@/components/ReservationsManager';
 
+/* ═══ Types ═══ */
 interface Boat {
-  id: string;
-  name: string;
-  model: string;
-  length: number;
-  year: number;
-  registrationNumber: string;
-  totalShares: number;
-  monthlyFee: number;
-  imageUrl?: string;
-  notes?: string;
+  id: string; name: string; model: string; length: number; year: number;
+  registrationNumber: string; totalShares: number; monthlyFee: number;
+  imageUrl?: string; notes?: string; fuelType?: string; capacity?: number;
 }
-
-interface Share {
-  id: string;
-  shareNumber: number;
-  boat: Boat;
-}
-
-interface Charge {
-  id: string;
-  status: string;
-  boatId?: string;
-  dueDate: string;
-}
-
+interface Share { id: string; shareNumber: number; boat: Boat; }
+interface Charge { id: string; status: string; boatId?: string; dueDate: string; }
 interface SwapRequest {
-  id: string;
-  status: string;
-  message?: string;
-  createdAt: string;
-  reservation: {
-    id: string;
-    startDate: string;
-    endDate: string;
-    boat: { id: string; name: string };
-    user: { id: string; name: string };
-  };
-  offeredReservation: {
-    id: string;
-    startDate: string;
-    endDate: string;
-    user: { id: string; name: string };
-  };
+  id: string; status: string; message?: string; createdAt: string;
+  reservation: { id: string; startDate: string; endDate: string; boat: { id: string; name: string }; user: { id: string; name: string } };
+  offeredReservation: { id: string; startDate: string; endDate: string; user: { id: string; name: string } };
   requester: { id: string; name: string };
+}
+interface Weather { temp: number; code: number; wind: number; humidity?: number; }
+
+/* ═══ Marina coordinates (Angra dos Reis default) ═══ */
+const MARINA_LAT = -22.97;
+const MARINA_LNG = -44.32;
+
+/* ═══ Weather helpers ═══ */
+function weatherIcon(code: number) {
+  if (code === 0) return <Sun size={14} className="text-amber-400" />;
+  if (code <= 3) return <Cloud size={14} className="text-slate-400" />;
+  if (code <= 48) return <CloudFog size={14} className="text-slate-400" />;
+  if (code <= 55) return <CloudDrizzle size={14} className="text-blue-400" />;
+  if (code <= 65) return <CloudRain size={14} className="text-blue-400" />;
+  if (code <= 75) return <CloudSnow size={14} className="text-blue-200" />;
+  if (code <= 82) return <CloudRain size={14} className="text-blue-500" />;
+  return <CloudLightning size={14} className="text-amber-400" />;
+}
+function weatherLabel(code: number) {
+  if (code === 0) return 'Céu limpo';
+  if (code <= 3) return 'Parcial';
+  if (code <= 48) return 'Nublado';
+  if (code <= 55) return 'Garoa';
+  if (code <= 65) return 'Chuva';
+  if (code <= 75) return 'Neve';
+  if (code <= 82) return 'Pancadas';
+  return 'Trovoada';
 }
 
 export default function BoatsPage() {
@@ -64,9 +69,8 @@ export default function BoatsPage() {
   const [chargesByBoat, setChargesByBoat] = useCachedState<Record<string, { overdue: number; pending: number }>>('pc:boats:chargesByBoat', {});
   const [pendingSwaps, setPendingSwaps] = useCachedState<SwapRequest[]>('pc:boats:pendingSwaps', []);
   const [respondingId, setRespondingId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(() => !hasCached('pc:boats:shares'));
+  const [loading, setLoading] = useState(() => !hasCached('pc:boats:shares') && !hasCached('pc:boats:highlightedTrips'));
 
-  // Confirm arrival state
   const [todayReservations, setTodayReservations] = useCachedState<any[]>('pc:boats:todayReservations', []);
   const [showConfirmArrival, setShowConfirmArrival] = useState(false);
   const [confirmReservation, setConfirmReservation] = useState<any | null>(null);
@@ -74,32 +78,78 @@ export default function BoatsPage() {
   const [confirmSaving, setConfirmSaving] = useState(false);
   const [confirmError, setConfirmError] = useState('');
   const [highlightedTrips, setHighlightedTrips] = useCachedState<any[]>('pc:boats:highlightedTrips', []);
+  const [tripsLoaded, setTripsLoaded] = useState(() => hasCached('pc:boats:highlightedTrips'));
   const [activeTripIdx, setActiveTripIdx] = useState(0);
   const [activeCotaIdx, setActiveCotaIdx] = useState(0);
+  const [weather, setWeather] = useCachedState<Weather | null>('pc:boats:weather', null);
   const tripScrollRef = useRef<HTMLDivElement>(null);
   const cotaScrollRef = useRef<HTMLDivElement>(null);
 
   const HOURS = ['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00'];
   const userId = user?.id;
 
+  /* ═══ Weather fetch ═══ */
+  useEffect(() => {
+    const fetchWeather = async () => {
+      // 1) Try backend (authenticated, cached, hgbrasil) — primary source
+      try {
+        const { data } = await getWeatherCurrent();
+        const w = data?.data || data;
+        if (w && typeof w.airTemperature === 'number') {
+          // Map cloudCover/precipitation → simple WMO-ish weather code
+          const cc = Number(w.cloudCover ?? 0);
+          const precip = Number(w.precipitation ?? 0);
+          let code = 0;
+          if (precip > 5) code = 65;       // heavy rain
+          else if (precip > 0) code = 51;  // drizzle
+          else if (cc > 75) code = 3;      // overcast
+          else if (cc > 25) code = 2;      // partly cloudy
+          else code = 0;                   // clear
+          setWeather({
+            temp: Math.round(Number(w.airTemperature)),
+            code,
+            wind: Math.round(Number(w.windSpeed ?? 0) * 3.6), // m/s → km/h
+            humidity: w.humidity != null ? Math.round(Number(w.humidity)) : undefined,
+          });
+          return;
+        }
+      } catch { /* fall through to public fallback */ }
+
+      // 2) Public fallback (Open-Meteo) — works for unauthenticated state
+      try {
+        const r = await fetch(
+          `https://api.open-meteo.com/v1/forecast?latitude=${MARINA_LAT}&longitude=${MARINA_LNG}&current=temperature_2m,weather_code,wind_speed_10m,relative_humidity_2m&timezone=America/Sao_Paulo`
+        );
+        const d = await r.json();
+        if (d?.current) {
+          setWeather({
+            temp: Math.round(d.current.temperature_2m),
+            code: d.current.weather_code,
+            wind: Math.round(d.current.wind_speed_10m),
+            humidity: d.current.relative_humidity_2m,
+          });
+        }
+      } catch { /* silent */ }
+    };
+    fetchWeather();
+    const interval = setInterval(fetchWeather, 15 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  /* ═══ Data fetching ═══ */
   useEffect(() => {
     if (!userId) return;
     let cancelled = false;
     (async () => {
-      // Run all independent API calls in parallel
-      const [sharesRes, chargesRes, swapsRes, myResRes] = await Promise.allSettled([
-        getShares({ userId }),
-        getMyCharges(),
-        getPendingSwaps(),
-        getMyReservations(),
+      const [sharesRes, chargesRes, swapsRes, myResRes, tripsRes] = await Promise.allSettled([
+        getShares({ userId }), getMyCharges(), getPendingSwaps(),
+        getMyReservations(), api.get('/social/trips'),
       ]);
 
-      // Process shares
       const sharesData = sharesRes.status === 'fulfilled' ? sharesRes.value.data : undefined;
       const shareItems = Array.isArray(sharesData) ? sharesData : sharesData?.data || [];
       setShares(shareItems);
 
-      // Process charges
       if (chargesRes.status === 'fulfilled') {
         const list: Charge[] = Array.isArray(chargesRes.value.data) ? chargesRes.value.data : chargesRes.value.data?.data || [];
         const grouped: Record<string, { overdue: number; pending: number }> = {};
@@ -112,37 +162,32 @@ export default function BoatsPage() {
         setChargesByBoat(grouped);
       }
 
-      // Process swaps
       if (swapsRes.status === 'fulfilled') {
         setPendingSwaps(Array.isArray(swapsRes.value.data) ? swapsRes.value.data : swapsRes.value.data?.data || []);
       }
 
-      // Process today's reservations
       if (myResRes.status === 'fulfilled') {
         const resData = myResRes.value.data;
         const resList = Array.isArray(resData) ? resData : resData.data || [];
-        const todayRes = resList.filter((r: any) =>
-          ['CONFIRMED', 'PENDING'].includes(r.status) &&
-          isToday(parseISO(r.startDate))
-        );
-        setTodayReservations(todayRes);
+        setTodayReservations(resList.filter((r: any) => {
+          if (!['CONFIRMED', 'PENDING'].includes(r.status)) return false;
+          const diff = differenceInCalendarDays(parseISO(r.startDate), new Date());
+          return diff === 0 || diff === 1;
+        }));
       }
 
-      // Fetch highlighted trips
-      try {
-        const { data } = await api.get('/social/trips');
-        const trips = data.trips || [];
+      if (tripsRes.status === 'fulfilled') {
+        const trips = tripsRes.value.data.trips || [];
         setHighlightedTrips(trips.filter((t: any) => t.isHighlighted).slice(0, 5));
-      } catch { /* silent */ }
-
+      }
+      setTripsLoaded(true);
       if (!cancelled) setLoading(false);
     })();
     return () => { cancelled = true; };
   }, [userId]);
 
-  const handleBoatClick = (boatId: string) => {
-    router.push(`/reservations?boatId=${encodeURIComponent(boatId)}`);
-  };
+  /* ═══ Handlers ═══ */
+  const handleBoatClick = (boatId: string) => router.push(`/reservations?boatId=${encodeURIComponent(boatId)}`);
 
   const openConfirmArrival = (r: any) => {
     setConfirmReservation(r);
@@ -153,17 +198,14 @@ export default function BoatsPage() {
 
   const handleConfirmArrival = async () => {
     if (!confirmReservation) return;
-    setConfirmError('');
-    setConfirmSaving(true);
+    setConfirmError(''); setConfirmSaving(true);
     try {
       await confirmArrival(confirmReservation.id, arrivalTime);
       setShowConfirmArrival(false);
       setTodayReservations(prev => prev.map(r =>
         r.id === confirmReservation.id ? { ...r, confirmedAt: new Date().toISOString(), expectedArrivalTime: arrivalTime } : r
       ));
-    } catch (err: any) {
-      setConfirmError(err?.response?.data?.message || 'Erro ao confirmar presença');
-    }
+    } catch (err: any) { setConfirmError(err?.response?.data?.message || 'Erro ao confirmar presença'); }
     setConfirmSaving(false);
   };
 
@@ -172,84 +214,116 @@ export default function BoatsPage() {
     try {
       await cancelReservation(r.id, 'Cancelado pelo cotista');
       setTodayReservations(prev => prev.filter(res => res.id !== r.id));
-    } catch (err: any) {
-      alert(err?.response?.data?.message || 'Erro ao cancelar reserva');
-    }
+    } catch (err: any) { alert(err?.response?.data?.message || 'Erro ao cancelar reserva'); }
   };
 
   const handleSwapRespond = async (swapId: string, accept: boolean) => {
     setRespondingId(swapId);
-    try {
-      await respondToSwap(swapId, accept);
-      setPendingSwaps(prev => prev.filter(s => s.id !== swapId));
-    } catch { alert('Erro ao responder solicitação'); }
+    try { await respondToSwap(swapId, accept); setPendingSwaps(prev => prev.filter(s => s.id !== swapId)); }
+    catch { alert('Erro ao responder solicitação'); }
     setRespondingId(null);
   };
 
   const handleTripScroll = () => {
     if (!tripScrollRef.current) return;
-    const el = tripScrollRef.current;
-    const idx = Math.round(el.scrollLeft / el.clientWidth);
-    setActiveTripIdx(idx);
+    setActiveTripIdx(Math.round(tripScrollRef.current.scrollLeft / tripScrollRef.current.clientWidth));
   };
 
   const handleCotaScroll = () => {
     if (!cotaScrollRef.current) return;
-    const el = cotaScrollRef.current;
-    const idx = Math.round(el.scrollLeft / el.clientWidth);
-    setActiveCotaIdx(idx);
+    setActiveCotaIdx(Math.round(cotaScrollRef.current.scrollLeft / cotaScrollRef.current.clientWidth));
   };
 
+  const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || 'https://api.marinaprizeclub.com/api/v1').replace(/\/api\/v1$/, '');
+  const resolveMediaUrl = (url: string | undefined | null) => {
+    if (!url) return '';
+    if (url.startsWith('/')) return `${API_ORIGIN}${url}`;
+    return url;
+  };
+
+  const firstName = user?.name?.split(' ')[0] || '';
+  const now = new Date();
+  const greeting = now.getHours() < 12 ? 'Bom dia' : now.getHours() < 18 ? 'Boa tarde' : 'Boa noite';
+
+  /* ═══ Loading ═══ */
   if (loading) {
     return (
-      <div className="py-4 space-y-6 pb-4">
-        {/* Shimmer loading */}
+      <div className="py-1 space-y-3 pb-2">
         <style dangerouslySetInnerHTML={{ __html: `
-          @keyframes lxShimmer { 0% { background-position: -400px 0 } 100% { background-position: 400px 0 } }
-          .lx-shimmer { background: linear-gradient(90deg, var(--subtle) 25%, var(--card) 50%, var(--subtle) 75%); background-size: 800px 100%; animation: lxShimmer 1.8s ease-in-out infinite; }
+          @keyframes sh{0%{background-position:-400px 0}100%{background-position:400px 0}}
+          .sh{background:linear-gradient(90deg,var(--subtle) 25%,var(--card-hover) 50%,var(--subtle) 75%);background-size:800px 100%;animation:sh 1.5s ease-in-out infinite;border-radius:16px}
         `}} />
-        <div className="h-[260px] rounded-3xl lx-shimmer" />
-        <div className="h-6 w-36 rounded-xl lx-shimmer" />
-        <div className="h-[220px] rounded-3xl lx-shimmer" />
-        <div className="h-[220px] rounded-3xl lx-shimmer" />
+        <div className="px-4 flex items-center justify-between">
+          <div className="space-y-1.5"><div className="h-4 w-24 sh" /><div className="h-3 w-36 sh" /></div>
+          <div className="h-9 w-24 sh" style={{ borderRadius: '12px' }} />
+        </div>
+        <div className="px-3"><div className="h-[100px] sh" /></div>
+        <div className="px-3"><div className="h-[220px] sh" /></div>
       </div>
     );
   }
 
-  const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || 'https://api.marinaprizeclub.com/api/v1').replace(/\/api\/v1$/, '');
-  function resolveMediaUrl(url: string | undefined | null): string {
-    if (!url) return '';
-    if (url.startsWith('/')) return `${API_ORIGIN}${url}`;
-    return url;
-  }
+  const hasTrips = highlightedTrips.length > 0;
+  const hasSwaps = pendingSwaps.length > 0;
 
+  /* ═══ Render ═══ */
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes lxFadeUp { from { opacity: 0; transform: translateY(18px) } to { opacity: 1; transform: translateY(0) } }
-        @keyframes lxShimmer { 0% { background-position: -400px 0 } 100% { background-position: 400px 0 } }
-        @keyframes lxGlow { 0%, 100% { opacity: 0.5 } 50% { opacity: 1 } }
-        @keyframes lxFloat { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-4px) } }
-        .lx-fade { animation: lxFadeUp 0.6s ease-out both }
-        .lx-fade-1 { animation-delay: 0.05s }
-        .lx-fade-2 { animation-delay: 0.12s }
-        .lx-fade-3 { animation-delay: 0.2s }
-        .lx-fade-4 { animation-delay: 0.28s }
-        .lx-gold { background: linear-gradient(135deg, #FFC857, #FFD98E, #FFC857); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-        .lx-gold-bg { background: linear-gradient(135deg, rgba(255,200,87,0.12), rgba(255,200,87,0.04)); border: 1px solid rgba(255,200,87,0.15); }
-        .lx-glass { background: var(--card); backdrop-filter: blur(16px) saturate(1.4); -webkit-backdrop-filter: blur(16px) saturate(1.4); border: 1px solid var(--border); }
-        .lx-card { background: var(--card); border: 1px solid var(--border); box-shadow: 0 8px 32px rgba(0,0,0,0.08), 0 1px 0 rgba(255,255,255,0.03) inset; }
-        .lx-float { animation: lxFloat 4s ease-in-out infinite; }
+        @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes sh{0%{background-position:-400px 0}100%{background-position:400px 0}}
+        @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
+        .ani{animation:fadeUp .35s ease-out both}
+        .ani-1{animation-delay:.03s}.ani-2{animation-delay:.06s}.ani-3{animation-delay:.1s}.ani-4{animation-delay:.14s}
+        .sh{background:linear-gradient(90deg,var(--subtle) 25%,var(--card-hover) 50%,var(--subtle) 75%);background-size:800px 100%;animation:sh 1.5s ease-in-out infinite}
+        .gc{background:var(--card);border:1px solid var(--border);border-radius:18px;overflow:hidden;transition:transform .15s}
+        .gc:active{transform:scale(.98)}
+        .pill{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;letter-spacing:.04em;padding:3px 8px;border-radius:100px}
+        .tag-own{background:rgba(59,130,246,.12);color:#60A5FA;border:1px solid rgba(59,130,246,.15)}
+        .tag-cota{background:rgba(255,200,87,.1);color:#FFC857;border:1px solid rgba(255,200,87,.15)}
+        .light .tag-cota{background:rgba(180,130,30,.08);color:#997020;border:1px solid rgba(180,130,30,.12)}
+        .sc{display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:10px;flex:1;min-width:0}
       `}} />
 
       <div className="-mx-4 -mt-2 pb-4">
 
-        {/* ── HERO TRIPS CAROUSEL ── */}
-        {highlightedTrips.length > 0 && (
-          <div className="lx-fade relative">
+        {/* ══════ GREETING + WEATHER ROW ══════ */}
+        <div className="px-4 pt-0.5 pb-2 flex items-center justify-between ani">
+          <div>
+            <h1 className="text-[18px] font-extrabold text-[var(--text)] tracking-tight leading-tight">
+              {greeting}{firstName ? `, ${firstName}` : ''}
+            </h1>
+            <p className="text-[11px] text-[var(--text-muted)] mt-px">
+              {now.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </p>
+          </div>
+          {weather ? (
+            <div
+              className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl cursor-pointer active:scale-95 transition-transform"
+              style={{ background: 'var(--subtle)', border: '1px solid var(--border)' }}
+              title={`${weatherLabel(weather.code)} · Vento ${weather.wind} km/h${weather.humidity ? ` · Umidade ${weather.humidity}%` : ''}`}
+            >
+              {weatherIcon(weather.code)}
+              <span className="text-[14px] font-bold text-[var(--text)] leading-none">{weather.temp}°</span>
+              <div className="flex items-center gap-0.5 text-[9px] text-[var(--text-muted)]">
+                <Wind size={8} />
+                <span>{weather.wind}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl" style={{ background: 'var(--subtle)', border: '1px solid var(--border)' }}>
+              <Cloud size={14} className="text-[var(--text-muted)]" style={{ opacity: .3 }} />
+              <span className="text-[11px] text-[var(--text-muted)]" style={{ opacity: .5 }}>--°</span>
+            </div>
+          )}
+        </div>
+
+        {/* ══════ TRIPS CAROUSEL (compact) ══════ */}
+        {hasTrips ? (
+          <div className="ani ani-1 mb-2">
             <div
               ref={tripScrollRef}
-              className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide"
+              className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide gap-2.5 px-3"
               onScroll={handleTripScroll}
             >
               {highlightedTrips.map((trip: any, i: number) => {
@@ -258,301 +332,252 @@ export default function BoatsPage() {
                   <div
                     key={trip.id}
                     onClick={() => router.push(`/social?tripId=${trip.id}`)}
-                    className="relative w-full h-[300px] overflow-hidden cursor-pointer active:scale-[0.985] transition-transform duration-300 snap-center flex-shrink-0"
-                    style={{ minWidth: '100%' }}
+                    className="relative flex-shrink-0 overflow-hidden cursor-pointer active:scale-[0.98] transition-transform duration-200 snap-center"
+                    style={{
+                      width: highlightedTrips.length === 1 ? '100%' : 'calc(100% - 20px)',
+                      minWidth: highlightedTrips.length === 1 ? '100%' : 'calc(100% - 20px)',
+                      height: '110px', borderRadius: '16px',
+                    }}
                   >
                     {photo ? (
-                      <Image
-                        src={resolveMediaUrl(photo)}
-                        alt=""
-                        fill
-                        className="object-cover scale-105"
-                        sizes="100vw"
-                        priority={i === 0}
-                        loading={i === 0 ? 'eager' : 'lazy'}
-                      />
+                      <Image src={resolveMediaUrl(photo)} alt="" fill className="object-cover" sizes="90vw" priority={i === 0} loading={i === 0 ? 'eager' : 'lazy'} />
                     ) : (
-                      <div className="absolute inset-0 bg-gradient-to-br from-[#0A2540] via-[#0F3460] to-[#1A3A5C]" />
+                      <div className="absolute inset-0 bg-gradient-to-br from-[#0A2540] via-[#0F3460] to-[#1A5276]" />
                     )}
-                    <div className="absolute inset-0" style={{ background: 'linear-gradient(0deg, rgba(10,20,35,0.95) 0%, rgba(10,20,35,0.5) 35%, rgba(0,0,0,0.15) 60%, rgba(0,0,0,0.25) 100%)' }} />
+                    <div className="absolute inset-0" style={{ background: 'linear-gradient(0deg, rgba(0,0,0,.8) 0%, rgba(0,0,0,.15) 55%, rgba(0,0,0,.05) 100%)' }} />
 
-
-
-                    <div className="absolute top-4 right-5">
-                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold text-white" style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(16px)' }}>
-                        <Calendar size={10} /> {trip.date ? new Date(trip.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).toUpperCase() : ''}
-                      </div>
+                    <div className="absolute top-2 right-2">
+                      <span className="pill" style={{ background: 'rgba(0,0,0,.45)', backdropFilter: 'blur(10px)', color: '#fff' }}>
+                        <Calendar size={8} />
+                        {trip.date ? new Date(trip.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).toUpperCase() : ''}
+                      </span>
                     </div>
 
-                    <div className="absolute bottom-0 left-0 right-0 px-5 pb-5">
-                      <h1 className="text-[28px] font-black text-white leading-[1.1] tracking-tight" style={{ textShadow: '0 2px 20px rgba(0,0,0,0.5)' }}>
+                    <div className="absolute bottom-0 left-0 right-0 px-3 pb-2.5">
+                      <h3 className="text-[15px] font-extrabold text-white leading-tight tracking-tight" style={{ textShadow: '0 1px 8px rgba(0,0,0,.4)' }}>
                         {trip.title}
-                      </h1>
-                      {trip.destination && (
-                        <div className="flex items-center gap-1.5 mt-2">
-                          <MapPin size={11} className="text-[#FFC857]" />
-                          <span className="text-[12px] text-white/70 font-medium">{trip.destination}</span>
-                        </div>
-                      )}
-                      {trip._count && (
-                        <div className="flex items-center gap-3 mt-3">
-                          <div className="flex items-center gap-1.5 text-[11px] text-white/50">
-                            <Users size={11} /> {trip._count.participants} participante{trip._count.participants !== 1 ? 's' : ''}
-                          </div>
-                          <div className="flex items-center gap-1.5 text-[11px] text-white/50">
-                            <Star size={11} /> {trip._count.likes} like{trip._count.likes !== 1 ? 's' : ''}
-                          </div>
-                        </div>
-                      )}
+                      </h3>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {trip.destination && (
+                          <span className="flex items-center gap-0.5 text-[10px] text-white/60">
+                            <MapPin size={8} className="text-[#FFC857]" /> {trip.destination}
+                          </span>
+                        )}
+                        {trip._count && (
+                          <>
+                            <span className="flex items-center gap-0.5 text-[10px] text-white/40"><Users size={8} /> {trip._count.participants}</span>
+                            <span className="flex items-center gap-0.5 text-[10px] text-white/40"><Star size={8} /> {trip._count.likes}</span>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
               })}
             </div>
             {highlightedTrips.length > 1 && (
-              <div className="flex justify-center gap-1.5 mt-3">
+              <div className="flex justify-center gap-1 mt-1.5">
                 {highlightedTrips.map((_: any, i: number) => (
-                  <div key={i} className={`h-1.5 rounded-full transition-all duration-300 ${i === activeTripIdx ? 'bg-[#FFC857] w-5' : 'bg-white/20 w-1.5'}`} />
+                  <div key={i} className={`h-[4px] rounded-full transition-all duration-300 ${i === activeTripIdx ? 'bg-[#00C2A8] w-4' : 'bg-[var(--border)] w-[4px]'}`} />
                 ))}
               </div>
             )}
           </div>
-        )}
+        ) : !tripsLoaded ? (
+          <div className="px-3 mb-2 ani"><div className="h-[110px] sh" style={{ borderRadius: '16px' }} /></div>
+        ) : null}
 
-
-        {/* ── MINHAS COTAS ── */}
-        <div className="px-5 mt-8">
-          <div className="flex items-center gap-3 mb-5 lx-fade lx-fade-2">
-            <div className="w-[3px] h-5 rounded-full bg-gradient-to-b from-[#FFC857] to-[#FFB020]" />
-            <h2 className="text-[13px] font-black uppercase tracking-[0.15em] text-[var(--text)]">Minhas Cotas</h2>
-            <div className="flex-1 h-px bg-gradient-to-r from-[var(--border)] to-transparent" />
-          </div>
-
-          {/* Pending swap requests */}
-          {pendingSwaps.length > 0 && (
-            <div className="space-y-3 mb-5 lx-fade lx-fade-2">
-              {pendingSwaps.map(swap => {
-                const isResponding = respondingId === swap.id;
-                return (
-                  <div key={swap.id} className="lx-card rounded-3xl p-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/20">
-                        <ArrowLeftRight size={13} className="text-white" />
-                      </div>
-                      <span className="text-[10px] font-black text-amber-500 uppercase tracking-[0.15em]">Solicitação de Troca</span>
+        {/* ══════ SWAP REQUESTS (compact inline) ══════ */}
+        {hasSwaps && (
+          <div className="px-3 mb-2 space-y-2 ani ani-2">
+            {pendingSwaps.map(swap => {
+              const isR = respondingId === swap.id;
+              return (
+                <div key={swap.id} className="gc p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(245,158,11,.1)' }}>
+                      <ArrowLeftRight size={10} className="text-amber-500" />
                     </div>
-                    <p className="text-sm text-[var(--text)]">
-                      <span className="font-bold">{swap.requester.name}</span>
-                      <span className="text-[var(--text-muted)]"> quer trocar no </span>
-                      <span className="font-semibold">{swap.reservation.boat.name}</span>
-                    </p>
-                    <div className="mt-3 rounded-2xl overflow-hidden" style={{ background: 'var(--subtle)', border: '1px solid var(--border)' }}>
-                      <div className="p-3 flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-primary-500/10 flex items-center justify-center flex-shrink-0">
-                          <Calendar size={15} className="text-primary-500" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-[0.15em]">Sua reserva</p>
-                          <p className="text-sm font-bold text-[var(--text)]">
-                            {new Date(swap.reservation.startDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
-                            <span className="font-normal text-[var(--text-muted)]"> · </span>
-                            {new Date(swap.reservation.startDate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} — {new Date(swap.reservation.endDate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center px-4">
-                        <div className="flex-1 h-px bg-[var(--border)]" />
-                        <div className="mx-3 w-7 h-7 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center shadow-lg shadow-primary-500/25">
-                          <ArrowLeftRight size={12} className="text-white rotate-90" />
-                        </div>
-                        <div className="flex-1 h-px bg-[var(--border)]" />
-                      </div>
-                      <div className="p-3 flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center flex-shrink-0">
-                          <Calendar size={15} className="text-amber-500" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-[0.15em]">Reserva de {swap.requester.name}</p>
-                          <p className="text-sm font-bold text-primary-500">
-                            {new Date(swap.offeredReservation.startDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
-                            <span className="font-normal text-[var(--text-muted)]"> · </span>
-                            {new Date(swap.offeredReservation.startDate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} — {new Date(swap.offeredReservation.endDate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    {swap.message && (
-                      <p className="text-xs text-[var(--text-muted)] italic mt-3 px-1">&ldquo;{swap.message}&rdquo;</p>
-                    )}
-                    <div className="flex gap-2.5 mt-4">
-                      <button onClick={() => handleSwapRespond(swap.id, true)} disabled={isResponding}
-                        className="flex-1 bg-gradient-to-r from-emerald-500 to-emerald-400 text-white py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-1.5 active:scale-[0.97] transition-all disabled:opacity-50 shadow-lg shadow-emerald-500/20">
-                        <Check size={15} strokeWidth={2.5} /> Aceitar
-                      </button>
-                      <button onClick={() => handleSwapRespond(swap.id, false)} disabled={isResponding}
-                        className="flex-1 text-red-400 py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-1.5 active:scale-[0.97] transition-all disabled:opacity-50" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}>
-                        <XIcon size={15} strokeWidth={2.5} /> Recusar
-                      </button>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] text-[var(--text)] truncate">
+                        <span className="font-bold">{swap.requester.name.split(' ')[0]}</span>
+                        <span className="text-[var(--text-muted)]"> quer trocar · {swap.reservation.boat.name}</span>
+                      </p>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
+                  <div className="flex items-center gap-1 text-[10px] text-[var(--text-muted)] mb-2 px-1">
+                    <span>{new Date(swap.reservation.startDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}</span>
+                    <ArrowLeftRight size={8} className="text-amber-500 mx-1" />
+                    <span className="text-[#00C2A8]">{new Date(swap.offeredReservation.startDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}</span>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <button onClick={() => handleSwapRespond(swap.id, true)} disabled={isR}
+                      className="flex-1 h-[32px] rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 active:scale-[0.97] transition-all disabled:opacity-50 text-white"
+                      style={{ background: 'linear-gradient(135deg, #10B981, #34D399)' }}>
+                      <Check size={12} strokeWidth={2.5} /> Aceitar
+                    </button>
+                    <button onClick={() => handleSwapRespond(swap.id, false)} disabled={isR}
+                      className="flex-1 h-[32px] rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 active:scale-[0.97] transition-all disabled:opacity-50 text-red-400"
+                      style={{ background: 'rgba(239,68,68,.06)', border: '1px solid rgba(239,68,68,.1)' }}>
+                      <XIcon size={12} strokeWidth={2.5} /> Recusar
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
-          {/* Boats / Cotas */}
+        {/* ══════ MY BOATS / COTAS ══════ */}
+        <div className="ani ani-2">
+          <div className="px-4 mb-2">
+            <SectionLabel icon={<Anchor size={10} />} color="#00C2A8" label="Minhas Embarcações" />
+          </div>
+
           {shares.length === 0 ? (
-            <div className="text-center py-20 lx-fade lx-fade-2">
-              <div className="w-20 h-20 rounded-[28px] mx-auto mb-5 flex items-center justify-center lx-float" style={{ background: 'linear-gradient(135deg, rgba(0,194,168,0.08), rgba(0,117,119,0.04))', border: '1px solid rgba(0,194,168,0.1)' }}>
-                <Anchor size={36} className="text-primary-500/30" />
-              </div>
-              <p className="text-sm font-semibold text-[var(--text-secondary)]">Nenhuma embarcação encontrada</p>
-              <p className="text-xs text-[var(--text-muted)] mt-1">Entre em contato com a administração</p>
-            </div>
+            <EmptyState />
           ) : (
-            <>
+            <div>
               <div
                 ref={cotaScrollRef}
-                className={shares.length > 1 ? 'flex overflow-x-auto snap-x snap-mandatory scrollbar-hide -mx-5' : ''}
+                className={shares.length > 1 ? 'flex overflow-x-auto snap-x snap-mandatory scrollbar-hide gap-2.5 px-3' : 'px-3'}
                 onScroll={shares.length > 1 ? handleCotaScroll : undefined}
               >
                 {shares.map((share, idx) => {
                   const boat = share.boat;
                   const isOwn = boat.notes?.startsWith('[PRÓPRIA]');
-                  const boatCharges = chargesByBoat[boat.id] || { overdue: 0, pending: 0 };
-                  const card = (
+                  const bc = chargesByBoat[boat.id] || { overdue: 0, pending: 0 };
+
+                  return (
                     <div
-                      className={`lx-card rounded-3xl overflow-hidden cursor-pointer active:scale-[0.985] transition-all duration-300 lx-fade lx-fade-${Math.min(idx + 2, 4)}`}
+                      key={share.id}
+                      className={`gc ani ani-${Math.min(idx + 2, 4)} ${shares.length > 1 ? 'flex-shrink-0 snap-center' : ''}`}
+                      style={shares.length > 1 ? { width: 'calc(100% - 12px)', minWidth: 'calc(100% - 12px)' } : undefined}
                       onClick={() => handleBoatClick(boat.id)}
-                      role="button"
-                      tabIndex={0}
+                      role="button" tabIndex={0}
                       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleBoatClick(boat.id); } }}
                     >
-                      {/* Photo */}
-                      {boat.imageUrl ? (
-                        <div className="relative w-full h-48">
-                          <Image src={resolveMediaUrl(boat.imageUrl)} alt={boat.name} fill className="object-cover" sizes="(max-width: 768px) 100vw, 50vw" priority={idx === 0} loading={idx === 0 ? 'eager' : 'lazy'} unoptimized={boat.imageUrl.startsWith('data:')} />
-                          <div className="absolute inset-0" style={{ background: 'linear-gradient(0deg, rgba(10,20,35,0.9) 0%, rgba(10,20,35,0.2) 40%, transparent 70%)' }} />
-                          <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(10,20,35,0.3) 0%, transparent 30%)' }} />
-                          <div className="absolute top-3.5 right-3.5">
-                            <span className={`text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-full ${
-                              isOwn ? 'bg-blue-500/90 text-white shadow-lg shadow-blue-500/25' : 'bg-black/40 backdrop-blur-md text-white'
-                            }`}>
-                              {isOwn ? '✦ Própria' : `Cota#${boat.name}`}
-                            </span>
+                      {/* Image */}
+                      <div className="relative w-full" style={{ height: '160px' }}>
+                        {boat.imageUrl ? (
+                          <>
+                            <Image
+                              src={resolveMediaUrl(boat.imageUrl)} alt={boat.model} fill
+                              className="object-cover" sizes="(max-width:768px) 92vw, 50vw"
+                              priority={idx === 0} loading={idx === 0 ? 'eager' : 'lazy'}
+                              unoptimized={boat.imageUrl.startsWith('data:')}
+                            />
+                            <div className="absolute inset-0" style={{ background: 'linear-gradient(0deg, rgba(0,0,0,.85) 0%, rgba(0,0,0,.1) 55%, rgba(0,0,0,.03) 100%)' }} />
+                          </>
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center" style={{ background: 'linear-gradient(135deg, var(--card), var(--card-hover))' }}>
+                            <Ship size={36} style={{ color: 'var(--text-muted)', opacity: .1, animation: 'float 4s ease-in-out infinite' }} />
                           </div>
-                          <div className="absolute bottom-0 left-0 right-0 p-5">
-                            <p className="text-[12px] text-white/50 font-medium">{boat.model} · {boat.year} · {boat.length}ft</p>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="relative w-full h-36 flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(0,194,168,0.06), rgba(0,117,119,0.02))' }}>
-                          <Ship size={44} className="text-primary-500/15 lx-float" />
-                          <div className="absolute top-3.5 right-3.5">
-                            <span className={`text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-full ${
-                              isOwn ? 'bg-blue-500/90 text-white' : 'lx-gold-bg lx-gold'
-                            }`}>
-                              {isOwn ? '✦ Própria' : `Cota#${boat.name}`}
-                            </span>
-                          </div>
-                          <div className="absolute bottom-0 left-0 right-0 p-5">
-                            <p className="text-[12px] text-[var(--text-muted)] font-medium">{boat.model} · {boat.year}</p>
-                          </div>
-                        </div>
-                      )}
+                        )}
 
-                      {/* KPI Stats */}
-                      <div className="px-4 py-4">
-                        <div className="flex gap-2.5">
-                          {boatCharges.overdue > 0 && (
-                            <div className="flex-1 rounded-2xl p-3 flex items-center gap-2.5" style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.1)' }}>
-                              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(239,68,68,0.15), rgba(239,68,68,0.05))' }}>
-                                <AlertTriangle size={15} className="text-red-400" />
-                              </div>
-                              <div>
-                                <p className="text-[18px] font-black text-red-400 leading-none">{boatCharges.overdue}</p>
-                                <p className="text-[8px] font-bold text-red-400/60 uppercase tracking-[0.15em] mt-1">Vencida{boatCharges.overdue > 1 ? 's' : ''}</p>
-                              </div>
-                            </div>
-                          )}
-                          <div className="flex-1 rounded-2xl p-3 flex items-center gap-2.5" style={{ background: 'var(--subtle)', border: '1px solid var(--border)' }}>
-                            <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(0,194,168,0.1), rgba(0,194,168,0.03))' }}>
-                              <FileText size={15} className="text-primary-500/70" />
-                            </div>
-                            <div>
-                              <p className="text-[18px] font-black text-[var(--text)] leading-none">{boatCharges.pending}</p>
-                              <p className="text-[8px] font-bold text-[var(--text-muted)] uppercase tracking-[0.15em] mt-1">Fatura{boatCharges.pending !== 1 ? 's' : ''}</p>
-                            </div>
-                          </div>
-                          <div className="flex-1 rounded-2xl p-3 flex items-center gap-2.5" style={{ background: 'var(--subtle)', border: '1px solid var(--border)' }}>
-                            <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(255,200,87,0.12), rgba(255,200,87,0.04))' }}>
-                              <DollarSign size={15} style={{ color: '#FFC857', opacity: 0.7 }} />
-                            </div>
-                            <div>
-                              <p className="text-[15px] font-black text-[var(--text)] leading-none">R$ {Number(boat.monthlyFee || 0).toLocaleString('pt-BR')}</p>
-                              <p className="text-[8px] font-bold text-[var(--text-muted)] uppercase tracking-[0.15em] mt-1">Mensal</p>
-                            </div>
+                        <div className="absolute top-2 right-2">
+                          <span className={`pill ${isOwn ? 'tag-own' : 'tag-cota'}`}>
+                            {isOwn ? '✦ Própria' : `Cota #${boat.name}`}
+                          </span>
+                        </div>
+
+                        <div className="absolute bottom-0 left-0 right-0 px-3 pb-2.5">
+                          <h3 className="text-[17px] font-extrabold text-white leading-tight tracking-tight">
+                            {boat.model}
+                          </h3>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[10px] text-white/50 font-medium">{boat.year}</span>
+                            {boat.length > 0 && (
+                              <>
+                                <span className="w-[2px] h-[2px] rounded-full bg-white/25" />
+                                <span className="text-[10px] text-white/50 font-medium">{boat.length}ft</span>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
+
+                      {/* Stats row */}
+                      {bc.overdue > 0 && (
+                        <div className="p-2 flex gap-1.5">
+                          <div className="sc" style={{ background: 'rgba(239,68,68,.05)', border: '1px solid rgba(239,68,68,.08)' }}>
+                            <div className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(239,68,68,.1)' }}>
+                              <AlertTriangle size={11} className="text-red-400" />
+                            </div>
+                            <div>
+                              <p className="text-[13px] font-extrabold text-red-400 leading-none">{bc.overdue}</p>
+                              <p className="text-[7px] font-bold text-red-400/50 uppercase tracking-[0.06em]">Vencida{bc.overdue > 1 ? 's' : ''}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  );
-                  return shares.length > 1 ? (
-                    <div key={share.id} className="flex-shrink-0 snap-center px-5" style={{ minWidth: '100%' }}>
-                      {card}
-                    </div>
-                  ) : (
-                    <div key={share.id}>{card}</div>
                   );
                 })}
               </div>
               {shares.length > 1 && (
-                <div className="flex justify-center gap-1.5 mt-4">
+                <div className="flex justify-center gap-1 mt-2 mb-1">
                   {shares.map((_: any, i: number) => (
-                    <div key={i} className={`h-1.5 rounded-full transition-all duration-300 ${i === activeCotaIdx ? 'bg-[#FFC857] w-5' : 'bg-[var(--border)] w-1.5'}`} />
+                    <div key={i} className={`h-[4px] rounded-full transition-all duration-300 ${i === activeCotaIdx ? 'bg-[#00C2A8] w-4' : 'bg-[var(--border)] w-[4px]'}`} />
                   ))}
                 </div>
               )}
-            </>
+            </div>
           )}
         </div>
 
-        {/* Confirm arrival modal */}
+        {/* ══════ RESERVATIONS MANAGER ══════ */}
+        <ReservationsManager />
+
+        {/* ══════ CONFIRM ARRIVAL MODAL ══════ */}
         {showConfirmArrival && confirmReservation && (
-          <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-end" onClick={() => setShowConfirmArrival(false)}>
-            <div className="w-full rounded-t-[28px] p-6 max-h-[85vh] overflow-auto lx-card" onClick={e => e.stopPropagation()}>
-              <div className="w-10 h-1 bg-white/10 rounded-full mx-auto mb-5" />
-              <div className="flex items-center justify-between mb-5">
-                <div>
-                  <h2 className="text-lg font-black text-[var(--text)]">Confirmar Presença</h2>
-                  <p className="text-sm text-[var(--text-muted)]">
-                    {confirmReservation.boat?.name} · {format(parseISO(confirmReservation.startDate), "dd/MM 'às' HH:mm")} — {format(parseISO(confirmReservation.endDate), 'HH:mm')}
+          <div className="fixed inset-0 z-[10001] flex items-end" style={{ background: 'rgba(0,0,0,.6)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)' }} onClick={() => setShowConfirmArrival(false)}>
+            <div
+              className="w-full max-h-[85vh] overflow-auto"
+              style={{ background: 'var(--card)', borderTop: '1px solid var(--border)', borderRadius: '20px 20px 0 0', paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="p-4">
+                <div className="w-8 h-1 rounded-full mx-auto mb-4" style={{ background: 'var(--border)' }} />
+
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-[15px] font-extrabold text-[var(--text)]">Confirmar Presença</h2>
+                    <p className="text-[11px] text-[var(--text-muted)] mt-px">
+                      {confirmReservation.boat?.name} · {format(parseISO(confirmReservation.startDate), "dd/MM 'às' HH:mm")} — {format(parseISO(confirmReservation.endDate), 'HH:mm')}
+                    </p>
+                  </div>
+                  <button onClick={() => setShowConfirmArrival(false)} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: 'var(--subtle)' }}>
+                    <XIcon size={12} className="text-[var(--text-muted)]" />
+                  </button>
+                </div>
+
+                {confirmError && (
+                  <div className="mb-3 p-2.5 rounded-xl text-[11px] text-red-400 flex items-start gap-2" style={{ background: 'rgba(239,68,68,.05)', border: '1px solid rgba(239,68,68,.08)' }}>
+                    <AlertCircle size={12} className="mt-0.5 flex-shrink-0" /> <span>{confirmError}</span>
+                  </div>
+                )}
+
+                <div className="rounded-xl p-3 mb-4" style={{ background: 'rgba(16,185,129,.04)', border: '1px solid rgba(16,185,129,.08)' }}>
+                  <p className="text-[12px] text-emerald-400 font-semibold mb-0.5">
+                    {confirmReservation && isToday(parseISO(confirmReservation.startDate)) ? 'Confirmando sua presença hoje' : 'Confirmando sua presença'}
                   </p>
+                  <p className="text-[10px] text-[var(--text-muted)] leading-relaxed">A vaga é sua. Suplentes inscritos serão dispensados automaticamente.</p>
                 </div>
-                <button onClick={() => setShowConfirmArrival(false)} className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: 'var(--subtle)' }}>
-                  <XIcon size={16} className="text-[var(--text-secondary)]" />
-                </button>
-              </div>
-              {confirmError && (
-                <div className="mb-4 p-3 rounded-2xl text-sm text-red-400 flex items-start gap-2" style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.12)' }}>
-                  <AlertCircle size={16} className="mt-0.5 flex-shrink-0" /> <span>{confirmError}</span>
-                </div>
-              )}
-              <div className="space-y-5">
-                <div className="rounded-2xl p-4" style={{ background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.12)' }}>
-                  <p className="text-sm text-emerald-400 font-semibold mb-1">Confirmando sua presença hoje</p>
-                  <p className="text-xs text-[var(--text-muted)]">Informe o horário aproximado de chegada à marina. A equipe preparará o jet ski.</p>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-[0.15em] mb-2">Horário previsto de chegada</label>
+
+                <div className="mb-4">
+                  <label className="block text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-[0.1em] mb-1.5">Horário de chegada</label>
                   <select value={arrivalTime} onChange={e => setArrivalTime(e.target.value)}
-                    className="w-full px-4 py-3 rounded-2xl text-sm focus:ring-2 focus:ring-emerald-500/20 transition" style={{ background: 'var(--subtle)', border: '1px solid var(--border)', color: 'var(--text)' }}>
+                    className="w-full px-3 py-2.5 rounded-xl text-[13px] transition outline-none"
+                    style={{ background: 'var(--subtle)', border: '1px solid var(--border)', color: 'var(--text)' }}>
                     {HOURS.map(h => <option key={h} value={h}>{h}</option>)}
                   </select>
                 </div>
+
                 <button onClick={handleConfirmArrival} disabled={confirmSaving}
-                  className="w-full bg-gradient-to-r from-emerald-500 to-emerald-400 text-white py-3.5 rounded-2xl font-bold disabled:opacity-50 active:scale-[0.98] transition-transform flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20">
-                  {confirmSaving ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <CheckCircle2 size={18} />}
+                  className="w-full h-[42px] rounded-xl font-bold text-[13px] disabled:opacity-50 active:scale-[0.98] transition-all flex items-center justify-center gap-2 text-white"
+                  style={{ background: 'linear-gradient(135deg, #10B981, #34D399)' }}>
+                  {confirmSaving ? <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <CheckCircle2 size={14} />}
                   {confirmSaving ? 'Confirmando...' : 'Confirmar Presença'}
                 </button>
               </div>
@@ -560,8 +585,33 @@ export default function BoatsPage() {
           </div>
         )}
 
-        {/* Floating Weather Widget removed */}
       </div>
     </>
+  );
+}
+
+/* ═══ Sub-components ═══ */
+
+function SectionLabel({ icon, color, label }: { icon: React.ReactNode; color: string; label: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div className="w-5 h-5 rounded-md flex items-center justify-center" style={{ background: `${color}12`, color }}>
+        {icon}
+      </div>
+      <h2 className="text-[10px] font-extrabold uppercase tracking-[0.1em] text-[var(--text)]">{label}</h2>
+      <div className="flex-1 h-px" style={{ background: 'linear-gradient(90deg, var(--border), transparent)' }} />
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="text-center py-10 px-5 flex-1 flex flex-col items-center justify-center">
+      <div className="w-14 h-14 rounded-2xl mx-auto mb-3 flex items-center justify-center" style={{ animation: 'float 4s ease-in-out infinite', background: 'linear-gradient(135deg, rgba(0,194,168,.06), rgba(0,117,119,.02))', border: '1px solid rgba(0,194,168,.08)' }}>
+        <Anchor size={24} style={{ color: '#00C2A8', opacity: .2 }} />
+      </div>
+      <p className="text-[12px] font-semibold text-[var(--text-secondary)]">Nenhuma embarcação encontrada</p>
+      <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Entre em contato com a administração</p>
+    </div>
   );
 }

@@ -178,10 +178,16 @@ export function PieList({ items, labelKey, valueKey, total }: { items: any[]; la
 }
 
 export function useReportDates() {
-  const now = new Date();
-  const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-  const [from, setFrom] = useState(sixMonthsAgo.toISOString().split('T')[0]);
-  const [to, setTo] = useState(now.toISOString().split('T')[0]);
+  // Use Brazil/Sao_Paulo timezone for date defaults
+  const nowBrt = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+  const y = nowBrt.getFullYear();
+  const m = nowBrt.getMonth();
+  const d = nowBrt.getDate();
+  const sixMonthsAgo = new Date(y, m - 5, 1);
+  const todayStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  const sixMonthsStr = `${sixMonthsAgo.getFullYear()}-${String(sixMonthsAgo.getMonth() + 1).padStart(2, '0')}-${String(sixMonthsAgo.getDate()).padStart(2, '0')}`;
+  const [from, setFrom] = useState(sixMonthsStr);
+  const [to, setTo] = useState(todayStr);
   return { from, to, setFrom, setTo };
 }
 

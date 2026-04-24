@@ -1,6 +1,6 @@
 /* Prize Clube — Push Notification + Runtime Cache Service Worker */
 
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const IMG_CACHE = `pc-images-${CACHE_VERSION}`;
 const STATIC_CACHE = `pc-static-${CACHE_VERSION}`;
 const API_CACHE = `pc-api-${CACHE_VERSION}`;

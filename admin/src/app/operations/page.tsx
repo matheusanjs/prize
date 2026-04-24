@@ -19,6 +19,48 @@ import type { JetSki3DSketchRef, InitialMark } from '@/components/JetSki3DSketch
 const JetSki3DSketch = dynamic(() => import('@/components/JetSki3DSketch'), { ssr: false }) as any;
 const JetSki3DMarkViewer = dynamic(() => import('@/components/JetSki3DMarkViewer'), { ssr: false }) as any;
 
+/** Compress and resize image file before converting to base64. Max 1200px, JPEG 0.7 quality. */
+async function compressImage(file: File, maxSize = 1200, quality = 0.7): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Failed to load image')); };
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      try {
+        // Aggressively downsize for iOS memory safety
+        let w = img.width, h = img.height;
+        if (w > maxSize || h > maxSize) {
+          if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
+          else { w = Math.round(w * maxSize / h); h = maxSize; }
+        }
+        // Cap total pixels to ~2MP to avoid iOS canvas memory crash
+        const maxPixels = 2_000_000;
+        const totalPixels = w * h;
+        if (totalPixels > maxPixels) {
+          const ratio = Math.sqrt(maxPixels / totalPixels);
+          w = Math.round(w * ratio);
+          h = Math.round(h * ratio);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      } catch (e) {
+        // If canvas fails (iOS memory), try with smaller dimensions
+        try {
+          const w2 = 640, h2 = Math.round((img.height / img.width) * 640);
+          const canvas2 = document.createElement('canvas');
+          canvas2.width = w2; canvas2.height = h2;
+          canvas2.getContext('2d')!.drawImage(img, 0, 0, w2, h2);
+          resolve(canvas2.toDataURL('image/jpeg', 0.5));
+        } catch { reject(e); }
+      }
+    };
+    img.src = url;
+  });
+}
+
 const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || 'https://api.marinaprizeclub.com/api/v1').replace(/\/api\/v1$/, '');
 function resolveMediaUrl(url: string | undefined | null): string {
   if (!url) return '';
@@ -877,12 +919,15 @@ function ChecklistWizardModal({ existingChecklist, preSelectedReservation, onClo
   const [lifeVestsLoaned, setLifeVestsLoaned] = useState(existingChecklist?.lifeVestsLoaned || 0);
   const [videoFile, setVideoFile]   = useState<File | null>(null);
   const [fuelPhotoFile, setFuelPhotoFile] = useState<File | null>(null);
+  const [fuelPhotoDataUrl, setFuelPhotoDataUrl] = useState<string | null>(null);
   const [sketchUrl, setSketchUrl]   = useState<string | undefined>();
   const [sketchMarks, setSketchMarks] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError]           = useState('');
   const [overdueCharges, setOverdueCharges] = useState<{ description: string; amount: number; dueDate: string; userName?: string }[]>([]);
   const sketchRef = useRef<JetSki3DSketchRef>(null);
+  const fuelFileRef = useRef<HTMLInputElement>(null);
+  const videoFileRef = useRef<HTMLInputElement>(null);
 
   async function fetchOverdueCharges(boatId: string, userId?: string | null) {
     try {
@@ -978,18 +1023,32 @@ function ChecklistWizardModal({ existingChecklist, preSelectedReservation, onClo
     setStep('fuel');
   }
 
+  // Handle fuel photo selection — compress immediately to avoid mobile memory crash
+  async function handleFuelPhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFuelPhotoFile(file);
+    try {
+      const compressed = await compressImage(file, 1200, 0.7);
+      setFuelPhotoDataUrl(compressed);
+    } catch {
+      // Fallback: read raw
+      const reader = new FileReader();
+      reader.onload = ev => setFuelPhotoDataUrl(ev.target?.result as string);
+      reader.readAsDataURL(file);
+    }
+  }
+
   async function handleSubmit() {
     if (!checklistId) return;
     setSubmitting(true); setError('');
     try {
       const hullSketchUrl = sketchUrl;
       let videoUrl: string | undefined;
-      let fuelPhotoUrl: string | undefined;
+      const fuelPhotoUrl = fuelPhotoDataUrl || undefined; // already compressed on selection
       if (videoFile) {
+        if (videoFile.size > 50 * 1024 * 1024) throw new Error('Vídeo muito grande. Máximo 50MB.');
         videoUrl = await new Promise<string>(resolve => { const r = new FileReader(); r.onload = e => resolve(e.target?.result as string); r.readAsDataURL(videoFile); });
-      }
-      if (fuelPhotoFile) {
-        fuelPhotoUrl = await new Promise<string>(resolve => { const r = new FileReader(); r.onload = e => resolve(e.target?.result as string); r.readAsDataURL(fuelPhotoFile); });
       }
       await submitPreLaunch(checklistId, { items: itemsData, hullSketchUrl, hullSketchMarks: sketchMarks, videoUrl, fuelPhotoUrl, additionalObservations: observations || undefined, lifeVestsLoaned });
       setStep('success');
@@ -1215,38 +1274,38 @@ function ChecklistWizardModal({ existingChecklist, preSelectedReservation, onClo
                 <h3 className="text-sm font-bold text-th">Foto do Tanque de Combustível</h3>
                 <p className="text-xs text-th-muted mt-1">Tire uma foto do medidor de combustível ou abra a câmera do dispositivo</p>
               </div>
-              {!fuelPhotoFile ? (
-                <label className="flex flex-col items-center justify-center gap-3 p-10 border-2 border-dashed border-th rounded-2xl cursor-pointer hover:border-orange-400 transition-colors">
+              {!fuelPhotoDataUrl ? (
+                <div className="flex flex-col items-center justify-center gap-3 p-10 border-2 border-dashed border-th rounded-2xl cursor-pointer hover:border-orange-400 transition-colors" onClick={() => fuelFileRef.current?.click()}>
                   <span className="text-5xl">⛽</span>
                   <div className="text-center">
                     <p className="text-sm font-medium text-th">Abrir câmera ou selecionar foto</p>
                     <p className="text-xs text-th-muted mt-1">JPG, PNG, HEIC · Foto do nível do tanque</p>
                   </div>
-                  <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => setFuelPhotoFile(e.target.files?.[0] || null)} />
-                </label>
+                  <input ref={fuelFileRef} type="file" accept="image/*" className="hidden" onChange={handleFuelPhotoSelect} />
+                </div>
               ) : (
                 <div className="space-y-3">
                   <div className="rounded-xl overflow-hidden border border-th">
-                    <img src={URL.createObjectURL(fuelPhotoFile)} alt="Tanque" className="w-full object-contain max-h-56" />
+                    <img src={fuelPhotoDataUrl} alt="Tanque" className="w-full object-contain max-h-56" />
                   </div>
                   <div className="bg-th-bg border border-th rounded-xl p-3 flex items-center gap-3">
                     <span className="text-xl">⛽</span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-th truncate">{fuelPhotoFile.name}</p>
-                      <p className="text-xs text-th-muted">{(fuelPhotoFile.size/1024/1024).toFixed(1)} MB</p>
+                      <p className="text-sm font-semibold text-th truncate">{fuelPhotoFile?.name || 'foto-comprimida.jpg'}</p>
+                      <p className="text-xs text-th-muted">{fuelPhotoFile ? (fuelPhotoFile.size/1024/1024).toFixed(1) + ' MB' : 'Comprimido'}</p>
                     </div>
-                    <button onClick={() => setFuelPhotoFile(null)} className="p-1.5 hover:bg-th-card rounded-lg text-th-muted"><X className="w-4 h-4" /></button>
+                    <button onClick={() => { setFuelPhotoFile(null); setFuelPhotoDataUrl(null); }} className="p-1.5 hover:bg-th-card rounded-lg text-th-muted"><X className="w-4 h-4" /></button>
                   </div>
                 </div>
               )}
               <div className="flex gap-2">
                 <button onClick={() => setStep('sketch')} className="flex items-center gap-2 px-4 py-2.5 border border-th text-th-muted rounded-xl text-sm hover:bg-th-bg transition-colors"><ChevronLeft className="w-4 h-4" />Voltar</button>
-                <button onClick={() => setStep('video')} disabled={!fuelPhotoFile}
+                <button onClick={() => setStep('video')} disabled={!fuelPhotoDataUrl}
                   className="flex-1 py-2.5 bg-orange-500 disabled:bg-th-muted/30 disabled:text-th-muted text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-colors">
                   Próximo: Vídeo <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
-              <button onClick={() => setStep('video')} className="w-full text-center text-xs text-th-muted hover:text-th underline underline-offset-2">
+              <button onClick={() => { setFuelPhotoFile(null); setFuelPhotoDataUrl(null); setStep('video'); }} className="w-full text-center text-xs text-th-muted hover:text-th underline underline-offset-2">
                 Pular foto do tanque
               </button>
             </div>
@@ -1257,11 +1316,11 @@ function ChecklistWizardModal({ existingChecklist, preSelectedReservation, onClo
             <div className="space-y-4">
               <p className="text-xs text-th-muted">Opcional — grave ou selecione um vídeo da embarcação</p>
               {!videoFile ? (
-                <label className="flex flex-col items-center justify-center gap-3 p-10 border-2 border-dashed border-th rounded-2xl cursor-pointer hover:border-orange-400 transition-colors">
+                <div className="flex flex-col items-center justify-center gap-3 p-10 border-2 border-dashed border-th rounded-2xl cursor-pointer hover:border-orange-400 transition-colors" onClick={() => videoFileRef.current?.click()}>
                   <Video className="w-10 h-10 text-th-muted opacity-40" />
                   <div className="text-center"><p className="text-sm font-medium text-th">Selecionar ou gravar vídeo</p><p className="text-xs text-th-muted mt-1">MP4, MOV · máx. 100MB</p></div>
-                  <input type="file" accept="video/*" capture="environment" className="hidden" onChange={e => setVideoFile(e.target.files?.[0] || null)} />
-                </label>
+                  <input ref={videoFileRef} type="file" accept="video/*" className="hidden" onChange={e => setVideoFile(e.target.files?.[0] || null)} />
+                </div>
               ) : (
                 <div className="bg-th-bg border border-th rounded-2xl p-4 flex items-center gap-3">
                   <Video className="w-8 h-8 text-orange-500 flex-shrink-0" />
@@ -1286,7 +1345,7 @@ function ChecklistWizardModal({ existingChecklist, preSelectedReservation, onClo
                   ['Embarcação', selectedBoatName],
                   ['Itens verificados', `${itemsData.filter(i => i.checked).length}/${itemsData.length} ✓`],
                   ['Croqui do casco', 'Incluído'],
-                  ['⛽ Tanque', fuelPhotoFile ? fuelPhotoFile.name : 'Não incluído'],
+                  ['⛽ Tanque', fuelPhotoDataUrl ? 'Foto selecionada' : 'Não incluído'],
                   ['Vídeo', videoFile ? videoFile.name : 'Não incluído'],
                   ...(lifeVestsLoaned > 0 ? [['🦺 Coletes emprestados', `${lifeVestsLoaned} colete${lifeVestsLoaned > 1 ? 's' : ''}`]] : []),
                 ].map(([k, v]) => (
@@ -1365,13 +1424,19 @@ function ReturnInspectionModal({ item, onClose, onConfirm }: {
   const lifeVests = launchCL?.lifeVestsLoaned || 0;
   const launchMarks = launchCL?.hullSketchMarks;
 
-  const handleFuelPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFuelPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setFuelPhotoFile(file);
-    const reader = new FileReader();
-    reader.onload = ev => setFuelPreview(ev.target?.result as string);
-    reader.readAsDataURL(file);
+    // Compress for preview (saves memory on mobile)
+    try {
+      const compressed = await compressImage(file, 800, 0.6);
+      setFuelPreview(compressed);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = ev => setFuelPreview(ev.target?.result as string);
+      reader.readAsDataURL(file);
+    }
   };
 
   const captureSketch = () => {
@@ -1389,12 +1454,7 @@ function ReturnInspectionModal({ item, onClose, onConfirm }: {
 
   const handleSubmit = async () => {
     setSubmitting(true);
-    let returnFuelPhotoUrl: string | undefined;
-    if (fuelPhotoFile) {
-      returnFuelPhotoUrl = await new Promise<string>(resolve => {
-        const r = new FileReader(); r.onload = e => resolve(e.target?.result as string); r.readAsDataURL(fuelPhotoFile);
-      });
-    }
+    const returnFuelPhotoUrl = fuelPreview || undefined; // already compressed on selection
     let returnDamageVideoUrl: string | undefined;
     if (damageVideoFile) {
       returnDamageVideoUrl = await new Promise<string>(resolve => {
@@ -1483,7 +1543,7 @@ function ReturnInspectionModal({ item, onClose, onConfirm }: {
               <JetSki3DSketch ref={sketchRef} initialMarks={launchMarks ? (JSON.parse(launchMarks) as InitialMark[]) : undefined} markColor="#39ff14" />
               <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-300 dark:border-amber-500/30 rounded-xl">
                 <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-2">🎥 Vídeo da avaria (opcional)</p>
-                <input type="file" accept="video/*" capture="environment" onChange={handleDamageVideo}
+                <input type="file" accept="video/*" onChange={handleDamageVideo}
                   className="block w-full text-sm text-th-muted file:mr-4 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-amber-500 file:text-white file:font-medium file:cursor-pointer file:text-xs" />
                 {damageVideoPreview && (
                   <video src={damageVideoPreview} controls className="mt-2 w-full max-h-40 rounded-lg" />
@@ -1501,7 +1561,7 @@ function ReturnInspectionModal({ item, onClose, onConfirm }: {
               <p className="text-sm font-semibold text-th">📸 Foto do Tanque de Combustível</p>
               <p className="text-xs text-th-muted">Tire uma foto do medidor de combustível para registro de retorno.</p>
               <div className="border-2 border-dashed border-th rounded-xl p-4">
-                <input type="file" accept="image/*" capture="environment" onChange={handleFuelPhoto}
+                <input type="file" accept="image/*" onChange={handleFuelPhoto}
                   className="block w-full text-sm text-th-muted file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-blue-500 file:text-white file:font-medium file:cursor-pointer" />
                 {fuelPreview && (
                   <div className="mt-3">

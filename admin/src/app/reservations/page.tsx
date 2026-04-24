@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Calendar, ChevronLeft, ChevronRight, Plus, X, Ship, User, Clock, AlertTriangle, Search, ChevronDown, Wind, Droplets, CloudRain } from 'lucide-react';
-import { getReservations, getBoats, getUsers, createReservation, cancelReservation, getWeatherForecast, getWeatherCurrent } from '@/services/api';
+import { Calendar, ChevronLeft, ChevronRight, Plus, X, Ship, User, Clock, AlertTriangle, Search, ChevronDown, Wind, Droplets, CloudRain, Anchor, CheckCircle, XCircle } from 'lucide-react';
+import { getReservations, getBoats, getUsers, createReservation, cancelReservation, getWeatherForecast, getWeatherCurrent, getFreeBoats } from '@/services/api';
 import { useReservationPolling } from '@/hooks/useReservationPolling';
 import { saveCalendarCache, loadCalendarCache } from '@/utils/calendarCache';
 
@@ -66,10 +66,17 @@ export default function ReservationsPage() {
   const [userSearch, setUserSearch] = useState('');
   const [showBoatDrop, setShowBoatDrop] = useState(false);
   const [showUserDrop, setShowUserDrop] = useState(false);
-  const [form, setForm] = useState({ boatId: '', userId: '', startDate: '', startTime: '08:00', endDate: '', endTime: '18:00', notes: '' });
+  const [form, setForm] = useState({ boatId: '', userId: '', startDate: '', startTime: '09:00', endDate: '', endTime: '17:00', notes: '' });
   const [forecastMap, setForecastMap] = useState<Record<string, ForecastDay>>({});
   const [currentWeather, setCurrentWeather] = useState<CurrentWeather | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [showFreeBoats, setShowFreeBoats] = useState(false);
+  const [freeBoatsDate, setFreeBoatsDate] = useState(() => {
+    const brt = new Date(today.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    return `${brt.getFullYear()}-${String(brt.getMonth() + 1).padStart(2, '0')}-${String(brt.getDate()).padStart(2, '0')}`;
+  });
+  const [freeBoatsResults, setFreeBoatsResults] = useState<any[]>([]);
+  const [freeBoatsLoading, setFreeBoatsLoading] = useState(false);
 
   async function loadData() {
     try {
@@ -200,9 +207,7 @@ export default function ReservationsPage() {
 
   function openCreate(date?: string) {
     const d = date || dateKey(today);
-    const next = new Date(d + 'T12:00:00');
-    next.setDate(next.getDate() + 1);
-    setForm({ boatId: '', userId: '', startDate: d, startTime: '08:00', endDate: dateKey(next), endTime: '18:00', notes: '' });
+    setForm({ boatId: '', userId: '', startDate: d, startTime: '09:00', endDate: d, endTime: '17:00', notes: '' });
     setBoatSearch('');
     setUserSearch('');
     setShowBoatDrop(false);
@@ -252,6 +257,31 @@ export default function ReservationsPage() {
   );
   const activeCount = reservations.filter((r) => r.status === 'CONFIRMED' || r.status === 'IN_USE').length;
 
+  async function handleSearchFreeBoats() {
+    if (!freeBoatsDate) return;
+    setFreeBoatsLoading(true);
+    try {
+      const res = await getFreeBoats(freeBoatsDate);
+      setFreeBoatsResults(Array.isArray(res.data) ? res.data : res.data?.data || []);
+    } catch {
+      setFreeBoatsResults([]);
+    } finally {
+      setFreeBoatsLoading(false);
+    }
+  }
+
+  function openCreateFromFreeBoat(boatId: string) {
+    const d = freeBoatsDate;
+    const boat = boats.find((b) => b.id === boatId);
+    setForm({ boatId, userId: '', startDate: d, startTime: '09:00', endDate: d, endTime: '17:00', notes: '' });
+    setBoatSearch(boat ? `${boat.name} — ${boat.model}` : '');
+    setUserSearch('');
+    setShowBoatDrop(false);
+    setShowUserDrop(false);
+    setShowFreeBoats(false);
+    setShowCreate(true);
+  }
+
   return (
     <div>
       {/* Header */}
@@ -263,9 +293,14 @@ export default function ReservationsPage() {
           </h1>
           <p className="text-th-muted text-sm mt-1">{reservations.length} reservas • {activeCount} ativas</p>
         </div>
-        <button onClick={() => openCreate()} className="flex items-center gap-2 bg-primary-500 text-white px-4 py-2.5 rounded-lg font-medium hover:bg-primary-600 transition text-sm">
-          <Plus size={16} /> Nova Reserva
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={() => { setShowFreeBoats(true); handleSearchFreeBoats(); }} className="flex items-center gap-2 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-4 py-2.5 rounded-lg font-medium hover:bg-emerald-500/20 transition text-sm border border-emerald-500/20">
+            <Anchor size={16} /> Embarcações Livres
+          </button>
+          <button onClick={() => openCreate()} className="flex items-center gap-2 bg-primary-500 text-white px-4 py-2.5 rounded-lg font-medium hover:bg-primary-600 transition text-sm">
+            <Plus size={16} /> Nova Reserva
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -542,6 +577,161 @@ export default function ReservationsPage() {
         </div>
       </div>
 
+      {/* Free Boats Search Modal */}
+      {showFreeBoats && (
+        <div className="fixed inset-0 bg-th-overlay flex items-center justify-center z-50 p-4" onClick={() => setShowFreeBoats(false)}>
+          <div className="bg-th-card rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-6 border-b border-th">
+              <div className="flex items-center gap-2">
+                <Anchor className="text-emerald-500" size={20} />
+                <h2 className="text-lg font-bold text-th">Embarcações Livres</h2>
+              </div>
+              <button onClick={() => setShowFreeBoats(false)} className="p-1 hover:bg-red-500/10 rounded-lg"><X size={20} className="text-th-muted" /></button>
+            </div>
+
+            {/* Date selector */}
+            <div className="p-6 border-b border-th bg-th-surface">
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-th-secondary mb-1">Selecione a data</label>
+                  <input
+                    type="date"
+                    value={freeBoatsDate}
+                    onChange={(e) => setFreeBoatsDate(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-lg border border-th text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  />
+                </div>
+                <button
+                  onClick={handleSearchFreeBoats}
+                  disabled={freeBoatsLoading || !freeBoatsDate}
+                  className="flex items-center gap-2 bg-emerald-500 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-emerald-600 transition text-sm disabled:opacity-50 mt-5"
+                >
+                  {freeBoatsLoading ? (
+                    <span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                  ) : (
+                    <Search size={16} />
+                  )}
+                  Buscar
+                </button>
+              </div>
+              <p className="text-xs text-th-muted mt-2">
+                Lista todas as embarcações com status disponível e verifica quais estão livres na data selecionada.
+              </p>
+            </div>
+
+            {/* Results */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {freeBoatsLoading ? (
+                <div className="text-center py-12">
+                  <span className="animate-spin w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full mx-auto block mb-3" />
+                  <p className="text-sm text-th-muted">Buscando embarcações livres...</p>
+                </div>
+              ) : freeBoatsResults.length === 0 ? (
+                <div className="text-center py-12">
+                  <Ship size={40} className="mx-auto text-th-muted mb-3" />
+                  <p className="text-th-muted text-sm">Nenhuma embarcação encontrada para esta data</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {/* Summary */}
+                  <div className="flex items-center gap-4 mb-4">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-3 py-1.5 rounded-full">
+                      <CheckCircle size={13} />
+                      {freeBoatsResults.filter((r: any) => r.isFullyFree).length} totalmente livres
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 px-3 py-1.5 rounded-full">
+                      <AlertTriangle size={13} />
+                      {freeBoatsResults.filter((r: any) => !r.isFullyFree).length} com horário parcial
+                    </span>
+                  </div>
+
+                  {freeBoatsResults.map((item: any, idx: number) => {
+                    const boat = item.boat;
+                    const coOwners = boat.shares?.map((s: any) => s.user?.name).filter(Boolean) || [];
+                    return (
+                      <div
+                        key={boat.id || idx}
+                        className={`border rounded-2xl overflow-hidden transition ${
+                          item.isFullyFree
+                            ? 'border-emerald-500/20 bg-emerald-500/5'
+                            : 'border-amber-500/20 bg-amber-500/5'
+                        }`}
+                      >
+                        <div className="flex items-center gap-4 p-4">
+                          {/* Status icon */}
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                            item.isFullyFree
+                              ? 'bg-emerald-500/15 text-emerald-500'
+                              : 'bg-amber-500/15 text-amber-500'
+                          }`}>
+                            {item.isFullyFree ? <CheckCircle size={20} /> : <AlertTriangle size={20} />}
+                          </div>
+
+                          {/* Boat info */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <Ship size={14} className="text-th-muted flex-shrink-0" />
+                              <p className="font-semibold text-th truncate">{boat.name}</p>
+                              <span className="text-xs text-th-muted">— {boat.model} ({boat.year})</span>
+                            </div>
+                            <div className="flex items-center gap-3 mt-1">
+                              <span className={`text-xs font-medium ${
+                                item.isFullyFree ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'
+                              }`}>
+                                {item.isFullyFree
+                                  ? 'Livre o dia todo'
+                                  : `Próximo horário livre: ${item.nextFreeSlot ? new Date(item.nextFreeSlot.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }) + ' – ' + new Date(item.nextFreeSlot.end).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }) : '-'}`
+                                }
+                              </span>
+                              {coOwners.length > 0 && (
+                                <span className="text-[11px] text-th-muted flex items-center gap-1">
+                                  <User size={10} />
+                                  {coOwners.join(', ')}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Create reservation button */}
+                          <button
+                            onClick={() => openCreateFromFreeBoat(boat.id)}
+                            className="flex items-center gap-1.5 bg-primary-500 text-white px-3 py-2 rounded-lg text-xs font-medium hover:bg-primary-600 transition flex-shrink-0"
+                          >
+                            <Plus size={14} /> Reservar
+                          </button>
+                        </div>
+
+                        {/* Existing reservations list */}
+                        {!item.isFullyFree && item.reservations?.length > 0 && (
+                          <div className="border-t border-th/50 px-4 py-3 bg-th-surface/50">
+                            <p className="text-[10px] uppercase tracking-wider text-th-muted font-semibold mb-2">Reservas neste dia</p>
+                            <div className="space-y-1.5">
+                              {item.reservations.map((r: any) => (
+                                <div key={r.id} className="flex items-center gap-2 text-xs">
+                                  <div className={`w-1.5 h-1.5 rounded-full ${
+                                    r.status === 'CONFIRMED' ? 'bg-green-500' : r.status === 'PENDING' ? 'bg-yellow-500' : r.status === 'IN_USE' ? 'bg-blue-500' : 'bg-gray-400'
+                                  }`} />
+                                  <span className="text-th-secondary font-medium">{r.user?.name || '-'}</span>
+                                  <span className="text-th-muted">
+                                    {new Date(r.startDate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}
+                                    {' → '}
+                                    {new Date(r.endDate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Create Reservation Modal */}
       {showCreate && (
         <div className="fixed inset-0 bg-th-overlay flex items-center justify-center z-50 p-4" onClick={() => setShowCreate(false)}>
@@ -614,27 +804,21 @@ export default function ReservationsPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-th-secondary mb-1">Data Início *</label>
-                  <input type="date" value={form.startDate} onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))}
+                  <label className="block text-sm font-medium text-th-secondary mb-1">Data *</label>
+                  <input type="date" value={form.startDate} onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value, endDate: e.target.value }))}
                     className="w-full px-3 py-2.5 rounded-lg border border-th text-sm" />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-th-secondary mb-1">Hora Entrada *</label>
-                  <input type="time" value={form.startTime} onChange={(e) => setForm((f) => ({ ...f, startTime: e.target.value }))}
-                    className="w-full px-3 py-2.5 rounded-lg border border-th text-sm" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-th-secondary mb-1">Data Fim *</label>
-                  <input type="date" value={form.endDate} onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))}
-                    className="w-full px-3 py-2.5 rounded-lg border border-th text-sm" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-th-secondary mb-1">Hora Saída *</label>
-                  <input type="time" value={form.endTime} onChange={(e) => setForm((f) => ({ ...f, endTime: e.target.value }))}
-                    className="w-full px-3 py-2.5 rounded-lg border border-th text-sm" />
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-sm font-medium text-th-secondary mb-1">Entrada *</label>
+                    <input type="time" value={form.startTime} onChange={(e) => setForm((f) => ({ ...f, startTime: e.target.value }))}
+                      className="w-full px-3 py-2.5 rounded-lg border border-th text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-th-secondary mb-1">Saída *</label>
+                    <input type="time" value={form.endTime} onChange={(e) => setForm((f) => ({ ...f, endTime: e.target.value }))}
+                      className="w-full px-3 py-2.5 rounded-lg border border-th text-sm" />
+                  </div>
                 </div>
               </div>
 

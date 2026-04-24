@@ -3,7 +3,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { CreateBoatDto } from './dto/create-boat.dto';
 import { UpdateBoatDto } from './dto/update-boat.dto';
 import { AiService } from '../ai/ai.service';
-import * as PDFDocument from 'pdfkit';
+import PDFDocument from 'pdfkit';
 import { readFileSync, existsSync } from 'fs';
 import { URL } from 'url';
 

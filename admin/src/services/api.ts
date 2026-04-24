@@ -102,6 +102,7 @@ export const getReservations = (params?: { boatId?: string; startDate?: string; 
 export const getBoatReservations = (boatId: string, date?: string) => api.get(`/reservations/boat/${boatId}`, { params: { date } });
 export const createReservation = (data: Record<string, unknown>) => api.post('/reservations', data);
 export const cancelReservation = (id: string, reason?: string) => api.patch(`/reservations/${id}/cancel`, { reason });
+export const getFreeBoats = (date: string) => api.get('/reservations/free-boats', { params: { date } });
 
 // Finance
 export const getCharges = (params?: { status?: string; userId?: string; boatId?: string }) => api.get('/finance/charges', { params });
@@ -136,6 +137,7 @@ export const liftBoat = (queueId: string, returnData?: Record<string, unknown>) 
 export const liftAllBoats = () => api.post('/operations/queue/lift-all');
 export const launchToWater = (queueId: string) => api.patch(`/operations/queue/${queueId}/launch`);
 export const getLastReturnInspection = (boatId: string) => api.get(`/operations/return-inspection/${boatId}`);
+export const getRecentUsers = (boatId: string) => api.get(`/operations/recent-users/${boatId}`);
 export const getChecklistsByBoat = (boatId: string) => api.get(`/operations/checklists/boat/${boatId}`);
 
 // Operations
@@ -150,6 +152,7 @@ export const submitPreLaunch = (checklistId: string, data: Record<string, unknow
 
 // AI
 export const getAiInsights = () => api.get('/ai/insights');
+export const generateAiInsights = () => api.post('/ai/insights/generate');
 export const chatWithAi = (message: string) => api.post('/ai/chat', { message });
 export const getAiUsage = () => api.get('/ai/usage');
 
@@ -271,5 +274,6 @@ export const getReportMaintenance = (from?: string, to?: string) => api.get('/re
 export const getReportOperations = (from?: string, to?: string) => api.get('/reports/operations', { params: { from, to } });
 export const getReportRestaurant = (from?: string, to?: string) => api.get('/reports/restaurant', { params: { from, to } });
 export const getReportClients = (from?: string, to?: string) => api.get('/reports/clients', { params: { from, to } });
+export const getReportPendingFuel = (from?: string, to?: string) => api.get('/reports/pending-fuel', { params: { from, to } });
 
 export default api;

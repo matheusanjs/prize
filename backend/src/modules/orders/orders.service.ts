@@ -1,11 +1,15 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
+import { WooviService } from '../payments/woovi.service';
 
 @Injectable()
 export class OrdersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private wooviService: WooviService,
+  ) {}
 
   async findAll(status?: string, date?: string, restaurantTableId?: string) {
     const where: any = {};
@@ -103,6 +107,78 @@ export class OrdersService {
   async remove(id: string) {
     await this.findOne(id);
     return this.prisma.order.delete({ where: { id } });
+  }
+
+  async createConvenienceOrder(userId: string, dto: {
+    items: { menuItemId: string; quantity: number; notes?: string }[];
+    notes?: string;
+    paymentMethod: 'PIX' | 'PICKUP';
+  }) {
+    // Fetch menu items to get current prices
+    const menuItemIds = dto.items.map(i => i.menuItemId);
+    const menuItems = await this.prisma.menuItem.findMany({
+      where: { id: { in: menuItemIds }, isConvenience: true, isAvailable: true },
+    });
+
+    if (menuItems.length !== dto.items.length) {
+      throw new BadRequestException('Um ou mais itens não estão disponíveis na conveniência');
+    }
+
+    // Fetch user profile for customerName
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('Usuário não encontrado');
+
+    const itemsWithPrice = dto.items.map(i => {
+      const mi = menuItems.find(m => m.id === i.menuItemId)!;
+      return { menuItemId: i.menuItemId, name: mi.name, quantity: i.quantity, unitPrice: mi.price, notes: i.notes };
+    });
+
+    const total = itemsWithPrice.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
+
+    const order = await this.prisma.order.create({
+      data: {
+        type: 'TAKEAWAY' as any,
+        status: 'ANALYSIS' as any,
+        tableNumber: 'APP COTISTA',
+        customerName: user.name,
+        notes: dto.notes,
+        total,
+        paymentMethod: dto.paymentMethod,
+        items: {
+          create: itemsWithPrice.map(i => ({
+            menuItemId: i.menuItemId,
+            name: i.name,
+            quantity: i.quantity,
+            unitPrice: i.unitPrice,
+            notes: i.notes,
+          })),
+        },
+      },
+      include: { items: true },
+    });
+
+    // If PIX, create Woovi charge
+    if (dto.paymentMethod === 'PIX') {
+      try {
+        const valueCents = Math.round(total * 100);
+        const commentItems = itemsWithPrice.map(i => `${i.quantity}x ${i.name}`).join(', ');
+        const comment = `Convenience #${order.number} - ${commentItems}`;
+        const cpf = (user as any).cpf || '';
+        const pix = await this.wooviService.createCharge({
+          value: valueCents,
+          comment,
+          correlationID: `appco-${order.id}`,
+          customerName: user.name,
+          customerTaxId: cpf || undefined,
+        });
+        return { order, pix: { qrCode: pix.charge.qrCodeImage, brCode: pix.charge.brCode, expiresAt: pix.charge.expiresDate } };
+      } catch {
+        // PIX creation failed — return order without PIX (fallback to pickup)
+        return { order, pix: null };
+      }
+    }
+
+    return { order, pix: null };
   }
 
   async getStats() {

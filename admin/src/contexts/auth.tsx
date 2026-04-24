@@ -95,7 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     const { data } = await apiLogin(email, password);
-    if (data.user.role !== 'ADMIN') {
+    if (data.user.role !== 'ADMIN' && data.user.role !== 'OPERATOR') {
       if (data.user.role === 'WAITER') {
         // Redirect waiters to the garcom panel
         const params = new URLSearchParams({

@@ -16,14 +16,14 @@ export class AuthController {
   constructor(private authService: AuthService) {}
 
   @Post('register')
-  @Throttle({ auth: { limit: 5, ttl: 60_000 } })
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @ApiOperation({ summary: 'Registrar novo usuário' })
   async register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
 
   @Post('login')
-  @Throttle({ auth: { limit: 10, ttl: 60_000 } })
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login' })
   async login(@Body() dto: LoginDto) {
@@ -31,7 +31,7 @@ export class AuthController {
   }
 
   @Post('refresh')
-  @Throttle({ auth: { limit: 30, ttl: 60_000 } })
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Renovar tokens' })
   async refreshTokens(@Body() dto: RefreshTokenDto) {
@@ -48,7 +48,7 @@ export class AuthController {
   }
 
   @Post('change-password')
-  @Throttle({ auth: { limit: 5, ttl: 60_000 } })
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
@@ -58,7 +58,7 @@ export class AuthController {
   }
 
   @Post('forgot-password')
-  @Throttle({ auth: { limit: 5, ttl: 60_000 } })
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Solicitar redefinição de senha por e-mail' })
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
@@ -66,7 +66,7 @@ export class AuthController {
   }
 
   @Post('reset-password')
-  @Throttle({ auth: { limit: 5, ttl: 60_000 } })
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Redefinir senha com token enviado por e-mail' })
   async resetPassword(@Body() dto: ResetPasswordDto) {

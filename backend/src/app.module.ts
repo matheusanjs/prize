@@ -39,10 +39,7 @@ import { AuditLogInterceptor } from './interceptors/audit-log.interceptor';
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([
-      { name: 'default', ttl: 60_000, limit: 300 },   // 300 req/min per IP globally
-      { name: 'auth',    ttl: 60_000, limit: 10 },    // 10 attempts/min (login/register)
-      { name: 'webhook', ttl: 60_000, limit: 120 },   // 120/min for webhooks
-      { name: 'upload',  ttl: 60_000, limit: 30 },    // 30 uploads/min
+      { name: 'default', ttl: 60_000, limit: 3000 },  // 3000 req/min per IP — generous for interactive PWA. Auth/upload routes override per-method via @Throttle.
     ]),
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', '..', 'uploads'),

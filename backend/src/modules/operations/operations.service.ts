@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../../database/prisma.service';
 import { CreateChecklistDto } from './dto/create-checklist.dto';
 import { NotificationsService } from '../notifications/notifications.service';
-import * as PDFDocument from 'pdfkit';
+import PDFDocument from 'pdfkit';
 
 const PRE_LAUNCH_ITEMS = [
   'Âncora e cabo presentes',
@@ -337,11 +337,43 @@ export class OperationsService {
         },
       });
     }
-    if (!checklist) return null;
 
-    // Find cotista: from reservation, or from the latest queue entry for this boat
-    let cotistaUserId = checklist.reservation?.userId || null;
-    let cotistaName = checklist.reservation?.user?.name || null;
+    // 3. Check for more recent reservation on this boat — if the latest reservation
+    //    is newer than the checklist's reservation, use its userId instead.
+    //    This ensures ad-hoc/manual reservations (e.g. admin creating for a non-shareholder)
+    //    are reflected as the "last user" for fueling purposes.
+    const latestReservation = await this.prisma.reservation.findFirst({
+      where: {
+        boatId,
+        status: { in: ['CONFIRMED', 'PENDING', 'IN_USE', 'COMPLETED'] },
+        deletedAt: null,
+      },
+      orderBy: { createdAt: 'desc' },
+      include: { user: { select: { id: true, name: true, email: true } } },
+    });
+
+    if (!checklist && !latestReservation) return null;
+
+    // Determine cotista: prefer latest reservation if it's newer than checklist
+    let cotistaUserId: string | null = null;
+    let cotistaName: string | null = null;
+
+    if (latestReservation && checklist?.reservation) {
+      // Compare by createdAt — if reservation is more recent, use it
+      if (new Date(latestReservation.createdAt) >= new Date(checklist.reservation.createdAt)) {
+        cotistaUserId = latestReservation.userId;
+        cotistaName = latestReservation.user?.name || null;
+      } else {
+        cotistaUserId = checklist.reservation.userId;
+        cotistaName = checklist.reservation.user?.name || null;
+      }
+    } else if (latestReservation) {
+      cotistaUserId = latestReservation.userId;
+      cotistaName = latestReservation.user?.name || null;
+    } else if (checklist?.reservation) {
+      cotistaUserId = checklist.reservation.userId;
+      cotistaName = checklist.reservation.user?.name || null;
+    }
     if (!cotistaUserId) {
       const queue = await this.prisma.operationalQueue.findFirst({
         where: { boatId },
@@ -359,17 +391,140 @@ export class OperationsService {
       include: { user: { select: { id: true, name: true, email: true } } },
     });
     return {
-      checklistId: checklist.id,
+      checklistId: checklist?.id || null,
       boatId,
-      fuelPhotoUrl: checklist.fuelPhotoUrl || null,
-      returnFuelPhotoUrl: checklist.returnFuelPhotoUrl || null,
-      returnSketchMarks: checklist.returnSketchMarks || null,
-      returnObservations: checklist.returnObservations || null,
-      returnCompletedAt: checklist.returnCompletedAt || null,
+      fuelPhotoUrl: checklist?.fuelPhotoUrl || null,
+      returnFuelPhotoUrl: checklist?.returnFuelPhotoUrl || null,
+      returnSketchMarks: checklist?.returnSketchMarks || null,
+      returnObservations: checklist?.returnObservations || null,
+      returnCompletedAt: checklist?.returnCompletedAt || null,
       cotistaUserId,
       cotistaName,
       shares: shares.map(s => ({ userId: s.userId, userName: s.user.name, shareNumber: s.shareNumber })),
     };
+  }
+
+  /**
+   * Returns recent users of a boat with their fuel charge status.
+   * Includes cotistas + any user who had a reservation recently (even if not a cotista),
+   * so admin can charge for fuel even if the reservation was ad-hoc/manual.
+   */
+  async getRecentUsersWithFuelStatus(boatId: string) {
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    // Get all recent reservations for this boat (last 30 days)
+    const reservations = await this.prisma.reservation.findMany({
+      where: {
+        boatId,
+        deletedAt: null,
+        status: { in: ['CONFIRMED', 'PENDING', 'IN_USE', 'COMPLETED'] },
+        createdAt: { gte: thirtyDaysAgo },
+      },
+      include: {
+        user: { select: { id: true, name: true, email: true, phone: true } },
+        checklist: { select: { id: true, status: true, returnCompletedAt: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Get fuel logs for this boat in the same period
+    const fuelLogs = await this.prisma.fuelLog.findMany({
+      where: {
+        boatId,
+        createdAt: { gte: thirtyDaysAgo },
+      },
+      select: { operatorId: true, notes: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Parse fuel charge targets from notes (format: "Charged: userId1, userId2")
+    const chargedUserIds = new Set<string>();
+    for (const log of fuelLogs) {
+      if (log.notes) {
+        const match = log.notes.match(/Charged:\s*([a-z0-9,]+)/i);
+        if (match) {
+          match[1].split(',').forEach((id: string) => chargedUserIds.add(id.trim()));
+        }
+      }
+    }
+
+    // Build user list — deduplicate by userId
+    const userMap = new Map<string, {
+      userId: string;
+      userName: string;
+      userEmail?: string | null;
+      userPhone?: string | null;
+      lastUsedAt: Date;
+      reservationId: string;
+      checklistStatus?: string;
+      hasFuelCharge: boolean;
+      isShareholder: boolean;
+      source: 'reservation' | 'shareholder' | 'both';
+    }>();
+
+    // Get shareholders
+    const shares = await this.prisma.share.findMany({
+      where: { boatId, isActive: true },
+      include: { user: { select: { id: true, name: true, email: true, phone: true } } },
+    });
+
+    // First, add shareholders
+    for (const share of shares) {
+      const userId = share.userId;
+      if (!userMap.has(userId)) {
+        userMap.set(userId, {
+          userId,
+          userName: share.user?.name || 'Cotista',
+          userEmail: share.user?.email,
+          userPhone: share.user?.phone,
+          lastUsedAt: share.startDate,
+          reservationId: '',
+          hasFuelCharge: chargedUserIds.has(userId),
+          isShareholder: true,
+          source: 'shareholder',
+        });
+      }
+    }
+
+    // Then, add/update with reservation users (these take priority for lastUsedAt)
+    for (const r of reservations) {
+      const userId = r.userId;
+      const existing = userMap.get(userId);
+      const hasFuelCharge = chargedUserIds.has(userId);
+      if (existing) {
+        // Update with reservation data (more recent)
+        existing.lastUsedAt = r.createdAt;
+        existing.reservationId = r.id;
+        existing.checklistStatus = r.checklist?.status;
+        existing.hasFuelCharge = hasFuelCharge || existing.hasFuelCharge;
+        existing.source = 'both';
+      } else {
+        userMap.set(userId, {
+          userId,
+          userName: r.user?.name || 'Usuário',
+          userEmail: r.user?.email,
+          userPhone: r.user?.phone,
+          lastUsedAt: r.createdAt,
+          reservationId: r.id,
+          checklistStatus: r.checklist?.status,
+          hasFuelCharge,
+          isShareholder: false,
+          source: 'reservation',
+        });
+      }
+    }
+
+    // Convert to array and sort: NOT charged first (priority), then by lastUsedAt desc
+    const result = Array.from(userMap.values());
+    result.sort((a, b) => {
+      // Users without fuel charge come first
+      if (a.hasFuelCharge !== b.hasFuelCharge) return a.hasFuelCharge ? 1 : -1;
+      // Then by most recent usage
+      return new Date(b.lastUsedAt).getTime() - new Date(a.lastUsedAt).getTime();
+    });
+
+    return result;
   }
 
   async liftAllBoats() {

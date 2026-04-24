@@ -76,6 +76,8 @@ export default function InvoicesPage() {
       const { data } = await getFuelLog(match[1]);
       if (data?.imageUrl) {
         setFuelPhoto({ imageUrl: data.imageUrl, liters: data.liters, totalCost: data.totalCost, notes: data.notes });
+      } else {
+        setFuelPhoto({ imageUrl: '', liters: data?.liters ?? 0, totalCost: data?.totalCost ?? 0, notes: data?.notes });
       }
     } catch { /* empty */ } finally {
       setLoadingPhoto(false);
@@ -304,9 +306,12 @@ export default function InvoicesPage() {
                         Venc. {format(parseISO(charge.dueDate), "dd/MM/yyyy")}
                         {charge.boat && <span> · {charge.boat.name}</span>}
                         {hasFuelRef && (
-                          <span className="text-[10px] text-primary-500 flex items-center gap-0.5 ml-1">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleFuelChargeClick(charge); }}
+                            className="text-[10px] text-primary-500 flex items-center gap-0.5 ml-1 hover:text-primary-400 active:opacity-70 transition cursor-pointer"
+                          >
                             <Camera size={10} /> ver foto
-                          </span>
+                          </button>
                         )}
                       </p>
                       <span
@@ -464,7 +469,14 @@ export default function InvoicesPage() {
               </button>
             </div>
             <div className="relative w-full bg-[var(--subtle)]" style={{ aspectRatio: '4/3' }}>
-              <Image src={fuelPhoto.imageUrl} alt="Foto do abastecimento" fill className="object-contain" unoptimized />
+              {fuelPhoto.imageUrl ? (
+                <Image src={fuelPhoto.imageUrl} alt="Foto do abastecimento" fill className="object-contain" unoptimized />
+              ) : (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-[var(--text-muted)]">
+                  <Camera size={32} className="opacity-30" />
+                  <p className="text-xs">Foto não disponível</p>
+                </div>
+              )}
             </div>
             <div className="p-5 grid grid-cols-2 gap-3">
               <div className="bg-[var(--subtle)] rounded-xl p-3 text-center">

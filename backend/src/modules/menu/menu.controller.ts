@@ -26,6 +26,12 @@ export class MenuController {
     return this.menuService.getPublicMenu();
   }
 
+  @Get('convenience')
+  @ApiOperation({ summary: 'Itens de conveniência (APP COTISTA)' })
+  getConvenienceItems() {
+    return this.menuService.getConvenienceItems();
+  }
+
   // ─── Categories (admin) ─────────────────────────────────
 
   @Get('categories')

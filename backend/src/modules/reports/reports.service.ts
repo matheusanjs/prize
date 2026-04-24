@@ -463,4 +463,79 @@ export class ReportsService {
       clientActivity, newClients, paymentBehavior: behavior, topSpenders, engagementByMonth,
     };
   }
+
+  /* ════════════════════════════════════════════════════
+   *  ABASTECIMENTOS PENDENTES
+   * ════════════════════════════════════════════════════ */
+  async getPendingFuel(from?: string, to?: string) {
+    // Use São Paulo timezone for date boundaries
+    const nowBrt = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    const toDate = to ? new Date(to + 'T23:59:59.999') : new Date(nowBrt.getFullYear(), nowBrt.getMonth(), nowBrt.getDate(), 23, 59, 59, 999);
+    const fromDate = from ? new Date(from + 'T00:00:00') : new Date(nowBrt.getTime() - 30 * 24 * 60 * 60 * 1000);
+    fromDate.setHours(0, 0, 0, 0);
+
+    // Find all approved checklists (boat was used) in the date range
+    const completedChecklists = await this.prisma.checklist.findMany({
+      where: {
+        status: 'APPROVED',
+        createdAt: { gte: fromDate, lte: toDate },
+      },
+      include: {
+        boat: { select: { id: true, name: true, model: true } },
+        operator: { select: { id: true, name: true } },
+        reservation: {
+          include: {
+            user: { select: { id: true, name: true, email: true, phone: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 500,
+    });
+
+    // Get all fuel logs in the same period
+    const fuelLogs = await this.prisma.fuelLog.findMany({
+      where: { createdAt: { gte: fromDate, lte: toDate } },
+      select: { boatId: true, createdAt: true },
+    });
+
+    // Build set of (boatId, date) pairs that already have fuel charges
+    const chargedSet = new Set<string>();
+    for (const fl of fuelLogs) {
+      const dateKey = `${fl.boatId}-${fl.createdAt.toISOString().slice(0, 10)}`;
+      chargedSet.add(dateKey);
+    }
+
+    // Filter: checklist completed but no fuel charge for that boat on that day
+    const pending = completedChecklists
+      .filter((cl) => {
+        const dateKey = `${cl.boatId}-${cl.completedAt?.toISOString().slice(0, 10) || cl.createdAt.toISOString().slice(0, 10)}`;
+        return !chargedSet.has(dateKey);
+      })
+      .map((cl) => ({
+        checklistId: cl.id,
+        boat: cl.boat,
+        client: cl.reservation?.user || null,
+        operator: cl.operator,
+        completedAt: cl.completedAt,
+        returnCompletedAt: cl.returnCompletedAt,
+        reservationId: cl.reservationId,
+        hasFuelPhoto: !!cl.fuelPhotoUrl,
+        hasReturnFuelPhoto: !!cl.returnFuelPhotoUrl,
+        lifeVestsLoaned: cl.lifeVestsLoaned,
+      }));
+
+    // Summary stats
+    const uniqueBoats = new Set(pending.map(p => p.boat.id));
+    const uniqueClients = new Set(pending.filter(p => p.client).map(p => p.client!.id));
+
+    return {
+      summary: {
+        totalPending: pending.length,
+        uniqueBoats: uniqueBoats.size,
+        uniqueClients: uniqueClients.size,
+      },
+      pending,
+    };
+  }
 }

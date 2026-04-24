@@ -37,6 +37,8 @@ model User {
   swapRequestsMade     ReservationSwap[]  @relation("SwapRequester")
   swapRequestsReceived ReservationSwap[]  @relation("SwapTarget")
   reservations         Reservation[]
+  reservationsTransferredFrom Reservation[] @relation("ReservationTransferredFrom")
+  substituteRequests   ReservationSubstitute[] @relation("UserSubstituteRequests")
   shareSales           ShareSale[]
   shares               Share[]
   waiter               Waiter?
@@ -162,12 +164,16 @@ model Reservation {
   deletedAt           DateTime?
   confirmedAt         DateTime?
   expectedArrivalTime String?
+  transferredFromUserId String?
+  transferredAt       DateTime?
   checklist           Checklist?
   queue               OperationalQueue?
   swapsAsOffered      ReservationSwap[] @relation("SwapOffered")
   swapsAsTarget       ReservationSwap[] @relation("SwapTarget")
+  substitutes         ReservationSubstitute[]
   boat                Boat              @relation(fields: [boatId], references: [id])
   user                User              @relation(fields: [userId], references: [id])
+  transferredFromUser User?             @relation("ReservationTransferredFrom", fields: [transferredFromUserId], references: [id])
 
   @@index([boatId])
   @@index([userId])
@@ -521,6 +527,20 @@ model AiLog {
   @@map("ai_logs")
 }
 
+model AiInsight {
+  id          String   @id @default(cuid())
+  type        String   @default("OPERATIONAL_SUMMARY")
+  data        Json
+  rawResponse String?
+  provider    String
+  durationMs  Int      @default(0)
+  generatedBy String
+  createdAt   DateTime @default(now())
+
+  @@index([type, createdAt])
+  @@map("ai_insights")
+}
+
 model ShareSale {
   id               String   @id @default(cuid())
   boatId           String
@@ -567,8 +587,9 @@ model MenuItem {
   price       Float
   costPrice   Float?
   image       String?
-  isAvailable Boolean      @default(true)
-  order       Int          @default(0)
+  isAvailable   Boolean      @default(true)
+  isConvenience Boolean      @default(false)
+  order         Int          @default(0)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   category    MenuCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
@@ -758,6 +779,25 @@ model MarineWeatherSnapshot {
   @@map("marine_weather_snapshots")
 }
 
+model ReservationSubstitute {
+  id              String      @id @default(cuid())
+  reservationId   String
+  substituteId    String
+  status          String      @default("PENDING")
+  message         String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  resolvedAt      DateTime?
+  promotedAt      DateTime?
+  reservation     Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  substitute      User        @relation("UserSubstituteRequests", fields: [substituteId], references: [id])
+
+  @@unique([reservationId, substituteId])
+  @@index([reservationId, status])
+  @@index([substituteId, status])
+  @@map("reservation_substitutes")
+}
+
 model ReservationSwap {
   id                   String      @id @default(cuid())
   reservationId        String
@@ -850,6 +890,10 @@ enum NotificationType {
   SWAP_REQUEST
   SWAP_ACCEPTED
   SWAP_REJECTED
+  SUBSTITUTE_REGISTERED
+  SUBSTITUTE_PROMOTED
+  SUBSTITUTE_REJECTED
+  SUBSTITUTE_AVAILABLE
   CHECKLIST_READY
   QUEUE
   MAINTENANCE

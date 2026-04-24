@@ -1,6 +1,6 @@
 import {
   Controller, Get, Post, Put, Delete,
-  Body, Param, Query, UseGuards,
+  Body, Param, Query, UseGuards, Req,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { OrdersService } from './orders.service';
@@ -8,6 +8,7 @@ import { CreateOrderDto, UpdateOrderDto } from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('orders')
 @Controller('orders')
@@ -67,5 +68,22 @@ export class OrdersController {
   @ApiOperation({ summary: 'Excluir pedido' })
   remove(@Param('id') id: string) {
     return this.ordersService.remove(id);
+  }
+}
+
+@ApiTags('orders')
+@Controller('orders/app-cotista')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
+export class ConvenienceOrderController {
+  constructor(private ordersService: OrdersService) {}
+
+  @Post()
+  @ApiOperation({ summary: 'Criar pedido de conveniência (APP COTISTA)' })
+  create(
+    @CurrentUser('id') userId: string,
+    @Body() dto: { items: { menuItemId: string; quantity: number; notes?: string }[]; notes?: string; paymentMethod: 'PIX' | 'PICKUP' },
+  ) {
+    return this.ordersService.createConvenienceOrder(userId, dto);
   }
 }

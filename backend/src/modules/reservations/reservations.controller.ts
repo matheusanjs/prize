@@ -39,6 +39,14 @@ export class ReservationsController {
     return this.reservationsService.findByUser(userId, upcoming);
   }
 
+  @Get('free-boats')
+  @Roles('ADMIN', 'OPERATOR')
+  @ApiOperation({ summary: 'Embarcações livres em uma data específica' })
+  @ApiQuery({ name: 'date', required: true, description: 'Data no formato YYYY-MM-DD' })
+  getFreeBoats(@Query('date') date: string) {
+    return this.reservationsService.findFreeBoats(date);
+  }
+
   @Get('boat/:boatId')
   @ApiOperation({ summary: 'Reservas de uma embarcação (para ver horários ocupados)' })
   getBoatReservations(@Param('boatId') boatId: string, @Query('date') date?: string) {
@@ -122,5 +130,60 @@ export class ReservationsController {
   @ApiOperation({ summary: 'Cotistas da embarcação' })
   getCoOwners(@CurrentUser('id') userId: string, @Param('boatId') boatId: string) {
     return this.reservationsService.getCoOwners(userId, boatId);
+  }
+
+  // ─── Substitutes (Suplente de cota) ──────────────────────────────────
+
+  @Post(':id/substitute')
+  @ApiOperation({ summary: 'Inscrever-se como suplente de uma reserva' })
+  registerSubstitute(
+    @Param('id') reservationId: string,
+    @CurrentUser('id') userId: string,
+    @Body('message') message?: string,
+  ) {
+    return this.reservationsService.registerSubstitute(userId, reservationId, message);
+  }
+
+  @Patch('substitutes/:id/cancel')
+  @ApiOperation({ summary: 'Cancelar inscrição de suplente (suplente, titular ou admin)' })
+  cancelSubstitute(@Param('id') id: string, @CurrentUser() currentUser: any) {
+    return this.reservationsService.cancelSubstitute(id, currentUser.id, currentUser.role);
+  }
+
+  @Get('substitutes/my')
+  @ApiOperation({ summary: 'Minhas inscrições como suplente' })
+  getMySubstituteRequests(@CurrentUser('id') userId: string) {
+    return this.reservationsService.getMySubstituteRequests(userId);
+  }
+
+  @Get('substitutes/incoming')
+  @ApiOperation({ summary: 'Suplentes inscritos nas minhas reservas' })
+  getSubstitutesOnMyReservations(@CurrentUser('id') userId: string) {
+    return this.reservationsService.getSubstitutesOnMyReservations(userId);
+  }
+
+  @Get('substitutes/available')
+  @ApiOperation({ summary: 'Reservas onde posso me inscrever como suplente' })
+  getSubstitutableReservations(@CurrentUser('id') userId: string) {
+    return this.reservationsService.getSubstitutableReservations(userId);
+  }
+
+  @Get(':id/substitutes')
+  @ApiOperation({ summary: 'Suplentes de uma reserva' })
+  listSubstitutes(@Param('id') reservationId: string) {
+    return this.reservationsService.getSubstitutesForReservation(reservationId);
+  }
+
+  @Patch('substitutes/:id/promote')
+  @Roles('ADMIN', 'OPERATOR')
+  @ApiOperation({ summary: 'Promover suplente manualmente (Admin)' })
+  promoteSubstitute(@Param('id') id: string) {
+    return this.reservationsService.promoteSubstitute(id);
+  }
+
+  @Post(':id/pass-to-substitute')
+  @ApiOperation({ summary: 'Titular passa a vez para o próximo suplente em fila' })
+  passToNextSubstitute(@Param('id') reservationId: string, @CurrentUser('id') userId: string) {
+    return this.reservationsService.passToNextSubstitute(reservationId, userId);
   }
 }

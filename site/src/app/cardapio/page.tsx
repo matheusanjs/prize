@@ -21,6 +21,14 @@ interface MenuCategory {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
 
+/** Convert full image URL → WebP thumb URL served from /uploads/menu/thumbs/ */
+function toThumbUrl(imageUrl: string): string {
+  if (!imageUrl) return '';
+  // e.g. https://api.marinaprizeclub.com/uploads/menu/aperol-spritz.jpg
+  //   → https://api.marinaprizeclub.com/uploads/menu/thumbs/aperol-spritz.webp
+  return imageUrl.replace(/\/uploads\/menu\/([^/]+)\.(jpg|jpeg|png)$/i, '/uploads/menu/thumbs/$1.webp');
+}
+
 // ─── Category Icons ────────────────────────────────────────
 const categoryIcons: Record<string, string> = {
   'entradas': '🥗',
@@ -88,43 +96,43 @@ const theme = (dark: boolean) => ({
 });
 
 // ─── Item Card ─────────────────────────────────────────────
-function MenuItemCard({ item, index, dark }: { item: MenuItem & { isAvailable?: boolean }; index: number; dark: boolean }) {
+function MenuItemCard({ item, dark }: { item: MenuItem & { isAvailable?: boolean }; index?: number; dark: boolean }) {
   const [imgLoaded, setImgLoaded] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const c = theme(dark);
+  const thumbSrc = item.image ? toThumbUrl(item.image) : '';
 
   return (
     <>
       <div
-        style={{ animation: 'fadeInUp 0.4s ease-out both', animationDelay: `${index * 30}ms` }}
         onClick={() => setShowModal(true)}
         className={`group relative border rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 ${c.card}`}
       >
         <div className={`relative aspect-[4/3] overflow-hidden bg-gradient-to-br ${c.imgPlaceholder}`}>
-          {item.image ? (
+          {thumbSrc ? (
             <>
               {!imgLoaded && (
-                <div
-                  className={`absolute inset-0 animate-pulse bg-gradient-to-r ${c.shimmerFrom} ${c.shimmerVia} ${c.shimmerTo} bg-[length:200%_100%]`}
-                  style={{ animation: 'shimmer 1.5s infinite' }}
-                />
+                <div className={`absolute inset-0 bg-gradient-to-br ${c.imgPlaceholder}`} />
               )}
-              <Image
-                src={item.image}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={thumbSrc}
                 alt={item.name}
-                fill
-                className={`object-cover transition-all duration-500 group-hover:scale-105 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
-                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                loading="lazy"
+                decoding="async"
+                width={400}
+                height={300}
                 onLoad={() => setImgLoaded(true)}
+                className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 group-hover:scale-105 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
+                style={{ transform: 'translateZ(0)' }}
               />
             </>
           ) : (
             <div className="absolute inset-0 flex items-center justify-center text-4xl opacity-20">🍽️</div>
           )}
-          <div className="absolute bottom-2 right-2 bg-[#FF6B00] text-white text-xs font-bold px-2.5 py-1 rounded-lg shadow-lg shadow-[#FF6B00]/30">
+          <div className="absolute bottom-2 right-2 bg-[#FF6B00] text-white text-xs font-bold px-2.5 py-1 rounded-lg shadow-lg shadow-[#FF6B00]/30 z-10">
             R$ {item.price.toFixed(2).replace('.', ',')}
           </div>
-          <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
         </div>
 
         <div className="p-3 sm:p-4">
@@ -152,30 +160,37 @@ function MenuItemCard({ item, index, dark }: { item: MenuItem & { isAvailable?: 
             onClick={e => e.stopPropagation()}
             className={`border rounded-3xl overflow-hidden w-full max-w-lg shadow-2xl lightbox-img-enter ${c.modalBg}`}
           >
-              {item.image && (
-                <div className="relative aspect-[16/10] overflow-hidden">
-                  <Image src={item.image} alt={item.name} fill className="object-cover" sizes="500px" />
-                  <div className={`absolute inset-0 bg-gradient-to-t ${c.modalGrad} via-transparent to-transparent`} />
-                </div>
-              )}
-              <div className="p-6 -mt-8 relative">
-                <h2 className={`text-2xl font-black mb-2 ${c.modalText}`}>{item.name}</h2>
-                {item.description && <p className={`text-sm leading-relaxed mb-4 ${c.modalSub}`}>{item.description}</p>}
-                <div className="flex items-center justify-between">
-                  <span className="text-[#FF6B00] font-black text-2xl">
-                    R$ {item.price.toFixed(2).replace('.', ',')}
-                  </span>
-                  <button
-                    onClick={() => setShowModal(false)}
-                    className={`px-5 py-2.5 text-sm font-semibold rounded-xl transition-colors ${c.modalClose}`}
-                  >
-                    Fechar
-                  </button>
-                </div>
+            {item.image && (
+              <div className="relative aspect-[16/10] overflow-hidden bg-gray-900">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={item.image}
+                  alt={item.name}
+                  loading="lazy"
+                  decoding="async"
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
+                <div className={`absolute inset-0 bg-gradient-to-t ${c.modalGrad} via-transparent to-transparent`} />
+              </div>
+            )}
+            <div className="p-6 -mt-8 relative">
+              <h2 className={`text-2xl font-black mb-2 ${c.modalText}`}>{item.name}</h2>
+              {item.description && <p className={`text-sm leading-relaxed mb-4 ${c.modalSub}`}>{item.description}</p>}
+              <div className="flex items-center justify-between">
+                <span className="text-[#FF6B00] font-black text-2xl">
+                  R$ {item.price.toFixed(2).replace('.', ',')}
+                </span>
+                <button
+                  onClick={() => setShowModal(false)}
+                  className={`px-5 py-2.5 text-sm font-semibold rounded-xl transition-colors ${c.modalClose}`}
+                >
+                  Fechar
+                </button>
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
     </>
   );
 }

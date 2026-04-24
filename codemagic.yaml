@@ -56,6 +56,21 @@ workflows:
           </body></html>
           FALLBACK
           npx cap sync ios
+      - name: Set app version to 1.1 and ensure camera permissions
+        script: |
+          cd pwa/ios/App
+          # Use agvtool to set marketing version (sets MARKETING_VERSION in Xcode project)
+          agvtool new-marketing-version 1.1
+          # Ensure camera permission is in Info.plist
+          ruby -e '
+          path = "App/Info.plist"
+          text = File.read(path)
+          unless text.include?("NSCameraUsageDescription")
+            text.gsub!("</dict>", "\t<key>NSCameraUsageDescription</key>\n\t<string>O aplicativo precisa acessar a câmera para registrar fotos de inspeção de embarcações, nível de combustível e evidências de danos.</string>\n\t<key>NSPhotoLibraryUsageDescription</key>\n\t<string>O aplicativo precisa acessar a biblioteca de fotos para selecionar imagens de inspeção de embarcações e nível de combustível.</string>\n\t<key>NSPhotoLibraryAddUsageDescription</key>\n\t<string>O aplicativo precisa salvar fotos de inspeção na sua biblioteca.</string>\n</dict>")
+          end
+          File.write(path, text)
+          puts "Info.plist: camera permissions added"
+          '
       - name: Add CustomViewController to Xcode project
         script: |
           cd pwa/ios/App

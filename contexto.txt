@@ -1,0 +1,110 @@
+Análise Completa do Projeto Prize Clube 🚤
+Visão Geral
+O Prize Clube é um sistema completo de gestão de clube náutico/marina com múltiplos frontends, backend API, banco de dados relacional e integrações com serviços externos. O domínio de produção é marinaprizeclub.com.
+
+Arquitetura do Sistema
+
+┌─────────────────────────────────────────────────────────┐
+│                    INFRAESTRUTURA                        │
+│  Docker Compose (PostgreSQL 16 + Redis 7)               │
+│  PM2 (ecosystem.config.js) - 5 processos                │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│                   BACKEND - NestJS (porta 3000)         │
+│  27 módulos | Prisma ORM | Swagger API Docs             │
+│  prefixo: /api/v1                                        │
+└─────────────────────────────────────────────────────────┘
+
+┌──────────┬──────────┬──────────┬──────────┬─────────────┐
+│  Admin   │   PWA    │   Site   │  Garçom  │   Mobile    │
+│ :3001    │  :3002   │  :3003   │  :3004   │ (Expo/RN)   │
+│ Next.js  │ Next.js  │ Next.js  │ Next.js  │  Expo       │
+│ Dashboard│ Cliente  │ Instit.  │ Pedidos  │  App Nativo │
+└──────────┴──────────┴──────────┴──────────┴─────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│              SHARED - Tipos e Constantes                 │
+└─────────────────────────────────────────────────────────┘
+Backend (NestJS) - 27 Módulos
+Módulo	Descrição
+auth	Login, registro, JWT, refresh tokens, reset senha
+users	CRUD de usuários (Admin, Operador, Cliente, Garçom)
+boats	Embarcações, marketplace
+shares	Cotas de propriedade de embarcações
+share-sale	Vendas de cotas com parcelamento
+reservations	Reservas com validação, WebSocket gateway, trocas, substitutos
+finance	Cobranças (charges), inadimplência
+payments	Integração Woovi (PIX, QR code)
+fuel	Controle de combustível, preços, logs
+maintenance	Manutenção de embarcações
+operations	Operações náuticas
+queue	Fila de descida ao mar
+ai	IA com Google Generative AI + OpenAI
+notifications	Push notifications (APNs, Web Push), crons
+menu	Cardápio do restaurante (categorias + itens)
+orders	Pedidos do restaurante
+pdv	Ponto de venda, autoatendimento
+waiter-panel	Painel do garçom
+weather	Meteorologia marítima (Stormglass + HGBrasil)
+whatsapp	WhatsApp Business via Baileys (automação, chat, templates)
+social	Rede social (trips/passeios), gateway WebSocket
+mail	E-mails transacionais (Nodemailer)
+dashboard	Métricas consolidadas
+reports	Relatórios (embarcações, clientes, financeiro, etc.)
+health	Health check endpoint
+Infraestrutura e Integrações
+Banco de Dados: PostgreSQL 16 (Prisma ORM) — ~40+ models/tabelas
+Cache/Filas: Redis 7 (BullMQ para jobs assíncronos)
+Documentação API: Swagger em /api/docs
+Segurança: Helmet, CORS restrito, Throttler (rate limit), JWT, bcrypt
+Push Notifications: APNs (iOS), Web Push (PWA), com tracking de eventos
+Pagamentos: Woovi (PIX com QR code)
+IA: Google Generative AI + OpenAI (chat, insights, geração de conteúdo)
+WhatsApp: Baileys (conexão direta, sem API oficial)
+Meteorologia: Stormglass API + HGBrasil
+PDF: PDFKit (geração de PDFs)
+Processos: PM2 com configuração hardened para produção
+Modelos de Dados Principais (Prisma)
+User (4 roles: ADMIN, OPERATOR, CLIENT, WAITER)
+Boat (embarcações com status, combustível, manutenção)
+Share (cotas de propriedade)
+Reservation (com status, trocas, substitutos)
+OperationalQueue (fila de operações)
+Charge/Payment/Delinquency (financeiro completo)
+FuelLog/FuelPrice (controle de combustível)
+Maintenance/Checklist (manutenção e checklists)
+Order/OrderItem/MenuItem/MenuCategory (restaurante completo)
+RestaurantTable/CashRegister/Terminal (PDV)
+WhatsAppSession/WhatsAppMessage/WhatsAppTemplate (WhatsApp)
+Trip/TripParticipant/TripMessage/TripLike/TripPhoto (rede social)
+Notification/PushSubscription/DeviceToken (notificações)
+MarineWeatherSnapshot (meteorologia marítima)
+AiLog/AiInsight (IA)
+AuditLog (auditoria)
+Frontends
+App	Tecnologia	Função	Porta
+admin	Next.js + Tailwind	Painel administrativo completo (~40 páginas)	3001
+pwa	Next.js + Tailwind + Capacitor	App do cliente (reservas, social, financeiro)	3002
+site	Next.js + Tailwind	Site institucional (landing page, cardápio, cotas)	3003
+garcom	Next.js + Tailwind	App do garçom (pedidos) — simples	3004
+mobile	Expo + React Native	App nativo (iOS/Android) com Expo Router	—
+Páginas do Admin
+Dashboard, Embarcações, Cotas, Vendas de Cotas, Clientes, Reservas, Financeiro, Combustível, Manutenção, Operações, Cardápio, Pedidos, PDV, Cozinha (KDS), WhatsApp, Notificações, Relatórios (7 sub-relatórios), IA Insights, Social, Danos, Usos, Delinquência, E-mail
+
+Páginas do PWA
+Login, Cadastro, Embarcações, Reservas, Usos, Financeiro (invoices), Combustível, Manutenção, Operações, Social (rede social + compartilhamento), Perfil, Conveniência, Compras
+
+Observações e Possíveis Melhorias Identificadas
+ecosystem.config.js tem module.exports duplicado — a segunda definição (linhas 77-139) sobrescreve a primeira (linhas 14-76), perdendo configurações avançadas (autorestart, watch, max_restarts, logs)
+shared/types tem divergências com o schema Prisma (enums como BoatStatus.ACTIVE vs Prisma AVAILABLE, ReservationStatus com campos diferentes, interfaces com campos que não existem no schema)
+garcom é um app muito simples (apenas login + page principal) — pode estar incompleto
+Pronto para Modificações ✅
+Tenho mapeamento completo de toda a estrutura, modelos de dados, módulos backend, páginas frontend, dependências e integrações. Posso realizar qualquer tipo de modificação:
+
+Adicionar novos módulos/features no backend
+Criar/modificar páginas em qualquer frontend
+Alterar o schema do banco (Prisma migrations)
+Modificar integrações (WhatsApp, IA, pagamentos, etc.)
+Corrigir bugs e melhorar código existente
+Configurar deploy e infraestrutura

@@ -95,15 +95,19 @@ export default function FuelPage() {
         <div className="flex items-center gap-2">
           <button onClick={() => loadData(true)} className="p-2 hover:bg-[var(--subtle)] rounded-xl text-[var(--text-muted)]">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>          <button onClick={() => setShowPriceModal(true)}
-            className="flex items-center gap-1.5 px-3 py-2 border border-[var(--border)] rounded-xl text-xs font-medium text-[var(--text-secondary)] hover:border-orange-300 transition-colors">
-            <Settings className="w-3.5 h-3.5" />{fmtCurrency(currentPrice)}/L
-          </button>          <button onClick={() => setShowModal(true)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-orange-500 text-white rounded-xl text-xs font-bold ">
-            <Plus className="w-4 h-4" />Abastecer
+          </button>
+          <button onClick={() => setShowPriceModal(true)}
+            className="p-2 border border-[var(--border)] rounded-xl text-[var(--text-secondary)] hover:border-orange-300 transition-colors" title={`${fmtCurrency(currentPrice)}/L`}>
+            <Settings className="w-4 h-4" />
           </button>
         </div>
       </div>
+
+      {/* Primary action — full width, always visible */}
+      <button onClick={() => setShowModal(true)}
+        className="w-full flex items-center justify-center gap-2 py-3.5 bg-orange-500 hover:bg-orange-400 active:scale-[0.98] text-white rounded-2xl text-sm font-bold shadow-lg shadow-orange-500/20 transition-all">
+        <Plus className="w-4 h-4" />Registrar Abastecimento
+      </button>
 
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-3">
@@ -379,7 +383,7 @@ function NewFuelingModal({ currentPrice, onClose, onSuccess }: {
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end">
-      <div className="bg-[var(--card)] rounded-t-3xl w-full max-h-[92vh] flex flex-col">
+      <div className="bg-[var(--card)] rounded-t-3xl w-full max-h-[92dvh] flex flex-col">
         <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
           <div className="w-10 h-1 bg-[var(--subtle-hover)] rounded-full" />
         </div>
@@ -398,7 +402,7 @@ function NewFuelingModal({ currentPrice, onClose, onSuccess }: {
           <button onClick={onClose} className="p-1.5 hover:bg-[var(--subtle)] rounded-xl"><X className="w-5 h-5 text-[var(--text-secondary)]" /></button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4 pb-10 space-y-4">
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4" style={{ paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom, 0px))' }}>
           {successMsg ? (
             <div className="flex flex-col items-center justify-center py-12 gap-4 text-center">
               <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center">

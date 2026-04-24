@@ -26,7 +26,7 @@ export class WooviController {
 
   @Post('webhook')
   @HttpCode(200)
-  @Throttle({ webhook: { limit: 120, ttl: 60_000 } })
+  @Throttle({ default: { limit: 120, ttl: 60_000 } })
   @UsePipes(new ValidationPipe({ whitelist: false, transform: false }))
   @ApiOperation({ summary: 'Receber webhook da Woovi' })
   async handleWebhook(

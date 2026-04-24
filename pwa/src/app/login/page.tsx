@@ -250,8 +250,25 @@ export default function LoginPage() {
         </form>
       </div>
 
+      {/* Sign up link */}
+      <div style={{ marginTop: 24, textAlign: 'center' }}>
+        <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.45)' }}>
+          Não tem uma conta?{' '}
+          <Link
+            href="/cadastro"
+            style={{
+              color: 'rgba(0,177,181,0.9)',
+              fontWeight: 600,
+              textDecoration: 'none',
+            }}
+          >
+            Cadastre-se
+          </Link>
+        </p>
+      </div>
+
       {/* Footer */}
-      <p style={{ marginTop: 32, fontSize: 11, color: 'rgba(255,255,255,0.25)', letterSpacing: '0.05em' }}>
+      <p style={{ marginTop: 16, fontSize: 11, color: 'rgba(255,255,255,0.25)', letterSpacing: '0.05em' }}>
         Prize Clube &copy; {new Date().getFullYear()}
       </p>
     </div>

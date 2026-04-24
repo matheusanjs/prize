@@ -9,5 +9,6 @@ export class CreateMenuItemDto {
   @ApiProperty({ required: false }) @IsOptional() @IsNumber() costPrice?: number;
   @ApiProperty({ required: false }) @IsOptional() @IsString() image?: string;
   @ApiProperty({ required: false }) @IsOptional() @IsBoolean() isAvailable?: boolean;
+  @ApiProperty({ required: false }) @IsOptional() @IsBoolean() isConvenience?: boolean;
   @ApiProperty({ required: false }) @IsOptional() @IsInt() order?: number;
 }

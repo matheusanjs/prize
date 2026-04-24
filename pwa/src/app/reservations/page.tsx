@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { Plus, X, ChevronLeft, ChevronRight, Clock, Ship, User, AlertCircle, Calendar, ArrowLeftRight, CheckCircle2 } from 'lucide-react';
+import { Plus, X, ChevronLeft, ChevronRight, Clock, Ship, User, AlertCircle, Calendar, ArrowLeftRight, CheckCircle2, UserPlus, Hourglass } from 'lucide-react';
 import { useAuth } from '@/contexts/auth';
-import { getMyReservations, createReservation, cancelReservation, getShares, getAllBoatReservations, createSwapRequest, confirmArrival, invalidateCache } from '@/services/api';
-import { format, startOfMonth, endOfMonth, addMonths, subMonths, eachDayOfInterval, isSameDay, isToday, parseISO, isBefore, startOfDay } from 'date-fns';
+import { getMyReservations, createReservation, cancelReservation, getShares, getAllBoatReservations, createSwapRequest, confirmArrival, invalidateCache, registerSubstitute, listReservationSubstitutes, cancelSubstitute, getMySwaps } from '@/services/api';
+import { format, startOfMonth, endOfMonth, addMonths, subMonths, eachDayOfInterval, isSameDay, isToday, parseISO, isBefore, startOfDay, differenceInCalendarDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useReservationsRealtime } from '@/hooks/useReservationsRealtime';
 import { handleApiError } from '@/lib/errors';
@@ -16,8 +16,17 @@ interface Reservation {
   status: string;
   confirmedAt?: string | null;
   expectedArrivalTime?: string | null;
+  transferredFromUserId?: string | null;
   boat?: { id: string; name: string };
   user?: { id: string; name: string; avatar?: string };
+}
+
+interface SubstituteEntry {
+  id: string;
+  status: string;
+  createdAt: string;
+  message?: string | null;
+  substitute: { id: string; name: string; avatar?: string };
 }
 
 interface BoatOption { id: string; name: string; status?: string; }
@@ -61,6 +70,9 @@ export default function ReservationsPage() {
   const [swapForm, setSwapForm] = useState({ offeredReservationId: '', message: '' });
   const [swapSaving, setSwapSaving] = useState(false);
   const [swapError, setSwapError] = useState('');
+  // Set of target reservation IDs for which the current user already has a PENDING outgoing swap request.
+  // Used to disable the "Trocar" button and show "Troca já solicitada" instead.
+  const [pendingOutgoingSwapTargets, setPendingOutgoingSwapTargets] = useState<Set<string>>(new Set());
   const [reservationLimit, setReservationLimit] = useState<{ max: number; active: number } | null>(null);
   const [showConfirmArrival, setShowConfirmArrival] = useState(false);
 
@@ -68,6 +80,13 @@ export default function ReservationsPage() {
   const [arrivalTime, setArrivalTime] = useState('10:00');
   const [confirmSaving, setConfirmSaving] = useState(false);
   const [confirmError, setConfirmError] = useState('');
+
+  // Substitute (suplente) state — keyed by reservation id
+  const [substitutesByRes, setSubstitutesByRes] = useState<Record<string, SubstituteEntry[]>>({});
+  const [substituteSavingId, setSubstituteSavingId] = useState<string | null>(null);
+  const [substituteMessageOpen, setSubstituteMessageOpen] = useState<string | null>(null);
+  const [substituteMessage, setSubstituteMessage] = useState('');
+  const [substituteError, setSubstituteError] = useState('');
 
   // Track the latest in-flight snapshot request — ignore stale responses
   const snapshotRequestRef = useRef<string | null>(null);
@@ -175,6 +194,23 @@ export default function ReservationsPage() {
     }
   }, [selectedBoatId, writeCachedSnapshot]);
 
+  // Outgoing pending swap requests — loaded here (before realtime hook) so it can be a dep.
+  const loadPendingOutgoingSwaps = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const { data } = await getMySwaps();
+      const list: any[] = Array.isArray(data) ? data : (data?.data || []);
+      const targets = new Set<string>(
+        list
+          .filter(s => s.status === 'PENDING' && (s.requesterId === userId || s.requester?.id === userId))
+          .map(s => s.reservationId || s.reservation?.id)
+          .filter(Boolean)
+      );
+      setPendingOutgoingSwapTargets(targets);
+    } catch { /* silent */ }
+  }, [userId]);
+  useEffect(() => { loadPendingOutgoingSwaps(); }, [loadPendingOutgoingSwaps]);
+
   useEffect(() => {
     if (!selectedBoatId) return;
     // 1) Hydrate from cache synchronously — no empty state, no delay.
@@ -255,7 +291,8 @@ export default function ReservationsPage() {
     onSwapAccepted: useCallback(() => {
       // Swap changes two rows — safest path: reload snapshot
       loadSnapshot();
-    }, [loadSnapshot]),
+      loadPendingOutgoingSwaps();
+    }, [loadSnapshot, loadPendingOutgoingSwaps]),
   });
 
   // ─── Derive selected day reservations from the snapshot (zero-latency) ───
@@ -322,7 +359,7 @@ export default function ReservationsPage() {
     return map;
   }, [calendarReservations]);
 
-  const OPERATING_HOURS = 7;
+  const OCCUPIED_THRESHOLD = 4; // 4+ hours booked between 09h-17h = OCUPADO
 
   const getResForDay = useCallback((date: Date) => {
     const key = format(date, 'yyyy-MM-dd');
@@ -336,9 +373,9 @@ export default function ReservationsPage() {
     dayRes.forEach(r => {
       const sh = parseISO(r.startDate).getHours();
       const eh = parseISO(r.endDate).getHours();
-      for (let h = Math.max(sh, 10); h < Math.min(eh, 17); h++) bookedHours.add(h);
+      for (let h = Math.max(sh, 9); h < Math.min(eh, 17); h++) bookedHours.add(h);
     });
-    return bookedHours.size >= OPERATING_HOURS ? 'full' : 'partial';
+    return bookedHours.size >= OCCUPIED_THRESHOLD ? 'full' : 'partial';
   }, [getResForDay]);
 
   const selectedDayRes = selectedDate ? selectedDayReservations : [];
@@ -513,6 +550,14 @@ export default function ReservationsPage() {
         offeredReservationId: swapForm.offeredReservationId,
         message: swapForm.message || undefined,
       });
+      // Mark this target as having a pending outgoing swap so the button is disabled immediately.
+      setPendingOutgoingSwapTargets(prev => {
+        const next = new Set(prev);
+        next.add(swapReservation.id);
+        return next;
+      });
+      // Refetch to reconcile (in case server merged with an existing request, etc.)
+      loadPendingOutgoingSwaps();
       setShowSwap(false);
     } catch (err: any) {
       setSwapError(err?.response?.data?.message || 'Erro ao solicitar troca');
@@ -520,11 +565,82 @@ export default function ReservationsPage() {
     setSwapSaving(false);
   };
 
+  // ─── Substitute (suplente) ────────────────────────────────────────
+  // Load substitutes only for confirmed-but-unconfirmed reservations
+  // belonging to OTHER users on the selected day, so the UI can show
+  // "vaga disponível" / "vaga já tem suplente" / "você é o suplente".
+  useEffect(() => {
+    if (!user || selectedDayReservations.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const candidates = selectedDayReservations.filter(r =>
+        r.status === 'CONFIRMED' && !r.expectedArrivalTime && r.user?.id !== user.id
+      );
+      // Also load my own confirmed/unconfirmed reservations to surface incoming substitutes
+      const mine = selectedDayReservations.filter(r =>
+        r.status === 'CONFIRMED' && !r.expectedArrivalTime && r.user?.id === user.id
+      );
+      const targets = [...candidates, ...mine];
+      if (targets.length === 0) return;
+      try {
+        const results = await Promise.allSettled(
+          targets.map(r => listReservationSubstitutes(r.id).then(resp => ({ id: r.id, list: resp.data })))
+        );
+        if (cancelled) return;
+        const map: Record<string, SubstituteEntry[]> = {};
+        results.forEach(res => {
+          if (res.status === 'fulfilled') {
+            const list = Array.isArray(res.value.list) ? res.value.list : (res.value.list?.data || []);
+            map[res.value.id] = list;
+          }
+        });
+        setSubstitutesByRes(prev => ({ ...prev, ...map }));
+      } catch { /* silent */ }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedDayReservations, user]);
+
+  const refreshSubstitutes = useCallback(async (reservationId: string) => {
+    try {
+      const { data } = await listReservationSubstitutes(reservationId);
+      const list = Array.isArray(data) ? data : (data?.data || []);
+      setSubstitutesByRes(prev => ({ ...prev, [reservationId]: list }));
+    } catch { /* silent */ }
+  }, []);
+
+
+  const handleRegisterSubstitute = async (reservation: Reservation) => {
+    setSubstituteError('');
+    setSubstituteSavingId(reservation.id);
+    try {
+      await registerSubstitute(reservation.id, substituteMessage.trim() || undefined);
+      setSubstituteMessageOpen(null);
+      setSubstituteMessage('');
+      await refreshSubstitutes(reservation.id);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || 'Erro ao se inscrever como suplente';
+      setSubstituteError(Array.isArray(msg) ? msg.join(', ') : msg);
+    }
+    setSubstituteSavingId(null);
+  };
+
+  const handleCancelSubstitute = async (reservationId: string, substituteEntryId: string) => {
+    if (!confirm('Cancelar sua inscrição como suplente?')) return;
+    setSubstituteSavingId(substituteEntryId);
+    try {
+      await cancelSubstitute(substituteEntryId);
+      await refreshSubstitutes(reservationId);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Erro ao cancelar inscrição');
+    }
+    setSubstituteSavingId(null);
+  };
+
   const statusColor: Record<string, string> = {
     CONFIRMED: 'bg-emerald-500', PENDING: 'bg-amber-400', CANCELLED: 'bg-red-400', COMPLETED: 'bg-sky-500', IN_USE: 'bg-primary-500',
   };
   const statusLabel: Record<string, string> = {
-    CONFIRMED: 'Confirmada', PENDING: 'Pendente', CANCELLED: 'Cancelada', COMPLETED: 'Concluída', IN_USE: 'Em uso',
+    CONFIRMED: 'Reservada', PENDING: 'Pendente', CANCELLED: 'Cancelada', COMPLETED: 'Concluída', IN_USE: 'Em uso',
   };
   const statusDot: Record<string, string> = {
     CONFIRMED: 'bg-emerald-400', PENDING: 'bg-amber-400', IN_USE: 'bg-primary-400', COMPLETED: 'bg-sky-400',
@@ -609,14 +725,15 @@ export default function ReservationsPage() {
               const isPast = isBefore(day, startOfDay(new Date())) && !today;
               const availability = getDayAvailability(day);
               const hasMine = dayRes.some(r => r.user?.id === user?.id);
+              const showMine = hasMine && availability !== 'full'; // only show MINHA when not fully occupied
               const cellBg = isPast ? 'bg-transparent'
-                : hasMine ? 'bg-[#F98307]/20'
+                : showMine ? 'bg-[#F98307]/20'
                 : availability === 'free' ? 'bg-emerald-500/25'
                 : availability === 'partial' ? 'bg-amber-400/25'
                 : 'bg-red-500/25';
 
               const cellBorder = isPast ? 'border-transparent'
-                : hasMine ? 'border-[#F98307]/50'
+                : showMine ? 'border-[#F98307]/50'
                 : availability === 'free' ? 'border-emerald-500/50'
                 : availability === 'partial' ? 'border-amber-500/50'
                 : 'border-red-500/50';
@@ -627,18 +744,18 @@ export default function ReservationsPage() {
                   onClick={() => setSelectedDate(day)}
                   className={`relative aspect-square flex flex-col items-center justify-center rounded-xl text-[13px] font-semibold transition-all duration-150 border-[1.5px] ${
                     isSelected
-                      ? `${cellBg} ${cellBorder} ${hasMine ? 'text-[#F98307] font-bold' : isPast ? 'text-[var(--text-muted)]/50 opacity-60' : 'text-[var(--text)]'} scale-[1.08] ring-2 ring-primary-500 ring-offset-2 ring-offset-[var(--card)] z-10 shadow-[0_4px_12px_rgba(0,117,119,0.2)]`
+                      ? `${cellBg} ${cellBorder} ${showMine ? 'text-[#F98307] font-bold' : isPast ? 'text-[var(--text-muted)]/50 opacity-60' : 'text-[var(--text)]'} scale-[1.08] ring-2 ring-primary-500 ring-offset-2 ring-offset-[var(--card)] z-10 shadow-[0_4px_12px_rgba(0,117,119,0.2)]`
                       : today
-                        ? `${cellBg} ${cellBorder} ${hasMine ? 'text-[#F98307]' : 'text-primary-500'} font-extrabold ring-[1.5px] ring-primary-500/40 ring-offset-1 ring-offset-[var(--card)]`
+                        ? `${cellBg} ${cellBorder} ${showMine ? 'text-[#F98307]' : 'text-primary-500'} font-extrabold ring-[1.5px] ring-primary-500/40 ring-offset-1 ring-offset-[var(--card)]`
                         : isPast
                           ? 'text-[var(--text-muted)]/50 border-transparent opacity-40'
-                          : `${cellBg} ${cellBorder} ${hasMine ? 'text-[#F98307] font-bold' : 'text-[var(--text)]'} hover:scale-[1.06] hover:bg-[var(--subtle-hover)] active:scale-[0.96]`
+                          : `${cellBg} ${cellBorder} ${showMine ? 'text-[#F98307] font-bold' : 'text-[var(--text)]'} hover:scale-[1.06] hover:bg-[var(--subtle-hover)] active:scale-[0.96]`
                   }`}
                 >
                   <span>{day.getDate()}</span>
                   {!isPast && (
                     <div className={`absolute bottom-[3px] left-1/2 -translate-x-1/2 w-[7px] h-[7px] rounded-full ${
-                      hasMine ? 'bg-[#F98307] shadow-[0_0_3px_rgba(249,131,7,0.5)]'
+                      showMine ? 'bg-[#F98307] shadow-[0_0_3px_rgba(249,131,7,0.5)]'
                       : availability === 'free' ? 'bg-emerald-500 shadow-[0_0_3px_rgba(16,185,129,0.5)]' : availability === 'partial' ? 'bg-amber-500 shadow-[0_0_3px_rgba(245,158,11,0.5)]' : 'bg-red-500 shadow-[0_0_3px_rgba(239,68,68,0.5)]'
                     }`} />
                   )}
@@ -724,7 +841,7 @@ export default function ReservationsPage() {
                         <span className="text-[10px] font-medium text-[var(--text-muted)]">{statusLabel[r.status] || r.status}</span>
                       </div>
                     </div>
-                    {isMine && r.confirmedAt && r.expectedArrivalTime && (
+                    {isMine && r.expectedArrivalTime && (
                       <div className="mt-3 flex items-center gap-2 bg-emerald-500/8 rounded-xl px-3 py-2 border border-emerald-500/12">
                         <CheckCircle2 size={13} className="text-emerald-500 flex-shrink-0" />
                         <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">Presença confirmada · Chegada: <strong>{r.expectedArrivalTime}</strong></span>
@@ -735,14 +852,34 @@ export default function ReservationsPage() {
                         <p className="text-[11px] text-emerald-500 text-center font-medium">
                           Reserva confirmada para você
                         </p>
-                        {!r.confirmedAt && isToday(selectedDate!) && (
-                          <button
-                            onClick={() => openConfirmArrival(r)}
-                            className="w-full text-[13px] text-white font-semibold bg-emerald-500 py-2.5 rounded-xl active:scale-[0.97] transition-all flex items-center justify-center gap-2 shadow-[0_3px_12px_rgba(16,185,129,0.25)]"
-                          >
-                            <CheckCircle2 size={15} /> Confirmar presença
-                          </button>
+                        {/* Substitutes inscritos na sua reserva (lembrete para confirmar presença) */}
+                        {(substitutesByRes[r.id] || []).filter(s => s.status === 'PENDING').length > 0 && !r.expectedArrivalTime && (
+                          <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 flex items-start gap-2">
+                            <Hourglass size={14} className="text-amber-500 mt-0.5 flex-shrink-0" />
+                            <div className="text-[11px] leading-relaxed">
+                              <p className="text-amber-600 dark:text-amber-400 font-semibold">
+                                {(substitutesByRes[r.id] || []).filter(s => s.status === 'PENDING').length === 1
+                                  ? 'Há 1 suplente inscrito'
+                                  : `Há ${(substitutesByRes[r.id] || []).filter(s => s.status === 'PENDING').length} suplentes inscritos`}
+                              </p>
+                              <p className="text-[var(--text-muted)] mt-0.5">
+                                Confirme sua presença para garantir a vaga, ou ela será transferida ao suplente perto do horário.
+                              </p>
+                            </div>
+                          </div>
                         )}
+                        {!r.expectedArrivalTime && (() => {
+                          const daysUntil = differenceInCalendarDays(parseISO(r.startDate), new Date());
+                          if (daysUntil !== 0 && daysUntil !== 1) return null;
+                          return (
+                            <button
+                              onClick={() => openConfirmArrival(r)}
+                              className="w-full text-[13px] text-white font-semibold bg-emerald-500 py-2.5 rounded-xl active:scale-[0.97] transition-all flex items-center justify-center gap-2 shadow-[0_3px_12px_rgba(16,185,129,0.25)]"
+                            >
+                              <CheckCircle2 size={15} /> {daysUntil === 0 ? 'Confirmar presença' : 'Confirmar presença (amanhã)'}
+                            </button>
+                          );
+                        })()}
                         <button
                           onClick={() => handleCancel(r.id)}
                           className="w-full text-[13px] text-red-500 font-semibold bg-red-500/10 py-2.5 rounded-xl active:scale-[0.97] transition-all border border-red-500/15 hover:bg-red-500/15 flex items-center justify-center gap-2"
@@ -751,19 +888,129 @@ export default function ReservationsPage() {
                         </button>
                       </div>
                     )}
-                    {!isMine && r.status === 'CONFIRMED' && !isBefore(parseISO(r.startDate), new Date()) && (
-                      <div className="mt-3">
-                        <p className="text-[11px] text-[var(--text-muted)] mb-2 text-center">
-                          Solicite uma troca de data com o cotista
-                        </p>
-                        <button
-                          onClick={() => openSwap(r)}
-                          className="w-full text-[13px] text-primary-500 font-semibold bg-primary-500/10 py-2.5 rounded-xl active:scale-[0.97] transition-all flex items-center justify-center gap-2 border border-primary-500/15 hover:bg-primary-500/15"
-                        >
-                          <ArrowLeftRight size={15} /> Trocar Data
-                        </button>
-                      </div>
-                    )}
+                    {!isMine && r.status === 'CONFIRMED' && !isBefore(parseISO(r.startDate), new Date()) && (() => {
+                      const subs = substitutesByRes[r.id] || [];
+                      const myEntry = subs.find(s => s.substitute.id === user?.id && s.status === 'PENDING');
+                      const otherPending = subs.find(s => s.status === 'PENDING' && s.substitute.id !== user?.id);
+                      const cutoffOk = (parseISO(r.startDate).getTime() - Date.now()) > 4 * 3600 * 1000;
+                      const eligibleForSub = !r.expectedArrivalTime && cutoffOk && !otherPending && !myEntry;
+                      return (
+                        <div className="mt-3 space-y-2">
+                          {/* Substitute status banners */}
+                          {myEntry && (
+                            <div className="bg-primary-500/10 border border-primary-500/20 rounded-xl p-3 flex items-start gap-2">
+                              <UserPlus size={14} className="text-primary-500 mt-0.5 flex-shrink-0" />
+                              <div className="text-[11px] leading-relaxed flex-1">
+                                <p className="text-primary-500 font-semibold">Você está inscrito como suplente</p>
+                                <p className="text-[var(--text-muted)] mt-0.5">
+                                  Reserva de {format(parseISO(r.startDate), "dd/MM HH:mm")} às {format(parseISO(r.endDate), "dd/MM HH:mm")}.
+                                  Se {r.user?.name?.split(' ')[0] || 'o cotista'} não confirmar a presença, será transferida para você.
+                                </p>
+                                <button
+                                  onClick={() => handleCancelSubstitute(r.id, myEntry.id)}
+                                  disabled={substituteSavingId === myEntry.id}
+                                  className="mt-1.5 text-[11px] text-red-500 font-semibold hover:underline"
+                                >
+                                  Cancelar inscrição
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                          {otherPending && !myEntry && (
+                            <div className="bg-[var(--subtle)] border border-[var(--border)] rounded-xl p-2.5 text-[11px] text-[var(--text-muted)] text-center">
+                              <span className="font-semibold text-[var(--text-secondary)]">{otherPending.substitute.name?.split(' ')[0]}</span> já está inscrito como suplente
+                            </div>
+                          )}
+                          {r.expectedArrivalTime && (
+                            <div className="bg-emerald-500/8 border border-emerald-500/12 rounded-xl p-2.5 text-[11px] text-emerald-600 dark:text-emerald-400 text-center font-medium">
+                              Cotista confirmou presença · vaga não disponível para suplente
+                            </div>
+                          )}
+
+                          {/* Action: register as substitute (with optional message) */}
+                          {eligibleForSub && (
+                            substituteMessageOpen === r.id ? (
+                              <div className="bg-[var(--subtle)] border border-[var(--border)] rounded-xl p-3 space-y-2">
+                                <textarea
+                                  value={substituteMessage}
+                                  onChange={e => setSubstituteMessage(e.target.value)}
+                                  placeholder="Mensagem opcional para o cotista..."
+                                  rows={2}
+                                  className="w-full px-3 py-2 rounded-lg border border-[var(--border)] text-[12px] bg-[var(--card)] text-[var(--text)] outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500/40 resize-none"
+                                />
+                                {substituteError && (
+                                  <p className="text-[11px] text-red-500 flex items-start gap-1.5"><AlertCircle size={11} className="mt-0.5 flex-shrink-0" />{substituteError}</p>
+                                )}
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => { setSubstituteMessageOpen(null); setSubstituteMessage(''); setSubstituteError(''); }}
+                                    className="flex-1 text-[12px] py-2 rounded-lg bg-[var(--subtle-hover)] text-[var(--text-secondary)] font-semibold"
+                                  >
+                                    Cancelar
+                                  </button>
+                                  <button
+                                    onClick={() => handleRegisterSubstitute(r)}
+                                    disabled={substituteSavingId === r.id}
+                                    className="flex-1 text-[12px] py-2 rounded-lg bg-primary-500 text-white font-semibold disabled:opacity-50"
+                                  >
+                                    {substituteSavingId === r.id ? 'Inscrevendo...' : 'Inscrever-se'}
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <p className="text-[11px] text-[var(--text-muted)] mb-2 text-center">
+                                  Se inscreva como suplente — assume a reserva caso o cotista não confirme presença
+                                </p>
+                                <div className="grid grid-cols-2 gap-2">
+                                  {pendingOutgoingSwapTargets.has(r.id) ? (
+                                    <button
+                                      disabled
+                                      title="Você já solicitou uma troca para esta reserva — aguardando resposta do cotista"
+                                      className="text-[12px] text-[var(--text-muted)] font-semibold bg-[var(--subtle)] py-2.5 rounded-xl flex items-center justify-center gap-2 border border-[var(--border)] cursor-not-allowed"
+                                    >
+                                      <ArrowLeftRight size={13} /> Troca solicitada
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => openSwap(r)}
+                                      className="text-[13px] text-primary-500 font-semibold bg-primary-500/10 py-2.5 rounded-xl active:scale-[0.97] transition-all flex items-center justify-center gap-2 border border-primary-500/15 hover:bg-primary-500/15"
+                                    >
+                                      <ArrowLeftRight size={15} /> Trocar
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => { setSubstituteMessageOpen(r.id); setSubstituteMessage(''); setSubstituteError(''); }}
+                                    className="text-[13px] text-amber-500 font-semibold bg-amber-500/10 py-2.5 rounded-xl active:scale-[0.97] transition-all flex items-center justify-center gap-2 border border-amber-500/15 hover:bg-amber-500/15"
+                                  >
+                                    <UserPlus size={15} /> Suplente
+                                  </button>
+                                </div>
+                              </>
+                            )
+                          )}
+
+                          {/* Swap available even when confirmed (substitute is hidden once cotista confirma presença) */}
+                          {!eligibleForSub && !myEntry && (
+                            pendingOutgoingSwapTargets.has(r.id) ? (
+                              <div
+                                className="w-full text-[12px] text-[var(--text-muted)] font-semibold bg-[var(--subtle)] py-2.5 rounded-xl flex items-center justify-center gap-2 border border-[var(--border)]"
+                                title="Você já solicitou uma troca para esta reserva — aguardando resposta do cotista"
+                              >
+                                <ArrowLeftRight size={14} /> Troca solicitada — aguardando resposta
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => openSwap(r)}
+                                className="w-full text-[13px] text-primary-500 font-semibold bg-primary-500/10 py-2.5 rounded-xl active:scale-[0.97] transition-all flex items-center justify-center gap-2 border border-primary-500/15 hover:bg-primary-500/15"
+                              >
+                                <ArrowLeftRight size={15} /> Trocar Data
+                              </button>
+                            )
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })}
@@ -774,8 +1021,8 @@ export default function ReservationsPage() {
 
       {/* Create modal */}
       {showCreate && selectedDate && (
-        <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-end" onClick={() => setShowCreate(false)}>
-          <div className="bg-[var(--card)] w-full rounded-t-3xl p-6 max-h-[85vh] overflow-auto border-t border-[var(--border)]" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[10001] bg-black/50 backdrop-blur-sm flex items-end" onClick={() => setShowCreate(false)}>
+          <div className="bg-[var(--card)] w-full rounded-t-3xl p-6 pb-10 max-h-[85vh] overflow-auto border-t border-[var(--border)]" style={{ paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom, 0px))' }} onClick={e => e.stopPropagation()}>
             <div className="w-10 h-1 bg-[var(--text-muted)]/20 rounded-full mx-auto mb-5" />
             <div className="flex items-center justify-between mb-6">
               <div>
@@ -863,8 +1110,8 @@ export default function ReservationsPage() {
 
       {/* Confirm arrival modal */}
       {showConfirmArrival && confirmReservation && (
-        <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-end" onClick={() => setShowConfirmArrival(false)}>
-          <div className="bg-[var(--card)] w-full rounded-t-3xl p-6 max-h-[85vh] overflow-auto border-t border-[var(--border)]" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[10001] bg-black/50 backdrop-blur-sm flex items-end" onClick={() => setShowConfirmArrival(false)}>
+          <div className="bg-[var(--card)] w-full rounded-t-3xl p-6 pb-10 max-h-[85vh] overflow-auto border-t border-[var(--border)]" style={{ paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom, 0px))' }} onClick={e => e.stopPropagation()}>
             <div className="w-10 h-1 bg-[var(--text-muted)]/20 rounded-full mx-auto mb-5" />
             <div className="flex items-center justify-between mb-6">
               <div>
@@ -917,8 +1164,8 @@ export default function ReservationsPage() {
 
       {/* Swap modal */}
       {showSwap && swapReservation && (
-        <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-end" onClick={() => setShowSwap(false)}>
-          <div className="bg-[var(--card)] w-full rounded-t-3xl p-6 max-h-[85vh] overflow-auto border-t border-[var(--border)]" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[10001] bg-black/50 backdrop-blur-sm flex items-end" onClick={() => setShowSwap(false)}>
+          <div className="bg-[var(--card)] w-full rounded-t-3xl p-6 pb-10 max-h-[85vh] overflow-auto border-t border-[var(--border)]" style={{ paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom, 0px))' }} onClick={e => e.stopPropagation()}>
             <div className="w-10 h-1 bg-[var(--text-muted)]/20 rounded-full mx-auto mb-5" />
             <div className="flex items-center justify-between mb-6">
               <div>

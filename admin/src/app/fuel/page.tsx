@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Fuel, Plus, Ship, DollarSign, Camera, Loader2, X, Settings, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { getFuelLogs, getBoats, createFuelLog, getFuelPrice, setFuelPrice, getSharesByBoat, getBoatReservations, getLastReturnInspection } from '@/services/api';
+import { getFuelLogs, getBoats, createFuelLog, getFuelPrice, setFuelPrice, getSharesByBoat, getBoatReservations, getLastReturnInspection, getRecentUsers } from '@/services/api';
 
 const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || 'https://api.marinaprizeclub.com/api/v1').replace(/\/api\/v1$/, '');
 function resolveMediaUrl(url: string | undefined | null): string {
@@ -239,7 +239,7 @@ function NewFuelingModal({ currentPrice, onClose, onSuccess }: { currentPrice: n
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
-  const [shareholders, setShareholders] = useState<{ userId: string; userName: string; shareNumber: number; hasReservationToday?: boolean }[]>([]);
+  const [shareholders, setShareholders] = useState<{ userId: string; userName: string; shareNumber: number; hasReservationToday?: boolean; hasFuelCharge?: boolean; isShareholder?: boolean; source?: string }[]>([]);
   const [targetUserId, setTargetUserId] = useState('');
   const [returnInspection, setReturnInspection] = useState<{ fuelPhotoUrl?: string; returnFuelPhotoUrl?: string; cotistaUserId?: string; cotistaName?: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -254,33 +254,29 @@ function NewFuelingModal({ currentPrice, onClose, onSuccess }: { currentPrice: n
 
   useEffect(() => {
     if (!selectedBoatId) { setShareholders([]); setTargetUserId(''); setReturnInspection(null); return; }
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
     Promise.all([
-      getSharesByBoat(selectedBoatId),
-      getBoatReservations(selectedBoatId, today).catch(() => ({ data: [] })),
+      getRecentUsers(selectedBoatId).catch(() => ({ data: [] })),
       getLastReturnInspection(selectedBoatId).catch(() => ({ data: null })),
-    ]).then(([sharesRes, reservRes, returnRes]) => {
-      const sharesList = Array.isArray(sharesRes.data) ? sharesRes.data : sharesRes.data?.data || [];
-      const reservations = Array.isArray(reservRes.data) ? reservRes.data : reservRes.data?.data || [];
-      const todayUserIds = new Set(reservations.map((r: any) => r.userId));
-      const mapped = sharesList.filter((s: any) => s.isActive !== false).map((s: any) => ({
-        userId: s.userId,
-        userName: s.user?.name || s.userName || 'Cotista',
-        shareNumber: s.shareNumber,
-        hasReservationToday: todayUserIds.has(s.userId),
+    ]).then(([recentRes, returnRes]) => {
+      const recentList = Array.isArray(recentRes.data) ? recentRes.data : recentRes.data?.data || [];
+      const mapped = recentList.map((u: any, idx: number) => ({
+        userId: u.userId,
+        userName: u.userName || 'Usuário',
+        shareNumber: idx + 1,
+        hasReservationToday: !!u.reservationId,
+        hasFuelCharge: u.hasFuelCharge,
+        isShareholder: u.isShareholder,
+        source: u.source,
       }));
-      // Sort: shareholders with reservation today come first
-      mapped.sort((a: any, b: any) => (b.hasReservationToday ? 1 : 0) - (a.hasReservationToday ? 1 : 0));
       setShareholders(mapped);
 
-      // Auto-select cotista: prefer return inspection cotista, then today's reservation, then first
       const ri = returnRes.data;
       setReturnInspection(ri || null);
       if (ri?.cotistaUserId && mapped.some((s: any) => s.userId === ri.cotistaUserId)) {
         setTargetUserId(ri.cotistaUserId);
       } else {
-        const todayShareholder = mapped.find((s: any) => s.hasReservationToday);
-        setTargetUserId(todayShareholder ? todayShareholder.userId : (mapped.length > 0 ? mapped[0].userId : ''));
+        const uncharged = mapped.find((s: any) => !s.hasFuelCharge);
+        setTargetUserId(uncharged ? uncharged.userId : (mapped.length > 0 ? mapped[0].userId : ''));
       }
     }).catch(() => setShareholders([]));
   }, [selectedBoatId]);
@@ -480,7 +476,10 @@ function NewFuelingModal({ currentPrice, onClose, onSuccess }: { currentPrice: n
                     >
                       {shareholders.map(s => (
                         <option key={s.userId} value={s.userId}>
-                          Cota #{s.shareNumber} — {s.userName}{s.hasReservationToday ? ' (reserva hoje)' : ''}
+                          {s.userName}
+                          {s.source === 'reservation' && !s.isShareholder ? ' (reserva avulsa)' : ''}
+                          {s.hasFuelCharge ? ' ✅ cobrado' : ' ⚠️ pendente'}
+                          {s.hasReservationToday ? ' — hoje' : ''}
                         </option>
                       ))}
                     </select>
