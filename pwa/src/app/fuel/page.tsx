@@ -9,6 +9,7 @@ import {
 import {
   getMyFuelLogs, getBoats, createFuelLog, getFuelPrice, setFuelPrice,
   analyzeGauge, getSharesByBoat, getBoatReservations, getLastReturnInspection,
+  getRecentUsers,
 } from '@/services/api';
 import ReactCrop, { type Crop as CropType } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
