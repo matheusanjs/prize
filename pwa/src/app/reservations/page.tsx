@@ -3,11 +3,13 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { Plus, X, ChevronLeft, ChevronRight, Clock, Ship, User, AlertCircle, Calendar, ArrowLeftRight, CheckCircle2, UserPlus, Hourglass } from 'lucide-react';
 import { useAuth } from '@/contexts/auth';
-import { getMyReservations, createReservation, cancelReservation, getShares, getAllBoatReservations, createSwapRequest, confirmArrival, invalidateCache, registerSubstitute, listReservationSubstitutes, cancelSubstitute, getMySwaps } from '@/services/api';
+import { getMyReservations, createReservation, cancelReservation, getShares, getAllBoatReservations, createSwapRequest, confirmArrival, registerSubstitute, listReservationSubstitutes, cancelSubstitute, getMySwaps } from '@/services/api';
 import { format, startOfMonth, endOfMonth, addMonths, subMonths, eachDayOfInterval, isSameDay, isToday, parseISO, isBefore, startOfDay, differenceInCalendarDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useReservationsRealtime } from '@/hooks/useReservationsRealtime';
 import { handleApiError } from '@/lib/errors';
+import { useQueryClient } from '@tanstack/react-query';
+import { useBoatSnapshotQuery, useSharesForBoatsQuery, useMyReservationsQuery, useMySwapsQuery } from '@/hooks/queries/useReservationsQuery';
 
 interface Reservation {
   id: string;
@@ -42,6 +44,7 @@ const HOURS = ['10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '1
 
 export default function ReservationsPage() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   // Hydrate boats + selected boat from localStorage synchronously so the
   // UI has something to render BEFORE /shares resolves. This eliminates the
   // "empty page" flash when re-entering the route.
@@ -70,8 +73,6 @@ export default function ReservationsPage() {
   const [swapForm, setSwapForm] = useState({ offeredReservationId: '', message: '' });
   const [swapSaving, setSwapSaving] = useState(false);
   const [swapError, setSwapError] = useState('');
-  // Set of target reservation IDs for which the current user already has a PENDING outgoing swap request.
-  // Used to disable the "Trocar" button and show "Troca já solicitada" instead.
   const [pendingOutgoingSwapTargets, setPendingOutgoingSwapTargets] = useState<Set<string>>(new Set());
   const [reservationLimit, setReservationLimit] = useState<{ max: number; active: number } | null>(null);
   const [showConfirmArrival, setShowConfirmArrival] = useState(false);
@@ -88,152 +89,73 @@ export default function ReservationsPage() {
   const [substituteMessage, setSubstituteMessage] = useState('');
   const [substituteError, setSubstituteError] = useState('');
 
-  // Track the latest in-flight snapshot request — ignore stale responses
-  const snapshotRequestRef = useRef<string | null>(null);
-
-  // ─── Load boats + weather + limit (parallel) ────────────────────────
   const [shareCache, setShareCache] = useState<any[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const userId = user?.id;
 
+  // React Query: boat snapshot
+  const boatSnapshotQ = useBoatSnapshotQuery(selectedBoatId);
+  // React Query: shares for boat selection
+  const sharesQ = useSharesForBoatsQuery(userId);
+  // React Query: swaps
+  const swapsQ = useMySwapsQuery(userId);
+
   useEffect(() => {
     if (!userId) return;
-    // Only show the full-page spinner if we have NOTHING cached — otherwise
-    // the cached view is already visible and we just revalidate silently.
-    const hasCachedBoats = boats.length > 0;
-    if (!hasCachedBoats) setLoading(true);
-    (async () => {
-      const preselectedBoatId = typeof window !== 'undefined'
-        ? new URLSearchParams(window.location.search).get('boatId') || ''
-        : '';
-      try {
-        // Run all independent calls in parallel
-        const [sharesRes] = await Promise.allSettled([
-          getShares({ userId }),
-        ]);
-
-        // Process shares
-        const shareList = sharesRes.status === 'fulfilled'
-          ? (Array.isArray(sharesRes.value.data) ? sharesRes.value.data : sharesRes.value.data.data || [])
-          : [];
-        const boatList = shareList.map((s: { boat: { id: string; name: string; status?: string } }) => ({
-          id: s.boat.id, name: s.boat.name, status: s.boat.status,
-        }));
-        setBoats(boatList);
-        setShareCache(shareList);
-        if (boatList.length > 0) {
-          // Preference order: ?boatId= → cached selection (if still valid) → first AVAILABLE → first.
-          const cachedBoatId = selectedBoatId;
-          const initialBoatId =
-            (preselectedBoatId && boatList.some((b: BoatOption) => b.id === preselectedBoatId) && preselectedBoatId)
-            || (cachedBoatId && boatList.some((b: BoatOption) => b.id === cachedBoatId) && cachedBoatId)
-            || (boatList.find((b: BoatOption) => b.status === 'AVAILABLE') || boatList[0]).id;
-          if (initialBoatId !== selectedBoatId) setSelectedBoatId(initialBoatId);
-        }
-
-      } catch { /* empty */ } finally { setLoading(false); }
-    })();
-  }, [userId]);
+    if (!sharesQ.data) return;
+    const preselectedBoatId = typeof window !== 'undefined'
+      ? new URLSearchParams(window.location.search).get('boatId') || ''
+      : '';
+    const shareList = sharesQ.data;
+    const boatList = shareList.map((s: any) => ({
+      id: s.boat.id, name: s.boat.name, status: s.boat.status,
+    }));
+    setBoats(boatList);
+    setShareCache(shareList);
+    if (boatList.length > 0) {
+      const cachedBoatId = selectedBoatId;
+      const initialBoatId =
+        (preselectedBoatId && boatList.some((b: BoatOption) => b.id === preselectedBoatId) && preselectedBoatId)
+        || (cachedBoatId && boatList.some((b: BoatOption) => b.id === cachedBoatId) && cachedBoatId)
+        || (boatList.find((b: BoatOption) => b.status === 'AVAILABLE') || boatList[0]).id;
+      if (initialBoatId !== selectedBoatId) setSelectedBoatId(initialBoatId);
+    }
+    setLoading(false);
+  }, [sharesQ.data, userId]);
 
   // ─── Reservation limit (after boat selected) ────────────────────────
+  const myReservationsQ = useMyReservationsQuery();
   useEffect(() => {
-    if (!selectedBoatId) return;
-    (async () => {
-      try {
-        const share = shareCache.find((s: any) => s.boat?.id === selectedBoatId || s.boatId === selectedBoatId);
-        const max = share?.maxReservations ?? 3;
-        const myRes = await getMyReservations();
-        const myList: Reservation[] = Array.isArray(myRes.data) ? myRes.data : myRes.data.data || [];
-        const active = myList.filter(r =>
-          (r.boat?.id === selectedBoatId) && ['CONFIRMED', 'PENDING'].includes(r.status) && new Date(r.endDate) >= new Date()
-        ).length;
-        setReservationLimit({ max, active });
-      } catch { setReservationLimit(null); }
-    })();
-  }, [selectedBoatId, shareCache]);
+    if (!selectedBoatId || !myReservationsQ.data) return;
+    const share = shareCache.find((s: any) => s.boat?.id === selectedBoatId || s.boatId === selectedBoatId);
+    const max = share?.maxReservations ?? 3;
+    const active = myReservationsQ.data.filter((r: Reservation) =>
+      (r.boat?.id === selectedBoatId) && ['CONFIRMED', 'PENDING'].includes(r.status) && new Date(r.endDate) >= new Date()
+    ).length;
+    setReservationLimit({ max, active });
+  }, [selectedBoatId, shareCache, myReservationsQ.data]);
 
-  // ─── Snapshot: load ALL reservations for the boat ONCE per boat change ─
-  // After this, month navigation + day selection are instant (derived from state).
-  // Refetch happens only on user actions (create/cancel/swap) or realtime events.
-  //
-  // Stale-while-revalidate: we persist the last successful snapshot per boat
-  // in localStorage so subsequent entries to this page render INSTANTLY from
-  // cache, and then reconcile with fresh server data in the background.
-  const cacheKey = (boatId: string) => `pc:reservations:snapshot:${boatId}`;
-
-  const readCachedSnapshot = useCallback((boatId: string): Reservation[] | null => {
-    if (typeof window === 'undefined') return null;
-    try {
-      const raw = localStorage.getItem(cacheKey(boatId));
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed?.items)) return parsed.items as Reservation[];
-      return null;
-    } catch { return null; }
-  }, []);
-
-  const writeCachedSnapshot = useCallback((boatId: string, items: Reservation[]) => {
-    if (typeof window === 'undefined') return;
-    try {
-      localStorage.setItem(cacheKey(boatId), JSON.stringify({ items, savedAt: Date.now() }));
-    } catch { /* quota or disabled storage — ignore */ }
-  }, []);
-
-  const loadSnapshot = useCallback(async () => {
-    if (!selectedBoatId) return;
-    const reqKey = `snap-${selectedBoatId}-${Date.now()}`;
-    snapshotRequestRef.current = reqKey;
-    try {
-      const { data } = await getAllBoatReservations(selectedBoatId, { pastDays: 60, futureMonths: 12 });
-      if (snapshotRequestRef.current !== reqKey) return;
-      const list: Reservation[] = Array.isArray(data) ? data : data.data || [];
-      setCalendarReservations(list);
-      writeCachedSnapshot(selectedBoatId, list);
-    } catch {
-      // Keep previous (possibly cached) data on error
-    }
-  }, [selectedBoatId, writeCachedSnapshot]);
-
-  // Outgoing pending swap requests — loaded here (before realtime hook) so it can be a dep.
-  const loadPendingOutgoingSwaps = useCallback(async () => {
-    if (!userId) return;
-    try {
-      const { data } = await getMySwaps();
-      const list: any[] = Array.isArray(data) ? data : (data?.data || []);
-      const targets = new Set<string>(
-        list
-          .filter(s => s.status === 'PENDING' && (s.requesterId === userId || s.requester?.id === userId))
-          .map(s => s.reservationId || s.reservation?.id)
-          .filter(Boolean)
-      );
-      setPendingOutgoingSwapTargets(targets);
-    } catch { /* silent */ }
-  }, [userId]);
-  useEffect(() => { loadPendingOutgoingSwaps(); }, [loadPendingOutgoingSwaps]);
-
+  // ─── Snapshot: sync React Query data to local state for realtime ────
   useEffect(() => {
-    if (!selectedBoatId) return;
-    // 1) Hydrate from cache synchronously — no empty state, no delay.
-    const cached = readCachedSnapshot(selectedBoatId);
-    if (cached && cached.length > 0) {
-      setCalendarReservations(cached);
+    if (boatSnapshotQ.data) {
+      setCalendarReservations(boatSnapshotQ.data);
+      setIsRefreshing(false);
+    } else if (boatSnapshotQ.isLoading) {
       setIsRefreshing(true);
-      // 2) Revalidate in background; any diff silently updates the UI.
-      loadSnapshot().finally(() => setIsRefreshing(false));
-    } else {
-      // No cache — show empty + fetch.
-      setCalendarReservations([]);
-      setIsRefreshing(true);
-      loadSnapshot().finally(() => setIsRefreshing(false));
     }
-  }, [selectedBoatId, loadSnapshot, readCachedSnapshot]);
+  }, [boatSnapshotQ.data, boatSnapshotQ.isLoading]);
 
-  // Persist optimistic/realtime mutations to cache so next entry stays fresh
+  // Outgoing pending swap requests
   useEffect(() => {
-    if (!selectedBoatId) return;
-    if (calendarReservations.length === 0) return;
-    writeCachedSnapshot(selectedBoatId, calendarReservations);
-  }, [selectedBoatId, calendarReservations, writeCachedSnapshot]);
+    if (!swapsQ.data || !userId) return;
+    const targets = new Set<string>(
+      swapsQ.data
+        .filter((s: any) => s.status === 'PENDING' && (s.requesterId === userId || s.requester?.id === userId))
+        .map((s: any) => s.reservationId || s.reservation?.id)
+        .filter(Boolean)
+    );
+    setPendingOutgoingSwapTargets(targets);
+  }, [swapsQ.data, userId]);
 
   // Persist boats list + selected boat so the next entry hydrates instantly
   useEffect(() => {
@@ -290,9 +212,9 @@ export default function ReservationsPage() {
     }, []),
     onSwapAccepted: useCallback(() => {
       // Swap changes two rows — safest path: reload snapshot
-      loadSnapshot();
-      loadPendingOutgoingSwaps();
-    }, [loadSnapshot, loadPendingOutgoingSwaps]),
+      boatSnapshotQ.refetch();
+      swapsQ.refetch();
+    }, [boatSnapshotQ, swapsQ]),
   });
 
   // ─── Derive selected day reservations from the snapshot (zero-latency) ───
@@ -382,7 +304,7 @@ export default function ReservationsPage() {
   const selectedBoat = boats.find(b => b.id === selectedBoatId);
 
   // Blocked hours for create modal
-  const getBlockedHours = () => {
+  const getBlockedHours = useMemo(() => {
     const blocked = new Set<string>();
     boatDayReservations.forEach(r => {
       if (r.status === 'CANCELLED') return;
@@ -391,9 +313,9 @@ export default function ReservationsPage() {
       for (let h = startH; h < endH; h++) blocked.add(`${String(h).padStart(2, '0')}:00`);
     });
     return blocked;
-  };
+  }, [boatDayReservations]);
 
-  const blockedHours = getBlockedHours();
+  const blockedHours = getBlockedHours;
   const availableStartHours = HOURS.filter(h => h !== '17:00' && !blockedHours.has(h));
 
   const getAvailableEndHours = (startTime: string) => {
@@ -456,11 +378,8 @@ export default function ReservationsPage() {
         setCalendarReservations(prev => prev.map(r => r.id === tempId ? created : r));
         setSelectedDayReservations(prev => prev.map(r => r.id === tempId ? created : r));
       }
-      invalidateCache('/reservations');
-      invalidateCache('calendar');
-      invalidateCache('boat/');
       // Background refresh (non-blocking) to reconcile with server truth
-      loadSnapshot();
+      boatSnapshotQ.refetch();
     } catch (err: any) {
       // ROLLBACK on failure
       setCalendarReservations(prevCalendar);
@@ -488,11 +407,8 @@ export default function ReservationsPage() {
 
     try {
       await cancelReservation(id);
-      invalidateCache('/reservations');
-      invalidateCache('calendar');
-      invalidateCache('boat/');
       // Background refresh to reconcile
-      loadSnapshot();
+      boatSnapshotQ.refetch();
     } catch {
       // ROLLBACK on failure
       setCalendarReservations(prevCalendar);
@@ -516,7 +432,7 @@ export default function ReservationsPage() {
     try {
       await confirmArrival(confirmReservation.id, arrivalTime);
       setShowConfirmArrival(false);
-      await loadSnapshot();
+      boatSnapshotQ.refetch();
     } catch (err: any) {
       setConfirmError(err?.response?.data?.message || 'Erro ao confirmar presença');
     }
@@ -557,7 +473,7 @@ export default function ReservationsPage() {
         return next;
       });
       // Refetch to reconcile (in case server merged with an existing request, etc.)
-      loadPendingOutgoingSwaps();
+      swapsQ.refetch();
       setShowSwap(false);
     } catch (err: any) {
       setSwapError(err?.response?.data?.message || 'Erro ao solicitar troca');
@@ -572,6 +488,7 @@ export default function ReservationsPage() {
   useEffect(() => {
     if (!user || selectedDayReservations.length === 0) return;
     let cancelled = false;
+    const timer = setTimeout(() => {
     (async () => {
       const candidates = selectedDayReservations.filter(r =>
         r.status === 'CONFIRMED' && !r.expectedArrivalTime && r.user?.id !== user.id
@@ -597,7 +514,8 @@ export default function ReservationsPage() {
         setSubstitutesByRes(prev => ({ ...prev, ...map }));
       } catch { /* silent */ }
     })();
-    return () => { cancelled = true; };
+    }, 300);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [selectedDayReservations, user]);
 
   const refreshSubstitutes = useCallback(async (reservationId: string) => {

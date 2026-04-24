@@ -2,6 +2,7 @@ import './globals.css';
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import { LayoutShell } from '@/components/layout/LayoutShell';
+import { QueryProvider } from './providers';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -51,7 +52,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className="font-sans">
-        <LayoutShell>{children}</LayoutShell>
+        <QueryProvider>
+          <LayoutShell>{children}</LayoutShell>
+        </QueryProvider>
       </body>
     </html>
   );

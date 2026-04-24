@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback, Suspense } from 'react';
+import { useEffect, useState, useRef, useCallback, Suspense, memo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/auth';
 import api from '@/services/api';
@@ -12,7 +12,8 @@ import {
 import { io, Socket } from 'socket.io-client';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { useCachedState, hasCached } from '@/hooks/useCachedState';
+import { useTripsQuery, useTripDetailQuery } from '@/hooks/queries/useSocialQuery';
+import { useQueryClient } from '@tanstack/react-query';
 
 const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || 'https://api.marinaprizeclub.com/api/v1').replace(/\/api\/v1$/, '');
 const WS_URL = API_ORIGIN;
@@ -26,10 +27,6 @@ function resolveMediaUrl(url: string | undefined | null): string {
 function formatDate(d: string) {
   return format(new Date(d), "dd 'de' MMMM", { locale: ptBR });
 }
-
-// ═══════════════════════════════════════════════════════════════
-// TYPES
-// ═══════════════════════════════════════════════════════════════
 
 interface TripPhoto { id: string; url: string; order: number }
 interface TripParticipant { id: string; userId: string; user: { id: string; name: string; avatar: string | null }; joinedAt: string }
@@ -49,10 +46,6 @@ interface ChatMessage {
   user: { id: string; name: string; avatar: string | null };
 }
 
-// ═══════════════════════════════════════════════════════════════
-// CSS KEYFRAMES
-// ═══════════════════════════════════════════════════════════════
-
 const gStyles = `
 @keyframes fadeInUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
 @keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
@@ -61,10 +54,6 @@ const gStyles = `
 .aShimmer{background:linear-gradient(90deg,var(--subtle) 25%,var(--subtle-hover) 50%,var(--subtle) 75%);background-size:200% 100%;animation:shimmer 1.5s infinite}
 .aPulse{animation:pulseGlow 2.5s ease-in-out infinite}
 `;
-
-// ═══════════════════════════════════════════════════════════════
-// MAIN PAGE
-// ═══════════════════════════════════════════════════════════════
 
 export default function SocialPage() {
   return (
@@ -76,35 +65,23 @@ export default function SocialPage() {
 
 function SocialPageInner() {
   const { user } = useAuth();
-  const [trips, setTrips] = useCachedState<Trip[]>('pc:social:trips', []);
-  const [hasShare, setHasShare] = useCachedState<boolean>('pc:social:hasShare', true);
-  const [loading, setLoading] = useState(() => !hasCached('pc:social:trips'));
-  const [view, setView] = useState<'feed' | 'create' | 'detail'>('feed');
-  const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
-  const [showChat, setShowChat] = useState(false);
+  const queryClient = useQueryClient();
+  const tripsQ = useTripsQuery();
+  const trips = tripsQ.data?.trips || [];
+  const hasShare = tripsQ.data?.hasShare ?? true;
+  const loading = tripsQ.isLoading && !tripsQ.data;
 
-  const loadTrips = useCallback(async () => {
-    try {
-      const { data } = await api.get('/social/trips');
-      setHasShare(data.hasShare);
-      setTrips(data.trips);
-    } catch { }
-    setLoading(false);
-  }, []);
+  const [view, setView] = useState<'feed' | 'create' | 'detail'>('feed');
+  const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
+  const [showChat, setShowChat] = useState(false);
 
   const searchParams = useSearchParams();
 
-  useEffect(() => { loadTrips(); }, [loadTrips]);
-
-  const openTrip = useCallback(async (tripId: string) => {
-    try {
-      const { data } = await api.get(`/social/trips/${tripId}`);
-      setSelectedTrip(data);
-      setView('detail');
-    } catch { }
+  const openTrip = useCallback((tripId: string) => {
+    setSelectedTripId(tripId);
+    setView('detail');
   }, []);
 
-  // Auto-open trip from query param (e.g. /social?tripId=xxx)
   useEffect(() => {
     const tripId = searchParams.get('tripId');
     if (tripId) openTrip(tripId);
@@ -113,14 +90,14 @@ function SocialPageInner() {
   if (loading) return <SkeletonFeed />;
   if (!hasShare) return <LockedView />;
 
-  if (view === 'create') return <CreateTrip onBack={() => setView('feed')} onCreated={() => { setView('feed'); loadTrips(); }} />;
-  if (view === 'detail' && selectedTrip) {
-    if (showChat) return <TripChat trip={selectedTrip} userId={user?.id || ''} onBack={() => setShowChat(false)} />;
-    return <TripDetail trip={selectedTrip} userId={user?.id || ''} onBack={() => { setView('feed'); loadTrips(); }} onOpenChat={() => setShowChat(true)} onRefresh={() => openTrip(selectedTrip.id)} />;
+  if (view === 'create') return <CreateTrip onBack={() => setView('feed')} onCreated={() => { setView('feed'); queryClient.invalidateQueries({ queryKey: ['social', 'trips'] }); }} />;
+  if (view === 'detail' && selectedTripId) {
+    if (showChat) return <TripChat tripId={selectedTripId} userId={user?.id || ''} onBack={() => setShowChat(false)} />;
+    return <TripDetailWrapper tripId={selectedTripId} userId={user?.id || ''} onBack={() => { setView('feed'); queryClient.invalidateQueries({ queryKey: ['social', 'trips'] }); }} onOpenChat={() => setShowChat(true)} />;
   }
 
-  const highlighted = trips.filter(t => t.isHighlighted);
-  const regular = trips.filter(t => !t.isHighlighted);
+  const highlighted = trips.filter((t: Trip) => t.isHighlighted);
+  const regular = trips.filter((t: Trip) => !t.isHighlighted);
 
   return (
     <>
@@ -153,7 +130,7 @@ function SocialPageInner() {
                 <span className="text-xs font-bold text-[var(--text)] tracking-wide uppercase">Em destaque</span>
               </div>
               <div className="space-y-3">
-                {highlighted.map((trip, i) => (
+                {highlighted.map((trip: Trip, i: number) => (
                   <div key={trip.id} onClick={() => openTrip(trip.id)} className="aFadeUp" style={{ animationDelay: `${i * 0.1}s` }}>
                     <HeroCard trip={trip} />
                   </div>
@@ -170,7 +147,7 @@ function SocialPageInner() {
                 <span className="text-xs font-bold text-[var(--text)] tracking-wide uppercase">Todas as Trips</span>
               </div>
               <div className="space-y-4">
-                {regular.map((trip, i) => (
+                {regular.map((trip: Trip, i: number) => (
                   <div key={trip.id} className="aFadeUp" style={{ animationDelay: `${i * 0.08}s` }}>
                     <TripCard trip={trip} onClick={() => openTrip(trip.id)} />
                   </div>
@@ -203,10 +180,6 @@ function SocialPageInner() {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════
-// SKELETON LOADING
-// ═══════════════════════════════════════════════════════════════
-
 function SkeletonFeed() {
   return (
     <>
@@ -225,10 +198,6 @@ function SkeletonFeed() {
     </>
   );
 }
-
-// ═══════════════════════════════════════════════════════════════
-// LOCKED VIEW
-// ═══════════════════════════════════════════════════════════════
 
 function LockedView() {
   return (
@@ -256,11 +225,7 @@ function LockedView() {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════
-// HERO CARD (Highlighted)
-// ═══════════════════════════════════════════════════════════════
-
-function HeroCard({ trip }: { trip: Trip }) {
+const HeroCard = memo(function HeroCard({ trip }: { trip: Trip }) {
   const photo = trip.photos[0]?.url;
   return (
     <div className="relative rounded-[16px] overflow-hidden h-28 cursor-pointer active:scale-[0.97] transition-transform duration-200" style={{ boxShadow: '0 4px 20px rgba(0,0,0,0.35)' }}>
@@ -288,13 +253,9 @@ function HeroCard({ trip }: { trip: Trip }) {
       </div>
     </div>
   );
-}
+});
 
-// ═══════════════════════════════════════════════════════════════
-// TRIP CARD (Regular — Hero Style)
-// ═══════════════════════════════════════════════════════════════
-
-function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
+const TripCard = memo(function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
   const photo = trip.photos[0]?.url;
   const isPending = trip.status === 'PENDING';
 
@@ -310,7 +271,6 @@ function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
         )}
         <div className="absolute inset-0" style={{ background: 'linear-gradient(0deg, rgba(10,37,64,0.92) 0%, rgba(10,37,64,0.4) 50%, rgba(10,37,64,0.15) 100%)' }} />
 
-        {/* Badges */}
         <div className="absolute top-3 left-3 flex items-center gap-2">
           {trip.isOfficial && (
             <span className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide text-[#0A2540]" style={{ background: 'linear-gradient(90deg, #FFC857, #FFAA00)', boxShadow: '0 2px 8px rgba(255,200,87,0.3)' }}>
@@ -324,7 +284,6 @@ function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
           )}
         </div>
 
-        {/* Stats */}
         <div className="absolute top-3 right-3 flex items-center gap-2">
           <span className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium text-white" style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(8px)' }}>
             <Heart size={10} className={trip.isLiked ? 'fill-red-400 text-red-400' : ''} /> {trip._count.likes}
@@ -334,7 +293,6 @@ function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
           </span>
         </div>
 
-        {/* Content */}
         <div className="absolute inset-0 flex items-end p-3.5">
           <div className="flex-1 min-w-0">
             <h3 className="text-white font-bold text-[14px] leading-tight truncate">{trip.title}</h3>
@@ -349,11 +307,31 @@ function TripCard({ trip, onClick }: { trip: Trip; onClick: () => void }) {
       </div>
     </div>
   );
-}
+});
 
-// ═══════════════════════════════════════════════════════════════
-// TRIP DETAIL
-// ═══════════════════════════════════════════════════════════════
+function TripDetailWrapper({ tripId, userId, onBack, onOpenChat }: {
+  tripId: string; userId: string; onBack: () => void; onOpenChat: () => void;
+}) {
+  const tripQ = useTripDetailQuery(tripId);
+  if (tripQ.isLoading && !tripQ.data) {
+    return (
+      <>
+        <style dangerouslySetInnerHTML={{ __html: gStyles }} />
+        <div className="flex items-center justify-center min-h-[60vh]"><Loader2 size={24} className="animate-spin text-primary-500" /></div>
+      </>
+    );
+  }
+  if (!tripQ.data) return null;
+  return (
+    <TripDetail
+      trip={tripQ.data}
+      userId={userId}
+      onBack={onBack}
+      onOpenChat={onOpenChat}
+      onRefresh={() => tripQ.refetch()}
+    />
+  );
+}
 
 function TripDetail({ trip, userId, onBack, onOpenChat, onRefresh }: {
   trip: Trip; userId: string; onBack: () => void; onOpenChat: () => void; onRefresh: () => void;
@@ -588,10 +566,6 @@ function TripDetail({ trip, userId, onBack, onOpenChat, onRefresh }: {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════
-// CREATE TRIP
-// ═══════════════════════════════════════════════════════════════
-
 function CreateTrip({ onBack, onCreated }: { onBack: () => void; onCreated: () => void }) {
   const [form, setForm] = useState({ title: '', meetingPoint: '', destination: '', date: '', time: '', maxParticipants: '' });
   const [photos, setPhotos] = useState<string[]>([]);
@@ -718,11 +692,9 @@ function CField({ label, value, onChange, placeholder, type = 'text' }: {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════
-// CHAT
-// ═══════════════════════════════════════════════════════════════
-
-function TripChat({ trip, userId, onBack }: { trip: Trip; userId: string; onBack: () => void }) {
+function TripChat({ tripId, userId, onBack }: { tripId: string; userId: string; onBack: () => void }) {
+  const tripDetailQ = useTripDetailQuery(tripId);
+  const trip = tripDetailQ.data;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
@@ -735,7 +707,6 @@ function TripChat({ trip, userId, onBack }: { trip: Trip; userId: string; onBack
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const [keyboardOffset, setKeyboardOffset] = useState(0);
 
-  // Handle iOS keyboard pushing content up
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
@@ -753,7 +724,8 @@ function TripChat({ trip, userId, onBack }: { trip: Trip; userId: string; onBack
   }, []);
 
   useEffect(() => {
-    api.get(`/social/trips/${trip.id}/messages`).then(({ data }) => {
+    setMessages([]);
+    api.get(`/social/trips/${tripId}/messages`).then(({ data }) => {
       setMessages(data.messages);
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     });
@@ -762,7 +734,7 @@ function TripChat({ trip, userId, onBack }: { trip: Trip; userId: string; onBack
     const socket = io(`${WS_URL}/social`, { auth: { token }, transports: ['websocket', 'polling'], reconnectionAttempts: 10, reconnectionDelay: 1000 });
     socketRef.current = socket;
 
-    socket.on('connect', () => { socket.emit('joinTrip', { tripId: trip.id }); });
+    socket.on('connect', () => { socket.emit('joinTrip', { tripId }); });
     socket.on('newMessage', (msg: ChatMessage) => {
       setMessages(prev => {
         if (prev.some(m => m.id === msg.id)) return prev;
@@ -771,17 +743,16 @@ function TripChat({ trip, userId, onBack }: { trip: Trip; userId: string; onBack
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
     });
 
-    return () => { socket.emit('leaveTrip', { tripId: trip.id }); socket.disconnect(); };
-  }, [trip.id]);
+    return () => { socket.emit('leaveTrip', { tripId }); socket.disconnect(); };
+  }, [tripId]);
 
   const send = async () => {
     if (!text.trim()) return;
     setSending(true);
     const content = text;
     setText('');
-    try { socketRef.current?.emit('sendMessage', { tripId: trip.id, content, type: 'TEXT' }); } catch { }
+    try { socketRef.current?.emit('sendMessage', { tripId, content, type: 'TEXT' }); } catch { }
     setSending(false);
-    // Keep keyboard open after sending
     setTimeout(() => inputRef.current?.focus(), 10);
   };
 
@@ -790,7 +761,7 @@ function TripChat({ trip, userId, onBack }: { trip: Trip; userId: string; onBack
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      socketRef.current?.emit('sendMessage', { tripId: trip.id, mediaBase64: reader.result as string, type: 'IMAGE' });
+      socketRef.current?.emit('sendMessage', { tripId, mediaBase64: reader.result as string, type: 'IMAGE' });
     };
     reader.readAsDataURL(file);
   };
@@ -799,7 +770,6 @@ function TripChat({ trip, userId, onBack }: { trip: Trip; userId: string; onBack
     if (recording) { mediaRecorderRef.current?.stop(); setRecording(false); return; }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // Use mp4/aac for iOS compatibility, fallback to webm
       const mimeType = MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4'
         : MediaRecorder.isTypeSupported('audio/aac') ? 'audio/aac'
         : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
@@ -811,7 +781,7 @@ function TripChat({ trip, userId, onBack }: { trip: Trip; userId: string; onBack
         stream.getTracks().forEach(t => t.stop());
         const blob = new Blob(chunks, { type: recorder.mimeType });
         const reader = new FileReader();
-        reader.onload = () => { socketRef.current?.emit('sendMessage', { tripId: trip.id, mediaBase64: reader.result as string, type: 'AUDIO' }); };
+        reader.onload = () => { socketRef.current?.emit('sendMessage', { tripId, mediaBase64: reader.result as string, type: 'AUDIO' }); };
         reader.readAsDataURL(blob);
       };
       mediaRecorderRef.current = recorder;
@@ -820,13 +790,16 @@ function TripChat({ trip, userId, onBack }: { trip: Trip; userId: string; onBack
     } catch { }
   };
 
+  const title = trip?.title || '';
+  const participantCount = trip?._count?.participants || 0;
+
   return (
     <div className="fixed inset-0 z-[10000] flex flex-col bg-[var(--bg)]" style={{ height: keyboardOffset > 0 ? `calc(100% - ${keyboardOffset}px)` : '100%' }}>
       <div className="px-4 py-3 flex items-center gap-3 header-safe-top shrink-0" style={{ background: 'var(--header-bg)', borderBottom: '1px solid var(--border)' }}>
         <button onClick={onBack} className="p-1"><ChevronLeft size={22} className="text-[var(--text)]" /></button>
         <div className="flex-1 min-w-0">
-          <h2 className="text-sm font-bold text-[var(--text)] truncate">{trip.title}</h2>
-          <p className="text-[10px] text-[var(--text-muted)]">{trip._count.participants} participantes</p>
+          <h2 className="text-sm font-bold text-[var(--text)] truncate">{title}</h2>
+          <p className="text-[10px] text-[var(--text-muted)]">{participantCount} participantes</p>
         </div>
       </div>
 
@@ -860,7 +833,7 @@ function TripChat({ trip, userId, onBack }: { trip: Trip; userId: string; onBack
   );
 }
 
-function MessageBubble({ msg, isOwn }: { msg: ChatMessage; isOwn: boolean }) {
+const MessageBubble = memo(function MessageBubble({ msg, isOwn }: { msg: ChatMessage; isOwn: boolean }) {
   if (msg.isDeleted) {
     return (
       <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
@@ -898,4 +871,4 @@ function MessageBubble({ msg, isOwn }: { msg: ChatMessage; isOwn: boolean }) {
       </div>
     </div>
   );
-}
+});

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, memo } from 'react';
 
 /** Compress image for iOS memory safety — uses createObjectURL, not FileReader */
 async function compressImage(file: File, maxSize = 1200, quality = 0.7): Promise<string> {
@@ -48,6 +48,8 @@ import {
 import api from '@/services/api';
 import { useAuth } from '@/contexts/auth';
 import { useCachedState, hasCached } from '@/hooks/useCachedState';
+import { useQueryClient } from '@tanstack/react-query';
+import { useChecklistsQuery, useQueueQuery, useTodayReservationsQuery, useClientReservationsQuery } from '@/hooks/queries/useOperationsQuery';
 
 const JetSkiViewer3D = dynamic(() => import('@/components/JetSkiViewer3D'), { ssr: false });
 import type { JetSki3DSketchRef, InitialMark } from '@/components/JetSki3DSketch';
@@ -137,11 +139,17 @@ export default function OperationsPage() {
    OPERATOR VIEW
 ═══════════════════════════════════════════════════════════════════════════ */
 function OperatorView() {
+  const queryClient = useQueryClient();
   const [tab, setTab]               = useState<'checkin' | 'confirmados' | 'onwater' | 'completed'>('checkin');
-  const [checklists, setChecklists] = useCachedState<ChecklistEntry[]>('pc:operations:checklists', []);
-  const [queue, setQueue]           = useCachedState<QueueEntry[]>('pc:operations:queue', []);
-  const [todayRes, setTodayRes]     = useCachedState<TodayRes[]>('pc:operations:todayRes', []);
-  const [loading, setLoading]       = useState(() => !hasCached('pc:operations:checklists'));
+  const checklistsQ = useChecklistsQuery();
+  const queueQ = useQueueQuery();
+  const todayResQ = useTodayReservationsQuery();
+
+  const checklists: ChecklistEntry[] = checklistsQ.data || [];
+  const queue: QueueEntry[] = queueQ.data || [];
+  const todayRes: TodayRes[] = todayResQ.data || [];
+  const loading = checklistsQ.isLoading && !checklistsQ.data;
+
   const [showWizard, setShowWizard] = useState(false);
   const [continueChecklist, setContinueChecklist] = useState<ChecklistEntry | null>(null);
   const [wizardReservation, setWizardReservation] = useState<TodayRes | null>(null);
@@ -152,40 +160,11 @@ function OperatorView() {
   const [liftingId, setLiftingId]   = useState<string | null>(null);
   const [launchingId, setLaunchingId] = useState<string | null>(null);
 
-  const initialLoadDone = useRef(false);
-
-  // Lightweight array equality — avoids JSON.stringify on large arrays
-  const shallowEqualArrays = useCallback((a: any[], b: any[]) => {
-    if (a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i++) {
-      if (a[i]?.id !== b[i]?.id) return false;
-    }
-    return true;
-  }, []);
-
-  const load = useCallback(async (silent = false) => {
-    if (!silent && !hasCached('pc:operations:checklists')) setLoading(true);
-    try {
-      const [cRes, qRes, tRes] = await Promise.all([
-        getChecklists().catch(() => ({ data: [] })),
-        api.get('/operations/queue').catch(() => ({ data: [] })),
-        api.get('/operations/pre-launch/today-reservations').catch(() => ({ data: [] })),
-      ]);
-      const d = cRes.data;
-      const newChecklists = Array.isArray(d) ? d : d?.data || [];
-      const q = qRes.data;
-      const newQueue = Array.isArray(q) ? q : q?.data || [];
-      const t = tRes.data;
-      const newTodayRes = Array.isArray(t) ? t : t?.data || [];
-      // Only update state if data actually changed (avoids unnecessary re-renders)
-      setChecklists(prev => shallowEqualArrays(prev, newChecklists) ? prev : newChecklists);
-      setQueue(prev => shallowEqualArrays(prev, newQueue) ? prev : newQueue);
-      setTodayRes(prev => shallowEqualArrays(prev, newTodayRes) ? prev : newTodayRes);
-    } finally { if (!silent) setLoading(false); }
-  }, [shallowEqualArrays]);
-
-  useEffect(() => { load().then(() => { initialLoadDone.current = true; }); }, [load]);
-  useEffect(() => { const t = setInterval(() => load(true), 15000); return () => clearInterval(t); }, [load]);
+  const refetchAll = useCallback(() => {
+    checklistsQ.refetch();
+    queueQ.refetch();
+    todayResQ.refetch();
+  }, [checklistsQ, queueQ, todayResQ]);
 
   const pendingCL   = checklists.filter(c => c.status === 'PENDING');
   const approvedCL  = checklists.filter(c => c.status === 'APPROVED');
@@ -205,8 +184,8 @@ function OperatorView() {
   const handleDeleteChecklist = async (cl: ChecklistEntry) => {
     if (!confirm(`Excluir checklist de ${cl.boat?.name || 'embarcação'}?`)) return;
     // Optimistic: remove from local state immediately
-    setChecklists(prev => prev.filter(c => c.id !== cl.id));
-    try { await deleteChecklist(cl.id); load(true); } catch { alert('Erro ao excluir checklist'); load(true); }
+    queryClient.setQueryData(['operations', 'checklists'], (prev: any) => (prev || []).filter((c: any) => c.id !== cl.id));
+    try { await deleteChecklist(cl.id); refetchAll(); } catch { alert('Erro ao excluir checklist'); refetchAll(); }
   };
   const handleContinueChecklist = (cl: ChecklistEntry) => {
     setContinueChecklist(cl); setShowWizard(true);
@@ -236,17 +215,17 @@ function OperatorView() {
   const doLiftBoat = async (item: QueueEntry, returnData?: Record<string, unknown>) => {
     setLiftingId(item.id);
     // Optimistic: move from IN_WATER to COMPLETED
-    setQueue(prev => prev.map(q => q.id === item.id ? { ...q, status: 'COMPLETED', completedAt: new Date().toISOString() } : q));
-    try { await liftBoat(item.id, returnData); load(true); }
-    catch { alert('Erro ao subir jet ski'); load(true); } finally { setLiftingId(null); }
+    queryClient.setQueryData(['operations', 'queue'], (prev: any) => (prev || []).map((q: any) => q.id === item.id ? { ...q, status: 'COMPLETED', completedAt: new Date().toISOString() } : q));
+    try { await liftBoat(item.id, returnData); refetchAll(); }
+    catch { alert('Erro ao subir jet ski'); refetchAll(); } finally { setLiftingId(null); }
   };
   const handleLaunchToWater = async (item: QueueEntry) => {
     if (!confirm(`Colocar ${item.boat?.name || 'jet ski'} na água?`)) return;
     setLaunchingId(item.id);
     // Optimistic: move from WAITING to IN_WATER
-    setQueue(prev => prev.map(q => q.id === item.id ? { ...q, status: 'IN_WATER', startedAt: new Date().toISOString() } : q));
-    try { await launchToWater(item.id); load(true); }
-    catch { alert('Erro ao colocar na água'); load(true); } finally { setLaunchingId(null); }
+    queryClient.setQueryData(['operations', 'queue'], (prev: any) => (prev || []).map((q: any) => q.id === item.id ? { ...q, status: 'IN_WATER', startedAt: new Date().toISOString() } : q));
+    try { await launchToWater(item.id); refetchAll(); }
+    catch { alert('Erro ao colocar na água'); refetchAll(); } finally { setLaunchingId(null); }
   };
 
   const tabs = [
@@ -270,7 +249,7 @@ function OperatorView() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => load(true)} className="p-2 hover:bg-[var(--subtle)] rounded-xl text-[var(--text-muted)]"><RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /></button>
+          <button onClick={() => refetchAll()} className="p-2 hover:bg-[var(--subtle)] rounded-xl text-[var(--text-muted)]"><RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /></button>
           <button onClick={() => setShowWizard(true)}
             className="flex items-center gap-1.5 px-3.5 py-2.5 bg-gradient-to-r from-primary-500 to-primary-400 text-white rounded-xl text-xs font-bold shadow-[0_4px_14px_rgba(0,117,119,0.3)]">
             <Plus className="w-4 h-4" />Checklist
@@ -505,7 +484,7 @@ function OperatorView() {
           existingChecklist={continueChecklist}
           preSelectedReservation={wizardReservation}
           onClose={() => { setShowWizard(false); setContinueChecklist(null); setWizardReservation(null); setPostChecklistQueue(null); }}
-          onSuccess={() => { setShowWizard(false); setContinueChecklist(null); setWizardReservation(null); load(true); }}
+          onSuccess={() => { setShowWizard(false); setContinueChecklist(null); setWizardReservation(null); refetchAll(); }}
         />
       )}
       {!showWizard && postChecklistQueue && (
@@ -527,7 +506,7 @@ function OperatorView() {
                   catch { alert('Erro ao colocar na água'); }
                   finally { setLaunchingId(null); }
                   setPostChecklistQueue(null);
-                  load(true);
+                  refetchAll();
                 }}
                 className="w-full py-3 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2"
               >
@@ -535,7 +514,7 @@ function OperatorView() {
                 Ir para a Água
               </button>
               <button
-                onClick={() => { setPostChecklistQueue(null); load(true); }}
+                onClick={() => { setPostChecklistQueue(null); refetchAll(); }}
                 className="w-full py-3 border border-[var(--border)] hover:bg-[var(--subtle)] text-[var(--text)] rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2"
               >
                 <Clock className="w-4 h-4" />Aguardando Cliente
@@ -558,7 +537,7 @@ function OperatorView() {
 }
 
 /* ─── Queue detail bottom sheet ─────────────────────────────────────────── */
-function QueueDetailSheet({ item, onClose }: { item: QueueEntry; onClose: () => void }) {
+const QueueDetailSheet = memo(function QueueDetailSheet({ item, onClose }: { item: QueueEntry; onClose: () => void }) {
   return (
     <div className="fixed inset-0 bg-black/50 z-[10000] flex items-end" onClick={onClose}>
       <div className="bg-[var(--card)] rounded-t-3xl w-full max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
@@ -595,10 +574,10 @@ function QueueDetailSheet({ item, onClose }: { item: QueueEntry; onClose: () => 
       </div>
     </div>
   );
-}
+});
 
 /* ─── Mobile checklist card ─────────────────────────────────────────────── */
-function CLCardMobile({ cl, onView, onContinue, onDelete }: { cl: ChecklistEntry; onView: (c: ChecklistEntry) => void; onContinue?: (c: ChecklistEntry) => void; onDelete?: (c: ChecklistEntry) => void }) {
+const CLCardMobile = memo(function CLCardMobile({ cl, onView, onContinue, onDelete }: { cl: ChecklistEntry; onView: (c: ChecklistEntry) => void; onContinue?: (c: ChecklistEntry) => void; onDelete?: (c: ChecklistEntry) => void }) {
   const checked = cl.items?.filter(i => i.checked).length ?? 0;
   const total   = cl.items?.length ?? 0;
   return (
@@ -644,10 +623,10 @@ function CLCardMobile({ cl, onView, onContinue, onDelete }: { cl: ChecklistEntry
       </div>
     </div>
   );
-}
+});
 
 /* ─── Checklist detail bottom sheet ─────────────────────────────────────── */
-function CLDetailSheet({ cl: initialCL, onClose }: { cl: ChecklistEntry; onClose: () => void }) {
+const CLDetailSheet = memo(function CLDetailSheet({ cl: initialCL, onClose }: { cl: ChecklistEntry; onClose: () => void }) {
   const [cl, setCl] = useState(initialCL);
   const [openSection, setOpenSection] = useState<string | null>(null);
   const [zoomImg, setZoomImg] = useState<string | null>(null);
@@ -838,7 +817,7 @@ function CLDetailSheet({ cl: initialCL, onClose }: { cl: ChecklistEntry; onClose
       </div>
     </div>
   );
-}
+});
 
 /* ─── Operator checklist wizard (bottom sheet) ───────────────────────────── */
 function OperatorChecklistWizard({ existingChecklist, preSelectedReservation, onClose, onSuccess }: { existingChecklist?: ChecklistEntry | null; preSelectedReservation?: TodayRes | null; onClose: () => void; onSuccess: () => void }) {
@@ -1619,7 +1598,7 @@ function ChecklistComparisonView({ selected, onBack }: { selected: ClientCheckli
    RETURN INSPECTION MODAL — shown before lifting boat
 ═══════════════════════════════════════════════════════════════════════════ */
 
-function ReturnInspectionModal({ item, onClose, onConfirm }: {
+const ReturnInspectionModal = memo(function ReturnInspectionModal({ item, onClose, onConfirm }: {
   item: QueueEntry;
   onClose: () => void;
   onConfirm: (data: Record<string, unknown>) => void;
@@ -1837,7 +1816,7 @@ function ReturnInspectionModal({ item, onClose, onConfirm }: {
       </div>
     </div>
   );
-}
+});
 
 interface FuelLog {
   id: string; liters: number; totalCost: number; createdAt: string;
@@ -1861,46 +1840,12 @@ const statusConf: Record<string, { label: string; bg: string; text: string; dot:
 };
 
 function ClientView() {
-  const [reservations, setReservations] = useCachedState<ClientReservation[]>('pc:operations:clientReservations', []);
-  const [loading, setLoading] = useState(() => !hasCached('pc:operations:clientReservations'));
+  const clientResQ = useClientReservationsQuery();
+  const reservations: ClientReservation[] = clientResQ.data || [];
+  const loading = clientResQ.isLoading && !clientResQ.data;
   const [selected, setSelected] = useState<ClientChecklist | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [tab, setTab] = useState<'active' | 'history'>('active');
-
-  useEffect(() => {
-    (async () => {
-      if (!hasCached('pc:operations:clientReservations')) setLoading(true);
-      try {
-        const res = await getMyReservationsForChecklist();
-        const checklistData: ClientReservation[] = Array.isArray(res.data) ? res.data : res.data?.data || [];
-
-        // Also load usages (fuel + completed reservations)
-        let usageData: ClientReservation[] = [];
-        try {
-          const usageRes = await api.get('/operations/usages/my');
-          usageData = Array.isArray(usageRes.data) ? usageRes.data : usageRes.data?.data || [];
-        } catch { /* empty */ }
-
-        // Merge: usages have fuel info, checklists have detailed inspections
-        const mergedMap = new Map<string, ClientReservation>();
-        checklistData.forEach(r => mergedMap.set(r.id, r));
-        usageData.forEach(r => {
-          const existing = mergedMap.get(r.id);
-          if (existing) {
-            // Keep checklist from checklistData (more complete with operator)
-            mergedMap.set(r.id, { ...r, checklist: existing.checklist || r.checklist });
-          } else {
-            mergedMap.set(r.id, r);
-          }
-        });
-
-        const merged = Array.from(mergedMap.values()).sort(
-          (a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()
-        );
-        setReservations(merged);
-      } catch { setReservations([]); } finally { setLoading(false); }
-    })();
-  }, []);
 
   const fmtFull = (s: string) => new Date(s).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: BRT });
   const fmtShort = (s: string) => new Date(s).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: BRT });

@@ -4,10 +4,11 @@ import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { AlertCircle, CheckCircle2, Clock, X, Camera, Receipt, TrendingUp, CreditCard, Fuel, Wrench, Calendar, FileText, QrCode, Copy, Loader2, Sparkles } from 'lucide-react';
 import Image from 'next/image';
 import { useAuth } from '@/contexts/auth';
-import { getMyCharges, getFuelLog, createWooviCharge, getWooviChargeStatus, invalidateCache } from '@/services/api';
+import { getMyCharges, getFuelLog, createWooviCharge, getWooviChargeStatus } from '@/services/api';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { useCachedState, hasCached } from '@/hooks/useCachedState';
+import { useQueryClient } from '@tanstack/react-query';
+import { useChargesQuery } from '@/hooks/queries/useInvoicesQuery';
 
 interface Charge {
   id: string;
@@ -42,8 +43,11 @@ const typeConfig: Record<string, { icon: typeof CreditCard; color: string }> = {
 
 export default function InvoicesPage() {
   const { user } = useAuth();
-  const [charges, setCharges] = useCachedState<Charge[]>('pc:invoices:charges', []);
-  const [loading, setLoading] = useState(() => !hasCached('pc:invoices:charges'));
+  const queryClient = useQueryClient();
+  const chargesQ = useChargesQuery();
+  const charges = useMemo<Charge[]>(() => chargesQ.data || [], [chargesQ.data]);
+  const loading = chargesQ.isLoading && !chargesQ.data;
+
   const [filter, setFilter] = useState<string>('ALL');
   const [fuelPhoto, setFuelPhoto] = useState<{ imageUrl: string; liters: number; totalCost: number; notes?: string } | null>(null);
   const [loadingPhoto, setLoadingPhoto] = useState(false);
@@ -62,7 +66,6 @@ export default function InvoicesPage() {
   } | null>(null);
   const [pixLoading, setPixLoading] = useState(false);
   const [pixCopied, setPixCopied] = useState(false);
-  const [pixCountdown, setPixCountdown] = useState<number | null>(null);
   const [showPaymentSuccessPulse, setShowPaymentSuccessPulse] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -87,36 +90,6 @@ export default function InvoicesPage() {
   const stopPolling = useCallback(() => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
   }, []);
-
-  const loadCharges = useCallback(async (showLoader = false) => {
-    if (!user) return;
-    if (showLoader) setLoading(true);
-    try {
-      // Avoid stale cached reads right after payment confirmation
-      invalidateCache('/finance/my-charges');
-      const { data } = await getMyCharges({ status: undefined, _ts: Date.now() });
-      const items = Array.isArray(data) ? data : data.data || [];
-      items.sort((a: Charge, b: Charge) => new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime());
-      setCharges(items);
-
-      // If modal is open, sync it with newest invoice status immediately
-      setPixModal(prev => {
-        if (!prev) return prev;
-        const updated = items.find((c: Charge) => c.id === prev.charge.id);
-        if (!updated) return prev;
-        if (updated.status === 'PAID' && prev.status !== 'PAID') {
-          stopPolling();
-          setShowPaymentSuccessPulse(true);
-          return { ...prev, status: 'PAID' };
-        }
-        return prev;
-      });
-    } catch {
-      // keep current screen state
-    } finally {
-      if (showLoader) setLoading(false);
-    }
-  }, [user, stopPolling]);
 
   const handlePayWithPix = async (charge: Charge) => {
     setPixLoading(true);
@@ -150,7 +123,7 @@ export default function InvoicesPage() {
         const { data } = await getWooviChargeStatus(correlationID);
         if (data?.status === 'PAID' || data?.charge?.status === 'PAID') {
           stopPolling();
-          await loadCharges(false);
+          queryClient.invalidateQueries({ queryKey: ['invoices', 'charges'] });
           setShowPaymentSuccessPulse(true);
           setPixModal(prev => prev ? { ...prev, status: 'PAID' } : null);
         }
@@ -162,23 +135,13 @@ export default function InvoicesPage() {
     stopPolling();
     setPixModal(null);
     setShowPaymentSuccessPulse(false);
+    queryClient.invalidateQueries({ queryKey: ['invoices', 'charges'] });
   };
 
-  // Compute effective status: PENDING + past due = OVERDUE (frontend-side)
   const effectiveStatus = (c: Charge) => {
     if (c.status === 'PENDING' && new Date(c.dueDate) < new Date()) return 'OVERDUE';
     return c.status;
   };
-
-  useEffect(() => {
-    if (!user) return;
-    // Snapshot-style: load once on mount. Subsequent refreshes happen only
-    // after explicit user actions (e.g., Pix payment confirmed below).
-    loadCharges(true);
-    return () => {
-      stopPolling();
-    };
-  }, [user, loadCharges, stopPolling]);
 
   useEffect(() => {
     if (!showPaymentSuccessPulse) return;
@@ -186,7 +149,10 @@ export default function InvoicesPage() {
     return () => clearTimeout(t);
   }, [showPaymentSuccessPulse]);
 
-  // Single-pass summary calculation — avoids 5x array filter/reduce per render
+  useEffect(() => {
+    return () => { stopPolling(); };
+  }, [stopPolling]);
+
   const summary = useMemo(() => {
     let totalPending = 0, countPending = 0, countOverdue = 0, countPaid = 0;
     const now = new Date();
