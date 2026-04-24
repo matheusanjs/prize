@@ -617,21 +617,27 @@ export class OperationsService {
       take: 100,
     });
 
-    // Get fuel logs for each reservation (by boat + date range)
-    const result = await Promise.all(
-      reservations.map(async (r) => {
-        const fuelLogs = await this.prisma.fuelLog.findMany({
-          where: {
-            boatId: r.boatId,
-            loggedAt: { gte: r.startDate, lte: r.endDate },
-          },
+    const boatIds = [...new Set(reservations.map(r => r.boatId))];
+    const allFuelLogs = boatIds.length > 0
+      ? await this.prisma.fuelLog.findMany({
+          where: { boatId: { in: boatIds } },
           orderBy: { loggedAt: 'asc' },
-        });
-        const totalFuel = fuelLogs.reduce((s, l) => s + l.liters, 0);
-        const fuelCost = fuelLogs.reduce((s, l) => s + l.totalCost, 0);
-        return { ...r, fuelLogs, totalFuel, fuelCost };
-      }),
-    );
+        })
+      : [];
+
+    const fuelLogsByBoat = new Map<string, typeof allFuelLogs>();
+    for (const log of allFuelLogs) {
+      if (!fuelLogsByBoat.has(log.boatId)) fuelLogsByBoat.set(log.boatId, []);
+      fuelLogsByBoat.get(log.boatId)!.push(log);
+    }
+
+    const result = reservations.map(r => {
+      const boatLogs = fuelLogsByBoat.get(r.boatId) || [];
+      const fuelLogs = boatLogs.filter(l => l.loggedAt >= r.startDate && l.loggedAt <= r.endDate);
+      const totalFuel = fuelLogs.reduce((s, l) => s + l.liters, 0);
+      const fuelCost = fuelLogs.reduce((s, l) => s + l.totalCost, 0);
+      return { ...r, fuelLogs, totalFuel, fuelCost };
+    });
 
     return result;
   }

@@ -1,4 +1,5 @@
-import { Controller, Get, Query, Post, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, Post, UseGuards, UseInterceptors } from '@nestjs/common';
+import { CacheInterceptor, CacheTTL } from '@nestjs/cache-manager';
 import { WeatherService } from './weather.service';
 import { WeatherJob } from './weather.job';
 
@@ -10,6 +11,8 @@ export class WeatherController {
   ) {}
 
   @Get('current')
+  @UseInterceptors(CacheInterceptor)
+  @CacheTTL(300000)
   async getCurrent() {
     const snapshot = await this.weatherService.getLatestValid();
     if (!snapshot) {
@@ -26,6 +29,8 @@ export class WeatherController {
   }
 
   @Get('forecast')
+  @UseInterceptors(CacheInterceptor)
+  @CacheTTL(300000)
   async getForecast() {
     const result = this.weatherService.getForecastDays();
     if (!result.days.length) {
@@ -35,6 +40,7 @@ export class WeatherController {
   }
 
   @Get('ai-summary')
+  @CacheTTL(900000)
   async getAiSummary() {
     const result = this.weatherService.getAiSummary();
     if (!result.summary) {

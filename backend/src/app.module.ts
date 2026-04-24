@@ -5,6 +5,8 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { BullModule } from '@nestjs/bullmq';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { CacheModule } from '@nestjs/cache-manager';
+import { redisStore } from 'cache-manager-redis-yet';
 import { join } from 'path';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './modules/auth/auth.module';import { UsersModule } from './modules/users/users.module';
@@ -50,6 +52,20 @@ import { AuditLogInterceptor } from './interceptors/audit-log.interceptor';
         host: process.env.REDIS_HOST || 'localhost',
         port: parseInt(process.env.REDIS_PORT || '6379'),
         password: process.env.REDIS_PASSWORD || undefined,
+      },
+    }),
+    CacheModule.registerAsync({
+      isGlobal: true,
+      useFactory: async () => {
+        const host = process.env.REDIS_HOST || 'localhost';
+        const port = parseInt(process.env.REDIS_PORT || '6379');
+        const password = process.env.REDIS_PASSWORD || undefined;
+        const store = await redisStore({
+          socket: { host, port },
+          password,
+          ttl: 30_000,
+        });
+        return { store, ttl: 30_000 };
       },
     }),
     DatabaseModule,

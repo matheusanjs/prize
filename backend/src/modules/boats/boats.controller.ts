@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, UseInterceptors, UploadedFile, Res } from '@nestjs/common';
+import { CacheInterceptor, CacheTTL } from '@nestjs/cache-manager';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiConsumes } from '@nestjs/swagger';
 import { diskStorage } from 'multer';
@@ -27,6 +28,8 @@ export class BoatsController {
   }
 
   @Get()
+  @UseInterceptors(CacheInterceptor)
+  @CacheTTL(300000)
   @ApiOperation({ summary: 'Listar embarcações' })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'status', required: false })
