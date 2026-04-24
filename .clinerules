@@ -1,0 +1,22 @@
+# Regras de Comportamento - Economia de Tokens
+
+## Estilo de Resposta
+- Seja extremamente conciso.
+- NÃO explique o código a menos que eu pergunte explicitamente "por que".
+- NÃO peça desculpas por erros; apenas corrija-os.
+- Se a solução for óbvia, forneça apenas o trecho de código alterado.
+
+## Padrões de Código
+- Use TypeScript sempre que possível.
+- Siga o padrão de componentes funcionais com Tailwind CSS (se aplicável ao seu projeto).
+- Não adicione comentários desnecessários no código.
+
+## Gerenciamento de Contexto (Onde economiza mais)
+- NÃO leia arquivos dentro de `node_modules`, `dist`, `.next` ou `build`.
+- Antes de ler um arquivo grande, tente entender a estrutura pelo `ls` ou `list_files`.
+- Se eu pedir uma alteração, altere apenas as linhas necessárias em vez de reescrever o arquivo inteiro (se a ferramenta suportar).
+
+## Comandos Ubuntu/Linux
+- Use comandos diretos de terminal Linux.
+- Prefira `apt` para instalações.
+- Se precisar rodar scripts, sempre verifique permissões (`chmod +x`).

@@ -122,11 +122,21 @@ export class ReservationValidationService {
     });
 
     if (stale.length > 0) {
-      await this.prisma.reservation.updateMany({
-        where: { id: { in: stale.map(r => r.id) } },
-        data: { status: 'COMPLETED' },
-      });
-      this.logger.log(`Auto-completed ${stale.length} stale IN_USE reservation(s)`);
+      const staleIds = stale.map(r => r.id);
+      await Promise.all([
+        this.prisma.reservation.updateMany({
+          where: { id: { in: staleIds } },
+          data: { status: 'COMPLETED' },
+        }),
+        this.prisma.operationalQueue.updateMany({
+          where: {
+            reservationId: { in: staleIds },
+            status: { in: ['IN_WATER', 'WAITING', 'PREPARING'] },
+          },
+          data: { status: 'COMPLETED', completedAt: new Date() },
+        }),
+      ]);
+      this.logger.log(`Auto-completed ${stale.length} stale IN_USE reservation(s) and their queue items`);
     }
 
     return stale.map(r => ({

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   Users, Ship, Wallet, AlertTriangle,
   TrendingUp, TrendingDown, Sparkles, Fuel, Wrench,
@@ -8,8 +8,9 @@ import {
   ChevronRight, BarChart3, Clock, AlertCircle,
   ArrowUpRight, ArrowDownRight,
 } from 'lucide-react';
-import { getDashboardStats, getAiInsights } from '@/services/api';
+import { getAiInsights } from '@/services/api';
 import AdminWeatherCard from '@/components/AdminWeatherCard';
+import { useDashboardStats } from '@/hooks/queries/useDashboardQuery';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -21,16 +22,11 @@ function fmtInt(v: number) {
 }
 
 export default function DashboardPage() {
-  const [d, setD] = useState<any>(null);
+  const statsQ = useDashboardStats();
+  const d = statsQ.data || null;
+  const error = statsQ.isError;
   const [aiInsights, setAiInsights] = useState<string | null>(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
-  const [error, setError] = useState(false);
-
-  useEffect(() => {
-    getDashboardStats()
-      .then((r) => setD(r.data))
-      .catch(() => setError(true));
-  }, []);
 
   const handleInsights = async () => {
     setLoadingInsights(true);

@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateChecklistDto } from './dto/create-checklist.dto';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -14,10 +15,38 @@ const PRE_LAUNCH_ITEMS = [
 
 @Injectable()
 export class OperationsService {
+  private readonly logger = new Logger(OperationsService.name);
+
   constructor(
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
   ) {}
+
+  @Cron('*/5 * * * *', { timeZone: 'America/Sao_Paulo' })
+  async autoCompleteStaleQueueItems() {
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const stale = await this.prisma.operationalQueue.findMany({
+      where: {
+        status: { in: ['IN_WATER', 'WAITING', 'PREPARING'] },
+        OR: [
+          // Ad-hoc items (no reservation) older than 24h
+          { reservationId: null, startedAt: { lt: twentyFourHoursAgo } },
+          // Items linked to completed/cancelled reservations
+          { reservation: { status: { in: ['COMPLETED', 'CANCELLED'] } } },
+        ],
+      },
+      select: { id: true, reservationId: true },
+    });
+
+    if (stale.length > 0) {
+      await this.prisma.operationalQueue.updateMany({
+        where: { id: { in: stale.map(q => q.id) } },
+        data: { status: 'COMPLETED', completedAt: new Date() },
+      });
+      this.logger.log(`Auto-completed ${stale.length} stale queue item(s)`);
+    }
+  }
 
   // ─── Pre-launch checklist (CLIENT flow) ───────────────────────────────────
 

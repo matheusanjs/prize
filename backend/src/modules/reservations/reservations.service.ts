@@ -36,15 +36,31 @@ export class ReservationsService {
   @Cron('0 17 * * *', { timeZone: 'America/Sao_Paulo' })
   async completeEndedReservations() {
     const now = new Date();
-    const result = await this.prisma.reservation.updateMany({
+    const ended = await this.prisma.reservation.findMany({
       where: {
-        status: { in: ['CONFIRMED', 'PENDING'] },
+        status: { in: ['CONFIRMED', 'PENDING', 'IN_USE'] },
         endDate: { lt: now },
+        deletedAt: null,
       },
-      data: { status: 'COMPLETED' },
+      select: { id: true },
     });
-    if (result.count > 0) {
-      this.logger.log(`Auto-completed ${result.count} ended reservation(s)`);
+
+    if (ended.length > 0) {
+      const ids = ended.map(r => r.id);
+      await Promise.all([
+        this.prisma.reservation.updateMany({
+          where: { id: { in: ids } },
+          data: { status: 'COMPLETED' },
+        }),
+        this.prisma.operationalQueue.updateMany({
+          where: {
+            reservationId: { in: ids },
+            status: { in: ['IN_WATER', 'WAITING', 'PREPARING'] },
+          },
+          data: { status: 'COMPLETED', completedAt: new Date() },
+        }),
+      ]);
+      this.logger.log(`Auto-completed ${ended.length} ended reservation(s) and their queue items`);
     }
   }
 
